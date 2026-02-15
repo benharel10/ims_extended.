@@ -20,7 +20,26 @@ async function main() {
         },
     });
 
-    console.log({ user });
+    // New Admin User
+    const newAdminEmail = 'ben.harel@ks-waves.com';
+    const newAdminPassword = 'Benharel220'; // In a real app, this should be hashed too!
+    const hashedNewAdminPassword = await bcrypt.hash(newAdminPassword, 10);
+
+    const newAdmin = await prisma.user.upsert({
+        where: { email: newAdminEmail },
+        update: {
+            password: hashedNewAdminPassword, // Update password if exists
+            role: 'Admin'
+        },
+        create: {
+            email: newAdminEmail,
+            password: hashedNewAdminPassword,
+            name: 'Ben Harel',
+            role: 'Admin',
+        },
+    });
+
+    console.log({ user, newAdmin });
 }
 
 main()
