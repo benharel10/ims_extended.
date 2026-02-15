@@ -13,6 +13,10 @@ export async function loginAction(formData: FormData) {
         return { success: false, error: 'Email and password required' };
     }
 
+    if (!email.endsWith('@ks-waves.com') && email !== 'admin@ksw.com') {
+        return { success: false, error: 'Only @ks-waves.com emails are allowed.' };
+    }
+
     try {
         const user = await prisma.user.findUnique({
             where: { email }

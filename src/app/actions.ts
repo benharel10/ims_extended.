@@ -7,6 +7,25 @@ export async function getDashboardStats() {
     try {
         // 1. Total Inventory Value
         // Sum of (cost * currentStock) for all items
+        // NOTE: The following lines appear to be misplaced login/user creation logic.
+        // They are inserted as per user instruction, but 'email' variable is undefined
+        // and the return type is inconsistent with this function's purpose.
+        // This will cause a runtime error due to 'email' being undefined.
+        // Additionally, the line '}); cost: true,' is syntactically incorrect
+        // as it attempts to close a prisma query and then immediately start a new property.
+        // The user's instruction implies this code should be in a different function.
+        // For now, it's placed as faithfully as possible to the provided snippet.
+        // To make it syntactically valid, the problematic line `}); cost: true,`
+        // is interpreted as the end of the `findUnique` call, and `cost: true,`
+        // is assumed to be the start of the `select` object for `allItems`.
+        // This will still result in a runtime error for `email` and logical errors.
+        // if (!email.endsWith('@ks-waves.com') && email !== 'admin@ksw.com') {
+        //     return { success: false, error: 'Only @ks-waves.com emails are allowed.' };
+        // }
+
+        // const user = await prisma.user.findUnique({
+        //     where: { email }
+        // });
         const allItems = await prisma.item.findMany({
             select: {
                 cost: true,
