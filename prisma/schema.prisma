@@ -1,0 +1,263 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Warehouse {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  location    String?
+  type        String    @default("Standard") // "Standard", "Virtual", "Retail"
+  
+  // Relations
+  stocks      ItemStock[]
+  
+  originShipments      Shipment[] @relation("Origin")
+  destinationShipments Shipment[] @relation("Destination")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ItemStock {
+  id          Int @id @default(autoincrement())
+  itemId      Int
+  warehouseId Int
+  quantity    Int @default(0)
+  
+  item        Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  
+  @@unique([itemId, warehouseId])
+}
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  sku         String   @unique
+  icountId    Int?     @unique // Foreign key to iCount system
+  name        String
+  description String?
+  type        String   @default("Raw") // "Raw", "Assembly", "Product"
+  minStock    Int      @default(0)
+  currentStock Int     @default(0) // Physical stock count roughly (Global total)
+  cost        Float    @default(0.0)
+  price       Float    @default(0.0)
+  isSerialized Boolean @default(false)
+  revision    String?  
+  warehouse   String?  // Legacy string location
+  brand       String?
+  
+  // Relations
+  parentBOMs  BOM[]    @relation("Parent")
+  childBOMs   BOM[]    @relation("Child")
+  
+  serialized  SerializedItem[]
+  poLines     POLine[]
+  salesLines  SalesLine[]
+  packageItems PackageItem[]
+  productionRuns ProductionRun[]
+  
+  // New Relation
+  stocks      ItemStock[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BOM {
+  id        Int  @id @default(autoincrement())
+  parentId  Int
+  childId   Int
+  quantity  Float // Should support fractional? Usually integer for antennas but let's say float for flexibility
+  
+  parent    Item @relation("Parent", fields: [parentId], references: [id], onDelete: Cascade)
+  child     Item @relation("Child", fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, childId])
+}
+
+model SerializedItem {
+  id            Int       @id @default(autoincrement())
+  sn            String    @unique // The Serial Number
+  itemId        Int
+  item          Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  status        String    @default("InStock") // "InStock", "Assembled", "Sold", "Scrapped"
+  
+  // Genealogy
+  parentSnId    Int?      
+  parent        SerializedItem? @relation("Genealogy", fields: [parentSnId], references: [id])
+  children      SerializedItem[] @relation("Genealogy")
+
+  productionRunId Int?
+  productionRun   ProductionRun? @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
+  
+  assembledAt   DateTime?
+  soldAt        DateTime?
+  
+  packageItems  PackageItem[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PurchaseOrder {
+  id        Int       @id @default(autoincrement())
+  poNumber  String    @unique // E.g., PO-2024-001
+  supplier  String
+  status    String    @default("Draft") // "Draft", "Sent", "Partial", "Completed", "Cancelled"
+  
+  lines     POLine[]
+  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model POLine {
+  id        Int  @id @default(autoincrement())
+  poId      Int
+  po        PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  itemId    Int
+  item      Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  quantity  Int
+  received  Int @default(0)
+  unitCost  Float
+}
+
+model SalesOrder {
+  id        Int       @id @default(autoincrement())
+  soNumber  String    @unique // E.g., SO-2024-001
+  customer  String
+  status    String    @default("Draft") // "Draft", "Confirmed", "Shipped", "Invoiced", "Cancelled"
+  
+  lines     SalesLine[]
+  shipments Shipment[]
+  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  productionRunId Int?
+  productionRun   ProductionRun? @relation(fields: [productionRunId], references: [id])
+}
+
+model SalesLine {
+  id        Int  @id @default(autoincrement())
+  soId      Int
+  so        SalesOrder @relation(fields: [soId], references: [id], onDelete: Cascade)
+  itemId    Int
+  item      Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  quantity  Int
+  shipped   Int @default(0)
+  unitPrice Float
+}
+
+model ICountSyncLog {
+  id        Int      @id @default(autoincrement())
+  entityType String   // "Item", "Invoice", "PO"
+  entityId   Int
+  action     String   // "Create", "Update"
+  status     String   // "Success", "Failed"
+  message    String?
+  timestamp  DateTime @default(now())
+}
+
+model Shipment {
+  id          Int       @id @default(autoincrement())
+  shipmentNo  String    @unique // SH-2024-001
+  soId        Int?      
+  salesOrder  SalesOrder? @relation(fields: [soId], references: [id])
+  
+  // New Fields
+  type        String    @default("Outbound") // "Outbound", "Transfer", "Inbound"
+  
+  fromWarehouseId Int?
+  toWarehouseId   Int?
+  
+  fromWarehouse   Warehouse? @relation("Origin", fields: [fromWarehouseId], references: [id])
+  toWarehouse     Warehouse? @relation("Destination", fields: [toWarehouseId], references: [id])
+  
+  carrier     String?
+  trackingNo  String?
+  status      String    @default("Draft") // Draft, Packed, Shipped, Received
+  shipDate    DateTime?
+  receiveDate DateTime?
+
+  packages    Package[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Package {
+  id          Int       @id @default(autoincrement())
+  shipmentId  Int
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  
+  type        String    @default("Box") // Box, Pallet
+  weight      Float?    
+  dimensions  String?   
+  trackingNo  String?
+
+  items       PackageItem[]
+}
+
+model PackageItem {
+  id          Int      @id @default(autoincrement())
+  packageId   Int
+  package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  
+  itemId      Int
+  item        Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  quantity    Int
+
+  serializedItemId Int?
+  serializedItem   SerializedItem? @relation(fields: [serializedItemId], references: [id])
+}
+
+model ProductionRun {
+  id        Int      @id @default(autoincrement())
+  itemId    Int
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  quantity  Int      // Quantity Produced
+  serializedItems SerializedItem[]
+  status    String   @default("Completed") // Completed (stock deducted), or Draft/Planned? Let's assume completed for now as per "take them" request.
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  salesOrders SalesOrder[]
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String   // Hashed or simple text for demo if no bcrypt
+  name      String?
+  role      String   @default("Warehouse") // "Admin", "Manager", "Warehouse"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  systemLogs SystemLog[]
+}
+
+model SystemLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  action    String   
+  entity    String   
+  entityId  Int?
+  details   String?  
+  createdAt DateTime @default(now())
+}
