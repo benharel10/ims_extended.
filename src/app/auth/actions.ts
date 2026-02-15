@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 import bcrypt from 'bcryptjs';
 
 export async function loginAction(formData: FormData) {
-    const email = formData.get('email') as string;
+    const email = (formData.get('email') as string || '').trim().toLowerCase();
     const password = formData.get('password') as string;
 
     if (!email || !password) {
