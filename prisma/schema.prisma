@@ -236,7 +236,7 @@ model ProductionRun {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Force rebuild comment: v1.1
+  // Force Vercel rebuild: v1.2 - Fixed integer types
   salesOrders SalesOrder[]
 }
 
