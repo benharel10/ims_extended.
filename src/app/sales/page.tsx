@@ -239,101 +239,103 @@ export default function SalesPage() {
                     {loading ? (
                         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading orders...</div>
                     ) : (
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                                    <th style={{ padding: '1rem', width: '40px' }}>
-                                        <input
-                                            type="checkbox"
-                                            onChange={toggleSelectAll}
-                                            checked={orders.length > 0 && selectedIds.size === orders.length}
-                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                        />
-                                    </th>
-                                    <th style={{ padding: '1rem' }}>SO Number</th>
-                                    <th style={{ padding: '1rem' }}>Customer</th>
-                                    <th style={{ padding: '1rem' }}>Status</th>
-                                    <th style={{ padding: '1rem' }}>Date</th>
-                                    <th style={{ padding: '1rem' }}>Total</th>
-                                    <th style={{ padding: '1rem' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {orders.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                                            No sales orders found. Create one to get started.
-                                        </td>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                        <th style={{ padding: '1rem', width: '40px' }}>
+                                            <input
+                                                type="checkbox"
+                                                onChange={toggleSelectAll}
+                                                checked={orders.length > 0 && selectedIds.size === orders.length}
+                                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                            />
+                                        </th>
+                                        <th style={{ padding: '1rem' }}>SO Number</th>
+                                        <th style={{ padding: '1rem' }}>Customer</th>
+                                        <th style={{ padding: '1rem' }}>Status</th>
+                                        <th style={{ padding: '1rem' }}>Date</th>
+                                        <th style={{ padding: '1rem' }}>Total</th>
+                                        <th style={{ padding: '1rem' }}>Actions</th>
                                     </tr>
-                                ) : (
-                                    orders
-                                        .filter(order =>
-                                            searchTerm === '' ||
-                                            order.soNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                            order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                            order.status.toLowerCase().includes(searchTerm.toLowerCase())
-                                        )
-                                        .map(order => (
-                                            <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedIds.has(order.id)}
-                                                        onChange={() => toggleSelect(order.id)}
-                                                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                                    />
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>{order.soNumber}</td>
-                                                <td style={{ padding: '1rem' }}>{order.customer}</td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <span style={{
-                                                        padding: '0.25rem 0.75rem',
-                                                        borderRadius: '1rem',
-                                                        fontSize: '0.875rem',
-                                                        background: order.status === 'Confirmed' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(100, 116, 139, 0.1)',
-                                                        color: order.status === 'Confirmed' ? '#3b82f6' : 'var(--text-muted)'
-                                                    }}>{order.status}</span>
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>{new Date(order.createdAt).toLocaleDateString()}</td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    ${order.lines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0).toFixed(2)}
-                                                </td>
-                                                <td style={{ padding: '1rem', display: 'flex', gap: '0.5rem' }}>
-                                                    <button
-                                                        className="btn btn-outline"
-                                                        style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-                                                        onClick={() => {
-                                                            setSelectedOrder(order);
-                                                            setItemSearch('');
-                                                            setIsDetailsOpen(true);
-                                                        }}
-                                                    >
-                                                        Details / Edit
-                                                    </button>
-                                                    {order.status === 'Draft' && (
-                                                        <button
-                                                            className="btn btn-primary"
-                                                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', background: '#10b981', borderColor: '#10b981' }}
-                                                            onClick={() => handleConfirmOrder(order.id)}
-                                                        >
-                                                            Confirm
-                                                        </button>
-                                                    )}
-                                                    {isAdmin && (
+                                </thead>
+                                <tbody>
+                                    {orders.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                                No sales orders found. Create one to get started.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        orders
+                                            .filter(order =>
+                                                searchTerm === '' ||
+                                                order.soNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                order.status.toLowerCase().includes(searchTerm.toLowerCase())
+                                            )
+                                            .map(order => (
+                                                <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedIds.has(order.id)}
+                                                            onChange={() => toggleSelect(order.id)}
+                                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '1rem' }}>{order.soNumber}</td>
+                                                    <td style={{ padding: '1rem' }}>{order.customer}</td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <span style={{
+                                                            padding: '0.25rem 0.75rem',
+                                                            borderRadius: '1rem',
+                                                            fontSize: '0.875rem',
+                                                            background: order.status === 'Confirmed' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                                                            color: order.status === 'Confirmed' ? '#3b82f6' : 'var(--text-muted)'
+                                                        }}>{order.status}</span>
+                                                    </td>
+                                                    <td style={{ padding: '1rem' }}>{new Date(order.createdAt).toLocaleDateString()}</td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        ${order.lines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0).toFixed(2)}
+                                                    </td>
+                                                    <td style={{ padding: '1rem', display: 'flex', gap: '0.5rem' }}>
                                                         <button
                                                             className="btn btn-outline"
-                                                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: '#ef4444', borderColor: '#ef4444' }}
-                                                            onClick={() => handleDelete(order.id)}
+                                                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+                                                            onClick={() => {
+                                                                setSelectedOrder(order);
+                                                                setItemSearch('');
+                                                                setIsDetailsOpen(true);
+                                                            }}
                                                         >
-                                                            <Trash2 size={14} />
+                                                            Details / Edit
                                                         </button>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))
-                                )}
-                            </tbody>
-                        </table>
+                                                        {order.status === 'Draft' && (
+                                                            <button
+                                                                className="btn btn-primary"
+                                                                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', background: '#10b981', borderColor: '#10b981' }}
+                                                                onClick={() => handleConfirmOrder(order.id)}
+                                                            >
+                                                                Confirm
+                                                            </button>
+                                                        )}
+                                                        {isAdmin && (
+                                                            <button
+                                                                className="btn btn-outline"
+                                                                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: '#ef4444', borderColor: '#ef4444' }}
+                                                                onClick={() => handleDelete(order.id)}
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
             </div>
@@ -511,61 +513,63 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                     </button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', flex: 1, overflow: 'hidden' }}>
+                <div className="responsive-grid-sidebar">
                     {/* Left: Order Lines */}
                     <div style={{ padding: '1.5rem', overflowY: 'auto', borderRight: '1px solid var(--border-color)' }}>
                         <h4 style={{ marginBottom: '1rem' }}>Order Items</h4>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                            <thead>
-                                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                                    <th style={{ padding: '0.5rem' }}>Item</th>
-                                    <th style={{ padding: '0.5rem' }}>Qty</th>
-                                    <th style={{ padding: '0.5rem' }}>Unit Price</th>
-                                    <th style={{ padding: '0.5rem' }}>Total</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {order.lines.length === 0 ? (
-                                    <tr><td colSpan={5} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>No items added yet.</td></tr>
-                                ) : (
-                                    order.lines.map((line: any) => {
-                                        // We need to resolve Item name from ID since line only has IDs usually (or we included item in fetch? getSalesOrders includes lines but maybe NOT deeply nested item?)
-                                        // Wait, getSalesOrders included lines: true, but line doesn't include item relation in findMany by default unless specific.
-                                        // Ideally we should include item in getSalesOrders. But for now we can lookup in 'items' list passed in.
-                                        const product = items.find((i: Item) => i.id === line.itemId);
-                                        return (
-                                            <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.5rem' }}>
-                                                    <div style={{ fontWeight: 500 }}>{product?.name || 'Unknown Item'}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{product?.sku}</div>
-                                                </td>
-                                                <td style={{ padding: '0.5rem' }}>{line.quantity}</td>
-                                                <td style={{ padding: '0.5rem' }}>${line.unitPrice.toFixed(2)}</td>
-                                                <td style={{ padding: '0.5rem' }}>${(line.quantity * line.unitPrice).toFixed(2)}</td>
-                                                <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                                    {(product?.type === 'Product' || product?.type === 'Assembly') && (
-                                                        <button
-                                                            onClick={() => product && handleProduce(product, line.quantity)}
-                                                            className="btn btn-sm btn-outline"
-                                                            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#f59e0b', borderColor: '#f59e0b' }}
-                                                            title="Produce this item instantly"
-                                                        >
-                                                            <Hammer size={12} /> Produce
-                                                        </button>
-                                                    )}
-                                                    {order.status === 'Draft' && (
-                                                        <button onClick={() => handleRemoveLine(line.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                <thead>
+                                    <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                                        <th style={{ padding: '0.5rem' }}>Item</th>
+                                        <th style={{ padding: '0.5rem' }}>Qty</th>
+                                        <th style={{ padding: '0.5rem' }}>Unit Price</th>
+                                        <th style={{ padding: '0.5rem' }}>Total</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {order.lines.length === 0 ? (
+                                        <tr><td colSpan={5} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>No items added yet.</td></tr>
+                                    ) : (
+                                        order.lines.map((line: any) => {
+                                            // We need to resolve Item name from ID since line only has IDs usually (or we included item in fetch? getSalesOrders includes lines but maybe NOT deeply nested item?)
+                                            // Wait, getSalesOrders included lines: true, but line doesn't include item relation in findMany by default unless specific.
+                                            // Ideally we should include item in getSalesOrders. But for now we can lookup in 'items' list passed in.
+                                            const product = items.find((i: Item) => i.id === line.itemId);
+                                            return (
+                                                <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.5rem' }}>
+                                                        <div style={{ fontWeight: 500 }}>{product?.name || 'Unknown Item'}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{product?.sku}</div>
+                                                    </td>
+                                                    <td style={{ padding: '0.5rem' }}>{line.quantity}</td>
+                                                    <td style={{ padding: '0.5rem' }}>${line.unitPrice.toFixed(2)}</td>
+                                                    <td style={{ padding: '0.5rem' }}>${(line.quantity * line.unitPrice).toFixed(2)}</td>
+                                                    <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                                        {(product?.type === 'Product' || product?.type === 'Assembly') && (
+                                                            <button
+                                                                onClick={() => product && handleProduce(product, line.quantity)}
+                                                                className="btn btn-sm btn-outline"
+                                                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#f59e0b', borderColor: '#f59e0b' }}
+                                                                title="Produce this item instantly"
+                                                            >
+                                                                <Hammer size={12} /> Produce
+                                                            </button>
+                                                        )}
+                                                        {order.status === 'Draft' && (
+                                                            <button onClick={() => handleRemoveLine(line.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
                     {/* Right: Add Item (Product Picker) */}

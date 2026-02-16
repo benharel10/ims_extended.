@@ -269,30 +269,32 @@ export default function ReportsPage() {
                         {activeTab === 'inventory' && (
                             <div>
                                 <h3 style={{ marginBottom: '1rem' }}>Inventory Valuation Report</h3>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                            <th style={{ padding: '0.75rem' }}>SKU</th>
-                                            <th style={{ padding: '0.75rem' }}>Name</th>
-                                            <th style={{ padding: '0.75rem' }}>Type</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Stock</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Unit Cost</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {inventoryData.map((item, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.75rem' }}>{item.sku}</td>
-                                                <td style={{ padding: '0.75rem' }}>{item.name}</td>
-                                                <td style={{ padding: '0.75rem' }}>{item.type}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.quantity}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>${item.unitCost.toFixed(2)}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${item.totalValue.toFixed(2)}</td>
+                                <div className="table-responsive">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                                <th style={{ padding: '0.75rem' }}>SKU</th>
+                                                <th style={{ padding: '0.75rem' }}>Name</th>
+                                                <th style={{ padding: '0.75rem' }}>Type</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Stock</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Unit Cost</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {inventoryData.map((item, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.75rem' }}>{item.sku}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{item.name}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{item.type}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.quantity}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>${item.unitCost.toFixed(2)}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${item.totalValue.toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
 
@@ -300,36 +302,38 @@ export default function ReportsPage() {
                         {activeTab === 'lowstock' && (
                             <div>
                                 <h3 style={{ marginBottom: '1rem' }}>Low Stock Alert Report</h3>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                            <th style={{ padding: '0.75rem' }}>Urgency</th>
-                                            <th style={{ padding: '0.75rem' }}>SKU</th>
-                                            <th style={{ padding: '0.75rem' }}>Name</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Current</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Min Stock</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Deficit</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Deficit Value</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {lowStockData.map((item, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    <span className={`badge ${item.urgency === 'Critical' ? 'badge-danger' : item.urgency === 'High' ? 'badge-warning' : 'badge-neutral'}`}>
-                                                        {item.urgency}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '0.75rem' }}>{item.sku}</td>
-                                                <td style={{ padding: '0.75rem' }}>{item.name}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: item.currentStock === 0 ? '#ef4444' : 'inherit' }}>{item.currentStock}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.minStock}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>{item.deficit}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>${item.deficitValue.toFixed(2)}</td>
+                                <div className="table-responsive">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                                <th style={{ padding: '0.75rem' }}>Urgency</th>
+                                                <th style={{ padding: '0.75rem' }}>SKU</th>
+                                                <th style={{ padding: '0.75rem' }}>Name</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Current</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Min Stock</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Deficit</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Deficit Value</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {lowStockData.map((item, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.75rem' }}>
+                                                        <span className={`badge ${item.urgency === 'Critical' ? 'badge-danger' : item.urgency === 'High' ? 'badge-warning' : 'badge-neutral'}`}>
+                                                            {item.urgency}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem' }}>{item.sku}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{item.name}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: item.currentStock === 0 ? '#ef4444' : 'inherit' }}>{item.currentStock}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{item.minStock}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>{item.deficit}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>${item.deficitValue.toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
 
@@ -337,47 +341,49 @@ export default function ReportsPage() {
                         {activeTab === 'purchasing' && (
                             <div>
                                 <h3 style={{ marginBottom: '1rem' }}>Purchase Order Tracking</h3>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                            <th style={{ padding: '0.75rem' }}>PO Number</th>
-                                            <th style={{ padding: '0.75rem' }}>Supplier</th>
-                                            <th style={{ padding: '0.75rem' }}>Date</th>
-                                            <th style={{ padding: '0.75rem' }}>Status</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Items</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Ordered</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Received</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Completion</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {purchasingData.map((po, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.75rem', fontWeight: 500 }}>{po.poNumber}</td>
-                                                <td style={{ padding: '0.75rem' }}>{po.supplier}</td>
-                                                <td style={{ padding: '0.75rem' }}>{new Date(po.createdAt).toLocaleDateString()}</td>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    <span className={`badge ${po.status === 'Completed' ? 'badge-success' : po.status === 'Partial' ? 'badge-warning' : 'badge-neutral'}`}>
-                                                        {po.status}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{po.itemCount}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{po.totalOrdered}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{po.totalReceived}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                                        <div style={{ width: '60px', height: '6px', background: 'var(--bg-dark)', borderRadius: '3px', overflow: 'hidden' }}>
-                                                            <div style={{ width: `${po.completionPercent}%`, height: '100%', background: po.completionPercent === 100 ? '#10b981' : '#3b82f6', transition: 'width 0.3s' }} />
-                                                        </div>
-                                                        <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{po.completionPercent.toFixed(0)}%</span>
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${po.totalValue.toFixed(2)}</td>
+                                <div className="table-responsive">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                                <th style={{ padding: '0.75rem' }}>PO Number</th>
+                                                <th style={{ padding: '0.75rem' }}>Supplier</th>
+                                                <th style={{ padding: '0.75rem' }}>Date</th>
+                                                <th style={{ padding: '0.75rem' }}>Status</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Items</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Ordered</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Received</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Completion</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {purchasingData.map((po, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 500 }}>{po.poNumber}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{po.supplier}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{new Date(po.createdAt).toLocaleDateString()}</td>
+                                                    <td style={{ padding: '0.75rem' }}>
+                                                        <span className={`badge ${po.status === 'Completed' ? 'badge-success' : po.status === 'Partial' ? 'badge-warning' : 'badge-neutral'}`}>
+                                                            {po.status}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{po.itemCount}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{po.totalOrdered}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{po.totalReceived}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                                            <div style={{ width: '60px', height: '6px', background: 'var(--bg-dark)', borderRadius: '3px', overflow: 'hidden' }}>
+                                                                <div style={{ width: `${po.completionPercent}%`, height: '100%', background: po.completionPercent === 100 ? '#10b981' : '#3b82f6', transition: 'width 0.3s' }} />
+                                                            </div>
+                                                            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{po.completionPercent.toFixed(0)}%</span>
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${po.totalValue.toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
 
@@ -418,38 +424,40 @@ export default function ReportsPage() {
                                 </div>
 
                                 <h3 style={{ marginBottom: '1rem' }}>Sales Performance</h3>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                            <th style={{ padding: '0.75rem' }}>SO Number</th>
-                                            <th style={{ padding: '0.75rem' }}>Customer</th>
-                                            <th style={{ padding: '0.75rem' }}>Date</th>
-                                            <th style={{ padding: '0.75rem' }}>Status</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Revenue</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Est. Cost</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Margin</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {salesData.map((order, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.75rem' }}>{order.soNumber}</td>
-                                                <td style={{ padding: '0.75rem' }}>{order.customer}</td>
-                                                <td style={{ padding: '0.75rem' }}>{new Date(order.date).toLocaleDateString()}</td>
-                                                <td style={{ padding: '0.75rem' }}>
-                                                    <span className={`badge ${order.status === 'Confirmed' ? 'badge-success' : 'badge-neutral'}`}>
-                                                        {order.status}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${order.totalValue.toFixed(2)}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>${order.totalCost.toFixed(2)}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: order.margin >= 0 ? '#10b981' : '#ef4444' }}>
-                                                    ${order.margin.toFixed(2)}
-                                                </td>
+                                <div className="table-responsive">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                                <th style={{ padding: '0.75rem' }}>SO Number</th>
+                                                <th style={{ padding: '0.75rem' }}>Customer</th>
+                                                <th style={{ padding: '0.75rem' }}>Date</th>
+                                                <th style={{ padding: '0.75rem' }}>Status</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Revenue</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Est. Cost</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Margin</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {salesData.map((order, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.75rem' }}>{order.soNumber}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{order.customer}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{new Date(order.date).toLocaleDateString()}</td>
+                                                    <td style={{ padding: '0.75rem' }}>
+                                                        <span className={`badge ${order.status === 'Confirmed' ? 'badge-success' : 'badge-neutral'}`}>
+                                                            {order.status}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${order.totalValue.toFixed(2)}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>${order.totalCost.toFixed(2)}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: order.margin >= 0 ? '#10b981' : '#ef4444' }}>
+                                                        ${order.margin.toFixed(2)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </>
                         )}
 
@@ -457,30 +465,32 @@ export default function ReportsPage() {
                         {activeTab === 'production' && (
                             <div>
                                 <h3 style={{ marginBottom: '1rem' }}>Production History</h3>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                            <th style={{ padding: '0.75rem' }}>Date</th>
-                                            <th style={{ padding: '0.75rem' }}>SKU</th>
-                                            <th style={{ padding: '0.75rem' }}>Product Name</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Qty</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
-                                            <th style={{ padding: '0.75rem' }}>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {productionData.map((run, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.75rem' }}>{new Date(run.createdAt).toLocaleDateString()}</td>
-                                                <td style={{ padding: '0.75rem' }}>{run.item?.sku}</td>
-                                                <td style={{ padding: '0.75rem' }}>{run.item?.name}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{run.quantity}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>${run.valueProduced?.toFixed(2)}</td>
-                                                <td style={{ padding: '0.75rem' }}>{run.status}</td>
+                                <div className="table-responsive">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                                <th style={{ padding: '0.75rem' }}>Date</th>
+                                                <th style={{ padding: '0.75rem' }}>SKU</th>
+                                                <th style={{ padding: '0.75rem' }}>Product Name</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Qty</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
+                                                <th style={{ padding: '0.75rem' }}>Status</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {productionData.map((run, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.75rem' }}>{new Date(run.createdAt).toLocaleDateString()}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{run.item?.sku}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{run.item?.name}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{run.quantity}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>${run.valueProduced?.toFixed(2)}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{run.status}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
 
@@ -488,30 +498,32 @@ export default function ReportsPage() {
                         {activeTab === 'warehouses' && (
                             <div>
                                 <h3 style={{ marginBottom: '1rem' }}>Warehouse Comparison</h3>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                            <th style={{ padding: '0.75rem' }}>Warehouse</th>
-                                            <th style={{ padding: '0.75rem' }}>Location</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Unique Items</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Units</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Avg Value/Item</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {warehouseData.map((wh, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.75rem', fontWeight: 500 }}>{wh.name}</td>
-                                                <td style={{ padding: '0.75rem' }}>{wh.location}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{wh.totalItems}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{wh.totalUnits}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${wh.totalValue.toFixed(2)}</td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>${wh.avgValuePerItem.toFixed(2)}</td>
+                                <div className="table-responsive">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                                <th style={{ padding: '0.75rem' }}>Warehouse</th>
+                                                <th style={{ padding: '0.75rem' }}>Location</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Unique Items</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Units</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Value</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Avg Value/Item</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {warehouseData.map((wh, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 500 }}>{wh.name}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{wh.location}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{wh.totalItems}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>{wh.totalUnits}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>${wh.totalValue.toFixed(2)}</td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>${wh.avgValuePerItem.toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
 
@@ -632,7 +644,7 @@ export default function ReportsPage() {
                                         </div>
 
                                         {/* Additional Metrics */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                                        <div className="grid-cols-2" style={{ gap: '1rem', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
                                             <div>
                                                 <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Production Cost</div>
                                                 <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>${profitLossData.productionCost.toLocaleString()}</div>

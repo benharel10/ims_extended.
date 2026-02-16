@@ -174,59 +174,61 @@ export default function PurchasingPage() {
                         No active purchase orders. Create one to get started.
                     </div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                                <th style={{ padding: '1rem' }}>PO Number</th>
-                                <th style={{ padding: '1rem' }}>Supplier</th>
-                                <th style={{ padding: '1rem' }}>Status</th>
-                                <th style={{ padding: '1rem' }}>Items</th>
-                                <th style={{ padding: '1rem' }}>Created</th>
-                                <th style={{ padding: '1rem' }}>Due Date</th>
-                                <th style={{ padding: '1rem' }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {pos.map(po => (
-                                <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                    <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
-                                    <td style={{ padding: '1rem' }}>{po.supplier}</td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <span className={`badge badge-${po.status === 'Completed' ? 'success' : po.status === 'Partial' ? 'warning' : 'secondary'}`}>
-                                            {po.status}
-                                        </span>
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
-                                    <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
-                                        {new Date(po.createdAt).toLocaleDateString()}
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        {(() => {
-                                            if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
-                                            const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
-                                            const isOverdue = new Date() > due && po.status !== 'Completed';
-                                            return (
-                                                <span style={{
-                                                    color: isOverdue ? 'var(--error)' : 'inherit',
-                                                    fontWeight: isOverdue ? 600 : 400,
-                                                    display: 'flex', alignItems: 'center', gap: '0.5rem'
-                                                }}>
-                                                    {due.toLocaleDateString()}
-                                                    {isOverdue && <AlertTriangle size={14} />}
-                                                </span>
-                                            );
-                                        })()}
-                                    </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <Link href={`/purchasing/${po.id}`} className="btn btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-                                            <ExternalLink size={14} style={{ marginRight: '0.5rem' }} />
-                                            View Details
-                                        </Link>
-                                    </td>
+                    <div className="table-responsive">
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                    <th style={{ padding: '1rem' }}>PO Number</th>
+                                    <th style={{ padding: '1rem' }}>Supplier</th>
+                                    <th style={{ padding: '1rem' }}>Status</th>
+                                    <th style={{ padding: '1rem' }}>Items</th>
+                                    <th style={{ padding: '1rem' }}>Created</th>
+                                    <th style={{ padding: '1rem' }}>Due Date</th>
+                                    <th style={{ padding: '1rem' }}>Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {pos.map(po => (
+                                    <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                        <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
+                                        <td style={{ padding: '1rem' }}>{po.supplier}</td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <span className={`badge badge-${po.status === 'Completed' ? 'success' : po.status === 'Partial' ? 'warning' : 'secondary'}`}>
+                                                {po.status}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
+                                        <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                                            {new Date(po.createdAt).toLocaleDateString()}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {(() => {
+                                                if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                                                const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
+                                                const isOverdue = new Date() > due && po.status !== 'Completed';
+                                                return (
+                                                    <span style={{
+                                                        color: isOverdue ? 'var(--error)' : 'inherit',
+                                                        fontWeight: isOverdue ? 600 : 400,
+                                                        display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                                    }}>
+                                                        {due.toLocaleDateString()}
+                                                        {isOverdue && <AlertTriangle size={14} />}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <Link href={`/purchasing/${po.id}`} className="btn btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                                                <ExternalLink size={14} style={{ marginRight: '0.5rem' }} />
+                                                View Details
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
@@ -258,65 +260,67 @@ export default function PurchasingPage() {
                         <p>No items are currently below their minimum stock level.</p>
                     </div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                                <th style={{ padding: '1rem', width: '40px' }}>
-                                    <div
-                                        className="checkbox"
-                                        onClick={() => {
-                                            if (selectedIds.size === items.length) setSelectedIds(new Set());
-                                            else setSelectedIds(new Set(items.map(i => i.id)));
-                                        }}
-                                        style={{ cursor: 'pointer' }}
-                                    >
-                                        {selectedIds.size === items.length && items.length > 0 ? <CheckSquare size={18} /> : <Square size={18} />}
-                                    </div>
-                                </th>
-                                <th style={{ padding: '1rem' }}>SKU</th>
-                                <th style={{ padding: '1rem' }}>Name</th>
-                                <th style={{ padding: '1rem' }}>Current Stock</th>
-                                <th style={{ padding: '1rem' }}>Min Stock</th>
-                                <th style={{ padding: '1rem' }}>Deficit</th>
-                                <th style={{ padding: '1rem' }}>Order Qty</th>
-                                <th style={{ padding: '1rem' }}>Cost Est.</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {items.map(item => {
-                                const deficit = item.minStock - item.currentStock;
-                                return (
-                                    <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedIds.has(item.id) ? 'rgba(7, 89, 133, 0.1)' : 'transparent' }}>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div
-                                                className="checkbox"
-                                                onClick={() => toggleSelect(item.id)}
-                                                style={{ cursor: 'pointer', color: selectedIds.has(item.id) ? 'var(--primary)' : 'var(--text-muted)' }}
-                                            >
-                                                {selectedIds.has(item.id) ? <CheckSquare size={18} /> : <Square size={18} />}
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '1rem', fontWeight: 500 }}>{item.sku}</td>
-                                        <td style={{ padding: '1rem' }}>{item.name}</td>
-                                        <td style={{ padding: '1rem', color: '#ef4444', fontWeight: 600 }}>{item.currentStock}</td>
-                                        <td style={{ padding: '1rem' }}>{item.minStock}</td>
-                                        <td style={{ padding: '1rem' }}>{deficit}</td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <input
-                                                type="number"
-                                                className="input-group"
-                                                style={{ width: '80px', padding: '0.25rem' }}
-                                                value={quantities[item.id] || 0}
-                                                onChange={(e) => updateQuantity(item.id, parseInt(e.target.value))}
-                                                min="1"
-                                            />
-                                        </td>
-                                        <td style={{ padding: '1rem' }}>${((quantities[item.id] || 0) * item.cost).toFixed(2)}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                    <div className="table-responsive">
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                    <th style={{ padding: '1rem', width: '40px' }}>
+                                        <div
+                                            className="checkbox"
+                                            onClick={() => {
+                                                if (selectedIds.size === items.length) setSelectedIds(new Set());
+                                                else setSelectedIds(new Set(items.map(i => i.id)));
+                                            }}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            {selectedIds.size === items.length && items.length > 0 ? <CheckSquare size={18} /> : <Square size={18} />}
+                                        </div>
+                                    </th>
+                                    <th style={{ padding: '1rem' }}>SKU</th>
+                                    <th style={{ padding: '1rem' }}>Name</th>
+                                    <th style={{ padding: '1rem' }}>Current Stock</th>
+                                    <th style={{ padding: '1rem' }}>Min Stock</th>
+                                    <th style={{ padding: '1rem' }}>Deficit</th>
+                                    <th style={{ padding: '1rem' }}>Order Qty</th>
+                                    <th style={{ padding: '1rem' }}>Cost Est.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.map(item => {
+                                    const deficit = item.minStock - item.currentStock;
+                                    return (
+                                        <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedIds.has(item.id) ? 'rgba(7, 89, 133, 0.1)' : 'transparent' }}>
+                                            <td style={{ padding: '1rem' }}>
+                                                <div
+                                                    className="checkbox"
+                                                    onClick={() => toggleSelect(item.id)}
+                                                    style={{ cursor: 'pointer', color: selectedIds.has(item.id) ? 'var(--primary)' : 'var(--text-muted)' }}
+                                                >
+                                                    {selectedIds.has(item.id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '1rem', fontWeight: 500 }}>{item.sku}</td>
+                                            <td style={{ padding: '1rem' }}>{item.name}</td>
+                                            <td style={{ padding: '1rem', color: '#ef4444', fontWeight: 600 }}>{item.currentStock}</td>
+                                            <td style={{ padding: '1rem' }}>{item.minStock}</td>
+                                            <td style={{ padding: '1rem' }}>{deficit}</td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <input
+                                                    type="number"
+                                                    className="input-group"
+                                                    style={{ width: '80px', padding: '0.25rem' }}
+                                                    value={quantities[item.id] || 0}
+                                                    onChange={(e) => updateQuantity(item.id, parseInt(e.target.value))}
+                                                    min="1"
+                                                />
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>${((quantities[item.id] || 0) * item.cost).toFixed(2)}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
         </div>

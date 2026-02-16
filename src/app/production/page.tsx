@@ -378,8 +378,8 @@ export default function ProductionPage() {
                         {isCreatingParent && (
                             <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', background: 'var(--bg-dark)' }}>
                                 <h4 style={{ marginBottom: '0.5rem' }}>Create New Product</h4>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1rem', alignItems: 'end' }}>
-                                    <div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end' }}>
+                                    <div style={{ flex: 1, minWidth: '150px' }}>
                                         <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '0.25rem' }}>SKU</label>
                                         <input
                                             type="text"
@@ -389,7 +389,7 @@ export default function ProductionPage() {
                                             onChange={e => setNewParent({ ...newParent, sku: e.target.value })}
                                         />
                                     </div>
-                                    <div>
+                                    <div style={{ flex: 1, minWidth: '150px' }}>
                                         <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '0.25rem' }}>Name</label>
                                         <input
                                             type="text"
@@ -425,93 +425,97 @@ export default function ProductionPage() {
                                     )}
 
                                     {bomLines.length > 0 && (
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) 100px 100px 120px 40px', gap: '1rem', marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                            <div>Component</div>
-                                            <div>Quantity</div>
-                                            <div>Line Cost</div>
-                                            <div>Unit Cost / Edit</div>
-                                            <div></div>
-                                        </div>
-                                    )}
-
-                                    {bomLines.map((line, index) => {
-                                        const comp = components.find(c => String(c.id) === line.childId);
-                                        const lineCost = comp ? (comp.cost * line.quantity).toFixed(2) : '0.00';
-
-                                        return (
-                                            <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) 100px 100px 120px 40px', gap: '1rem', alignItems: 'center' }}>
-                                                <select
-                                                    style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
-                                                    value={line.childId}
-                                                    onChange={(e) => updateBomLine(index, 'childId', e.target.value)}
-                                                >
-                                                    <option value="">-- Select --</option>
-                                                    {components
-                                                        .filter(c => c.id !== parseInt(selectedParentId)) // Prevent self-reference
-                                                        .map(c => (
-                                                            <option key={c.id} value={String(c.id)}>
-                                                                {c.sku} - {c.name} (Stk: {c.currentStock})
-                                                            </option>
-                                                        ))}
-                                                </select>
-
-                                                <input
-                                                    type="number"
-                                                    placeholder="Qty"
-                                                    min="0.0001"
-                                                    step="any"
-                                                    style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
-                                                    value={line.quantity}
-                                                    onChange={(e) => updateBomLine(index, 'quantity', parseFloat(e.target.value))}
-                                                />
-
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.9rem' }}>
-                                                    <span style={{ color: 'var(--text-muted)' }}>$</span>
-                                                    {lineCost}
+                                        <div className="table-responsive">
+                                            <div style={{ minWidth: '600px' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) 100px 100px 120px 40px', gap: '1rem', marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                    <div>Component</div>
+                                                    <div>Quantity</div>
+                                                    <div>Line Cost</div>
+                                                    <div>Unit Cost / Edit</div>
+                                                    <div></div>
                                                 </div>
 
-                                                {/* Cost Editing Column */}
-                                                <div>
-                                                    {comp && String(comp.id) === editingCostId ? (
-                                                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                                {bomLines.map((line, index) => {
+                                                    const comp = components.find(c => String(c.id) === line.childId);
+                                                    const lineCost = comp ? (comp.cost * line.quantity).toFixed(2) : '0.00';
+
+                                                    return (
+                                                        <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) 100px 100px 120px 40px', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                                            <select
+                                                                style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                                                value={line.childId}
+                                                                onChange={(e) => updateBomLine(index, 'childId', e.target.value)}
+                                                            >
+                                                                <option value="">-- Select --</option>
+                                                                {components
+                                                                    .filter(c => c.id !== parseInt(selectedParentId)) // Prevent self-reference
+                                                                    .map(c => (
+                                                                        <option key={c.id} value={String(c.id)}>
+                                                                            {c.sku} - {c.name} (Stk: {c.currentStock})
+                                                                        </option>
+                                                                    ))}
+                                                            </select>
+
                                                             <input
                                                                 type="number"
-                                                                step="0.01"
-                                                                style={{ width: '60px', padding: '0.25rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                                                                value={editCostValue}
-                                                                onChange={e => setEditCostValue(parseFloat(e.target.value))}
-                                                                autoFocus
+                                                                placeholder="Qty"
+                                                                min="0.0001"
+                                                                step="any"
+                                                                style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                                                value={line.quantity}
+                                                                onChange={(e) => updateBomLine(index, 'quantity', parseFloat(e.target.value))}
                                                             />
-                                                            <button onClick={() => handleUpdateCost(comp.id)} style={{ color: '#10b981', background: 'none', border: 'none', cursor: 'pointer' }} title="Save"><Save size={16} /></button>
-                                                            <button onClick={() => setEditingCostId(null)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }} title="Cancel">✕</button>
-                                                        </div>
-                                                    ) : (
-                                                        <div
-                                                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', opacity: 0.8 }}
-                                                            onClick={() => {
-                                                                if (comp) {
-                                                                    setEditingCostId(String(comp.id));
-                                                                    setEditCostValue(comp.cost);
-                                                                }
-                                                            }}
-                                                            title="Click to edit generic item cost"
-                                                        >
-                                                            <span style={{ fontSize: '0.85rem' }}>${comp?.cost.toFixed(2)}/u</span>
-                                                            <Settings size={12} />
-                                                        </div>
-                                                    )}
-                                                </div>
 
-                                                <button
-                                                    onClick={() => removeBomLine(index)}
-                                                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center' }}
-                                                    title="Remove Component"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.9rem' }}>
+                                                                <span style={{ color: 'var(--text-muted)' }}>$</span>
+                                                                {lineCost}
+                                                            </div>
+
+                                                            {/* Cost Editing Column */}
+                                                            <div>
+                                                                {comp && String(comp.id) === editingCostId ? (
+                                                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            style={{ width: '60px', padding: '0.25rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                                                                            value={editCostValue}
+                                                                            onChange={e => setEditCostValue(parseFloat(e.target.value))}
+                                                                            autoFocus
+                                                                        />
+                                                                        <button onClick={() => handleUpdateCost(comp.id)} style={{ color: '#10b981', background: 'none', border: 'none', cursor: 'pointer' }} title="Save"><Save size={16} /></button>
+                                                                        <button onClick={() => setEditingCostId(null)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }} title="Cancel">✕</button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div
+                                                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', opacity: 0.8 }}
+                                                                        onClick={() => {
+                                                                            if (comp) {
+                                                                                setEditingCostId(String(comp.id));
+                                                                                setEditCostValue(comp.cost);
+                                                                            }
+                                                                        }}
+                                                                        title="Click to edit generic item cost"
+                                                                    >
+                                                                        <span style={{ fontSize: '0.85rem' }}>${comp?.cost.toFixed(2)}/u</span>
+                                                                        <Settings size={12} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <button
+                                                                onClick={() => removeBomLine(index)}
+                                                                style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center' }}
+                                                                title="Remove Component"
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        </div>
+                                                    )
+                                                })}
                                             </div>
-                                        )
-                                    })}
+                                        </div>
+                                    )}
 
                                     <div style={{ marginTop: '0.5rem', marginBottom: '2rem' }}>
                                         <button className="btn btn-outline" onClick={addBomLine}>
@@ -522,7 +526,7 @@ export default function ProductionPage() {
                                     {/* Cost & Price Section */}
                                     <div style={{ background: 'var(--bg-dark)', padding: '1.5rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                                         <h4 style={{ margin: '0 0 1rem 0' }}>Costing & Pricing</h4>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', alignItems: 'end' }}>
+                                        <div className="grid-cols-3" style={{ alignItems: 'end' }}>
 
                                             <div>
                                                 <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Sum of Components</label>
@@ -586,7 +590,7 @@ export default function ProductionPage() {
                         <Play size={20} /> Execute Assembly
                     </h3>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                    <div className="grid-cols-2" style={{ gap: '2rem' }}>
                         <div>
                             <div style={{ marginBottom: '1.5rem' }}>
                                 <label style={{ display: 'block', marginBottom: '0.5rem' }}>Product to Assemble</label>
@@ -700,129 +704,132 @@ export default function ProductionPage() {
                             <History size={20} /> Recent Production Runs
                         </h3>
 
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                    <th style={{ padding: '0.75rem', width: '40px' }}>
-                                        <input
-                                            type="checkbox"
-                                            onChange={toggleSelectAllRuns}
-                                            checked={productionRuns.length > 0 && selectedRunIds.size === productionRuns.length}
-                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                        />
-                                    </th>
-                                    <th style={{ padding: '0.75rem' }}>ID</th>
-                                    <th style={{ padding: '0.75rem' }}>Date</th>
-                                    <th style={{ padding: '0.75rem' }}>Product</th>
-                                    <th style={{ padding: '0.75rem' }}>Qty Produced</th>
-                                    <th style={{ padding: '0.75rem' }}>Status</th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>
-                                        {selectedRunIds.size > 0 && isAdmin && (
-                                            <button
-                                                className="btn btn-sm btn-outline"
-                                                onClick={handleBulkDeleteRuns}
-                                                style={{ color: '#ef4444', borderColor: '#ef4444', padding: '0.25rem 0.5rem' }}
-                                            >
-                                                Delete ({selectedRunIds.size})
-                                            </button>
-                                        )}
-                                        {selectedRunIds.size === 0 && 'Actions'}
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {productionRuns.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                                            No production history yet.
-                                        </td>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                        <th style={{ padding: '0.75rem', width: '40px' }}>
+                                            <input
+                                                type="checkbox"
+                                                onChange={toggleSelectAllRuns}
+                                                checked={productionRuns.length > 0 && selectedRunIds.size === productionRuns.length}
+                                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                            />
+                                        </th>
+                                        <th style={{ padding: '0.75rem' }}>ID</th>
+                                        <th style={{ padding: '0.75rem' }}>Date</th>
+                                        <th style={{ padding: '0.75rem' }}>Product</th>
+                                        <th style={{ padding: '0.75rem' }}>Qty Produced</th>
+                                        <th style={{ padding: '0.75rem' }}>Status</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>
+                                            {selectedRunIds.size > 0 && isAdmin && (
+                                                <button
+                                                    className="btn btn-sm btn-outline"
+                                                    onClick={handleBulkDeleteRuns}
+                                                    style={{ color: '#ef4444', borderColor: '#ef4444', padding: '0.25rem 0.5rem' }}
+                                                >
+                                                    Delete ({selectedRunIds.size})
+                                                </button>
+                                            )}
+                                            {selectedRunIds.size === 0 && 'Actions'}
+                                        </th>
                                     </tr>
-                                ) : (
-                                    productionRuns.map(run => (
-                                        <tr key={run.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedRunIds.has(run.id)}
-                                                    onChange={() => toggleSelectRun(run.id)}
-                                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                                />
-                                            </td>
-                                            <td style={{ padding: '0.75rem', fontFamily: 'monospace' }}>#{run.id}</td>
-                                            <td style={{ padding: '0.75rem' }}>{new Date(run.createdAt).toLocaleDateString()} {new Date(run.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                                            <td style={{ padding: '0.75rem', fontWeight: 500 }}>
-                                                {run.item ? (
-                                                    `${run.item.sku} - ${run.item.name}`
-                                                ) : (
-                                                    <span style={{ color: '#ef4444', fontStyle: 'italic' }}>
-                                                        Deleted Product (Item #{run.itemId})
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                {editingRunId === run.id ? (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <input
-                                                            type="number"
-                                                            value={editRunQty}
-                                                            onChange={e => setEditRunQty(parseFloat(e.target.value))}
-                                                            style={{ width: '80px', padding: '0.25rem', background: 'var(--bg-card)', border: '1px solid var(--primary)', borderRadius: '4px', color: 'white' }}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <span style={{ fontSize: '1rem', fontWeight: 600 }}>{run.quantity}</span>
-                                                )}
-                                            </td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                                <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>{run.status}</span>
-                                            </td>
-                                            <td style={{ padding: '0.75rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                                {editingRunId === run.id ? (
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                        <button
-                                                            onClick={() => handleUpdateRun(run.id)}
-                                                            className="btn btn-primary"
-                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
-                                                        >
-                                                            Save
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setEditingRunId(null)}
-                                                            className="btn btn-outline"
-                                                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingRunId(run.id);
-                                                                setEditRunQty(run.quantity);
-                                                            }}
-                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', opacity: 0.6 }}
-                                                            title="Edit Quantity"
-                                                        >
-                                                            <Edit2 size={16} />
-                                                        </button>
-                                                        {isAdmin && (
-                                                            <button
-                                                                onClick={() => handleDeleteRun(run.id)}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', opacity: 0.6 }}
-                                                                title="Delete Run"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        )}
-                                                    </>
-                                                )}
+                                </thead>
+                                <tbody>
+                                    {productionRuns.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                                No production history yet.
                                             </td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                    ) : (
+                                        productionRuns.map(run => (
+                                            <tr key={run.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedRunIds.has(run.id)}
+                                                        onChange={() => toggleSelectRun(run.id)}
+                                                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                    />
+                                                </td>
+                                                <td style={{ padding: '0.75rem', fontFamily: 'monospace' }}>#{run.id}</td>
+                                                <td style={{ padding: '0.75rem' }}>{new Date(run.createdAt).toLocaleDateString()} {new Date(run.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                                                <td style={{ padding: '0.75rem', fontWeight: 500 }}>
+                                                    {run.item ? (
+                                                        `${run.item.sku} - ${run.item.name}`
+                                                    ) : (
+                                                        <span style={{ color: '#ef4444', fontStyle: 'italic' }}>
+                                                            Deleted Product (Item #{run.itemId})
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    {editingRunId === run.id ? (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <input
+                                                                type="number"
+                                                                value={editRunQty}
+                                                                onChange={e => setEditRunQty(parseFloat(e.target.value))}
+                                                                style={{ width: '80px', padding: '0.25rem', background: 'var(--bg-card)', border: '1px solid var(--primary)', borderRadius: '4px', color: 'white' }}
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <span style={{ fontSize: '1rem', fontWeight: 600 }}>{run.quantity}</span>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>{run.status}</span>
+                                                </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                                    {editingRunId === run.id ? (
+                                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <button
+                                                                onClick={() => handleUpdateRun(run.id)}
+                                                                className="btn btn-primary"
+                                                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                                                            >
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setEditingRunId(null)}
+                                                                className="btn btn-outline"
+                                                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingRunId(run.id);
+                                                                    setEditRunQty(run.quantity);
+                                                                }}
+                                                                className="btn btn-sm btn-ghost"
+                                                                title="Edit"
+                                                            >
+                                                                <Edit2 size={16} />
+                                                            </button>
+                                                            {isAdmin && (
+                                                                <button
+                                                                    onClick={() => handleDeleteRun(run.id)}
+                                                                    className="btn btn-sm btn-ghost"
+                                                                    style={{ color: '#ef4444' }}
+                                                                    title="Delete"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             )}

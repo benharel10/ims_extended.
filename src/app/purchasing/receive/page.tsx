@@ -156,49 +156,51 @@ export default function ReceivePOPage() {
                                             </select>
                                         </div>
 
-                                        <table style={{ width: '100%', fontSize: '0.9rem' }}>
-                                            <thead>
-                                                <tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}>
-                                                    <th style={{ padding: '0.5rem' }}>Item</th>
-                                                    <th style={{ padding: '0.5rem' }}>Ordered</th>
-                                                    <th style={{ padding: '0.5rem' }}>Received So Far</th>
-                                                    <th style={{ padding: '0.5rem' }}>Pending</th>
-                                                    <th style={{ padding: '0.5rem' }}>Receive Now</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {po.lines.map((line: any) => {
-                                                    const pending = line.quantity - line.received;
-                                                    const isComplete = pending <= 0;
+                                        <div className="table-responsive">
+                                            <table style={{ width: '100%', fontSize: '0.9rem' }}>
+                                                <thead>
+                                                    <tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}>
+                                                        <th style={{ padding: '0.5rem' }}>Item</th>
+                                                        <th style={{ padding: '0.5rem' }}>Ordered</th>
+                                                        <th style={{ padding: '0.5rem' }}>Received So Far</th>
+                                                        <th style={{ padding: '0.5rem' }}>Pending</th>
+                                                        <th style={{ padding: '0.5rem' }}>Receive Now</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {po.lines.map((line: any) => {
+                                                        const pending = line.quantity - line.received;
+                                                        const isComplete = pending <= 0;
 
-                                                    return (
-                                                        <tr key={line.id} style={{ opacity: isComplete ? 0.5 : 1 }}>
-                                                            <td style={{ padding: '0.5rem' }}>
-                                                                {line.item?.sku || line.newItemSku || <span style={{ opacity: 0.7 }}>New Item</span>} - {line.item?.name || line.newItemName}
-                                                            </td>
-                                                            <td style={{ padding: '0.5rem' }}>{line.quantity}</td>
-                                                            <td style={{ padding: '0.5rem' }}>{line.received}</td>
-                                                            <td style={{ padding: '0.5rem' }}>{Math.max(0, pending)}</td>
-                                                            <td style={{ padding: '0.5rem' }}>
-                                                                {!isComplete && (
-                                                                    <input
-                                                                        type="number"
-                                                                        className="input-group"
-                                                                        style={{ width: '80px', padding: '0.25rem' }}
-                                                                        placeholder="Qty"
-                                                                        max={pending}
-                                                                        min="0"
-                                                                        value={receiveQtys[line.id] || ''}
-                                                                        onChange={e => updateQty(line.id, parseInt(e.target.value))}
-                                                                    />
-                                                                )}
-                                                                {isComplete && <span className="text-muted">Complete</span>}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                                        return (
+                                                            <tr key={line.id} style={{ opacity: isComplete ? 0.5 : 1 }}>
+                                                                <td style={{ padding: '0.5rem' }}>
+                                                                    {line.item?.sku || line.newItemSku || <span style={{ opacity: 0.7 }}>New Item</span>} - {line.item?.name || line.newItemName}
+                                                                </td>
+                                                                <td style={{ padding: '0.5rem' }}>{line.quantity}</td>
+                                                                <td style={{ padding: '0.5rem' }}>{line.received}</td>
+                                                                <td style={{ padding: '0.5rem' }}>{Math.max(0, pending)}</td>
+                                                                <td style={{ padding: '0.5rem' }}>
+                                                                    {!isComplete && (
+                                                                        <input
+                                                                            type="number"
+                                                                            className="input-group"
+                                                                            style={{ width: '80px', padding: '0.25rem' }}
+                                                                            placeholder="Qty"
+                                                                            max={pending}
+                                                                            min="0"
+                                                                            value={receiveQtys[line.id] || ''}
+                                                                            onChange={e => updateQty(line.id, parseInt(e.target.value))}
+                                                                        />
+                                                                    )}
+                                                                    {isComplete && <span className="text-muted">Complete</span>}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
 
                                         <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
                                             <button

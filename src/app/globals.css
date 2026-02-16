@@ -435,3 +435,135 @@ p {
     padding: 0.5rem;
   }
 }
+
+/* Mobile Responsiveness Additions */
+.mobile-toggle {
+  display: none;
+  position: fixed;
+  top: 1.5rem;
+  /* Moved down slightly */
+  left: 1.5rem;
+  /* Moved right slightly */
+  z-index: 9999;
+  /* Nuclear option */
+  background: var(--primary);
+  border: 1px solid white;
+  /* High contrast border */
+  padding: 0.5rem;
+  border-radius: 50%;
+  /* Circle shape */
+  color: white;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  /* Strong shadow */
+  cursor: pointer;
+  width: 50px;
+  /* Big touch target */
+  height: 50px;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+}
+
+/* Responsive Table Wrapper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive Header */
+.flex-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .mobile-toggle {
+    display: flex !important;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  .main-content {
+    padding: 1rem;
+    padding-top: 5rem;
+    /* Space for toggle button */
+  }
+
+  /* Stack Flex Containers on Mobile where appropriate */
+  .flex-stack-mobile {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .flex-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .flex-header>div {
+    /* If there are multiple divs, they should flex */
+    flex: 1;
+    width: 100%;
+  }
+
+  .flex-header>div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    /* allow wrapping buttons */
+    gap: 0.5rem;
+    justify-content: flex-start;
+    margin-top: 1rem;
+  }
+
+  /* Adjust headings */
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+}
+
+.responsive-grid-sidebar {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  flex: 1;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .responsive-grid-sidebar {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .responsive-grid-sidebar>div:first-child {
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-color);
+  }
+}

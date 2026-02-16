@@ -447,97 +447,99 @@ export default function ShippingPage() {
                                                                 </button>
                                                             )}
                                                         </div>
-                                                        <table style={{ width: '100%', fontSize: '0.9rem' }}>
-                                                            <thead>
-                                                                <tr style={{ color: 'var(--text-muted)', textAlign: 'left' }}>
-                                                                    <th>Item</th>
-                                                                    <th style={{ width: '60px' }}>Qty</th>
-                                                                    <th style={{ width: '40px' }}></th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {pkg.items.map((pItem: any) => (
-                                                                    <tr key={pItem.id}>
-                                                                        <td style={{ padding: '0.25rem 0', color: 'var(--text-main)' }}>{pItem.item.sku} - {pItem.item.name}</td>
-                                                                        <td style={{ color: 'var(--text-main)' }}>{pItem.quantity}</td>
-                                                                        <td>
-                                                                            {isAdmin && (
-                                                                                <button onClick={() => removeItemFromPackage(pItem.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
-                                                                            )}
-                                                                        </td>
+                                                        <div className="table-responsive">
+                                                            <table style={{ width: '100%', fontSize: '0.9rem' }}>
+                                                                <thead>
+                                                                    <tr style={{ color: 'var(--text-muted)', textAlign: 'left' }}>
+                                                                        <th>Item</th>
+                                                                        <th style={{ width: '60px' }}>Qty</th>
+                                                                        <th style={{ width: '40px' }}></th>
                                                                     </tr>
-                                                                ))}
-                                                                {addingItemToPkg === pkg.id ? (
-                                                                    <tr>
-                                                                        <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
-                                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                                <select
-                                                                                    value={selectedItemToAdd}
-                                                                                    onChange={e => setSelectedItemToAdd(e.target.value)}
-                                                                                    className="input-group"
-                                                                                    style={{ flex: 1, padding: '0.25rem' }}
-                                                                                >
-                                                                                    <option value="">Select Item...</option>
-                                                                                    {items.map(i => {
-                                                                                        let stockLabel = `Total: ${i.currentStock}`;
-                                                                                        let available = i.currentStock;
-
-                                                                                        if (sourceWarehouseId && i.stocks) {
-                                                                                            const whStock = i.stocks.find((s: any) => s.warehouseId === sourceWarehouseId)?.quantity || 0;
-                                                                                            stockLabel = `WH Stock: ${whStock} (Total: ${i.currentStock})`;
-                                                                                            available = whStock;
-                                                                                        }
-
-                                                                                        // Optional: Disable if 0 stock in source warehouse for transfers?
-                                                                                        // const disabled = sourceWarehouseId && available <= 0;
-
-                                                                                        return (
-                                                                                            <option key={i.id} value={i.id}>
-                                                                                                {i.sku} - {i.name} ({stockLabel})
-                                                                                            </option>
-                                                                                        );
-                                                                                    })}
-                                                                                </select>
-
-                                                                                {isSerializedSelection ? (
-                                                                                    <select
-                                                                                        value={selectedSerialId}
-                                                                                        onChange={e => setSelectedSerialId(e.target.value)}
-                                                                                        className="input-group"
-                                                                                        style={{ width: '150px', padding: '0.25rem' }}
-                                                                                    >
-                                                                                        <option value="">Select S/N...</option>
-                                                                                        {availableSerials.map(s => <option key={s.id} value={s.id}>{s.sn}</option>)}
-                                                                                    </select>
-                                                                                ) : (
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        value={qtyToAdd}
-                                                                                        onChange={e => setQtyToAdd(parseInt(e.target.value))}
-                                                                                        style={{ width: '60px' }}
-                                                                                        className="input-group"
-                                                                                    />
+                                                                </thead>
+                                                                <tbody>
+                                                                    {pkg.items.map((pItem: any) => (
+                                                                        <tr key={pItem.id}>
+                                                                            <td style={{ padding: '0.25rem 0', color: 'var(--text-main)' }}>{pItem.item.sku} - {pItem.item.name}</td>
+                                                                            <td style={{ color: 'var(--text-main)' }}>{pItem.quantity}</td>
+                                                                            <td>
+                                                                                {isAdmin && (
+                                                                                    <button onClick={() => removeItemFromPackage(pItem.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
                                                                                 )}
-                                                                                <button onClick={() => handleAddItem(pkg.id)} className="btn btn-sm btn-primary">Save</button>
-                                                                                <button onClick={() => setAddingItemToPkg(null)} className="btn btn-sm">Cancel</button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                ) : (
-                                                                    <tr>
-                                                                        <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
-                                                                            <button
-                                                                                className="btn btn-sm btn-link"
-                                                                                style={{ padding: 0, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                                                                                onClick={() => openAddItem(pkg.id)}
-                                                                            >
-                                                                                <Plus size={14} /> Add Item
-                                                                            </button>
-                                                                        </td>
-                                                                    </tr>
-                                                                )}
-                                                            </tbody>
-                                                        </table>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                    {addingItemToPkg === pkg.id ? (
+                                                                        <tr>
+                                                                            <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
+                                                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                                    <select
+                                                                                        value={selectedItemToAdd}
+                                                                                        onChange={e => setSelectedItemToAdd(e.target.value)}
+                                                                                        className="input-group"
+                                                                                        style={{ flex: 1, padding: '0.25rem' }}
+                                                                                    >
+                                                                                        <option value="">Select Item...</option>
+                                                                                        {items.map(i => {
+                                                                                            let stockLabel = `Total: ${i.currentStock}`;
+                                                                                            let available = i.currentStock;
+
+                                                                                            if (sourceWarehouseId && i.stocks) {
+                                                                                                const whStock = i.stocks.find((s: any) => s.warehouseId === sourceWarehouseId)?.quantity || 0;
+                                                                                                stockLabel = `WH Stock: ${whStock} (Total: ${i.currentStock})`;
+                                                                                                available = whStock;
+                                                                                            }
+
+                                                                                            // Optional: Disable if 0 stock in source warehouse for transfers?
+                                                                                            // const disabled = sourceWarehouseId && available <= 0;
+
+                                                                                            return (
+                                                                                                <option key={i.id} value={i.id}>
+                                                                                                    {i.sku} - {i.name} ({stockLabel})
+                                                                                                </option>
+                                                                                            );
+                                                                                        })}
+                                                                                    </select>
+
+                                                                                    {isSerializedSelection ? (
+                                                                                        <select
+                                                                                            value={selectedSerialId}
+                                                                                            onChange={e => setSelectedSerialId(e.target.value)}
+                                                                                            className="input-group"
+                                                                                            style={{ width: '150px', padding: '0.25rem' }}
+                                                                                        >
+                                                                                            <option value="">Select S/N...</option>
+                                                                                            {availableSerials.map(s => <option key={s.id} value={s.id}>{s.sn}</option>)}
+                                                                                        </select>
+                                                                                    ) : (
+                                                                                        <input
+                                                                                            type="number"
+                                                                                            value={qtyToAdd}
+                                                                                            onChange={e => setQtyToAdd(parseInt(e.target.value))}
+                                                                                            style={{ width: '60px' }}
+                                                                                            className="input-group"
+                                                                                        />
+                                                                                    )}
+                                                                                    <button onClick={() => handleAddItem(pkg.id)} className="btn btn-sm btn-primary">Save</button>
+                                                                                    <button onClick={() => setAddingItemToPkg(null)} className="btn btn-sm">Cancel</button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ) : (
+                                                                        <tr>
+                                                                            <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
+                                                                                <button
+                                                                                    className="btn btn-sm btn-link"
+                                                                                    style={{ padding: 0, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                                                    onClick={() => openAddItem(pkg.id)}
+                                                                                >
+                                                                                    <Plus size={14} /> Add Item
+                                                                                </button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
@@ -748,7 +750,7 @@ export default function ShippingPage() {
                             <button className="btn btn-primary" onClick={handleCreateWarehouse}>Add</button>
                         </div>
 
-                        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>

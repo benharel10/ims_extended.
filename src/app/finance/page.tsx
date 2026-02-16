@@ -116,43 +116,45 @@ export default function FinancePage() {
                     </button>
                 </div>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                    <thead>
-                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                            <th style={{ padding: '0.75rem' }}>Time</th>
-                            <th style={{ padding: '0.75rem' }}>Entity</th>
-                            <th style={{ padding: '0.75rem' }}>Full ID/Ref</th>
-                            <th style={{ padding: '0.75rem' }}>Action</th>
-                            <th style={{ padding: '0.75rem' }}>Status</th>
-                            <th style={{ padding: '0.75rem' }}>Message</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {logs.length === 0 ? (
-                            <tr><td colSpan={6} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>No logs found.</td></tr>
-                        ) : (
-                            logs.map(log => (
-                                <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                    <td style={{ padding: '0.75rem' }}>
-                                        {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString()}
-                                    </td>
-                                    <td style={{ padding: '0.75rem' }}>{log.entityType}</td>
-                                    <td style={{ padding: '0.75rem' }}>#{log.entityId}</td>
-                                    <td style={{ padding: '0.75rem' }}>{log.action}</td>
-                                    <td style={{ padding: '0.75rem' }}>
-                                        <span style={{
-                                            color: log.status === 'Success' ? '#10b981' : '#ef4444',
-                                            fontWeight: 500
-                                        }}>
-                                            {log.status}
-                                        </span>
-                                    </td>
-                                    <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{log.message}</td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                <div className="table-responsive">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                                <th style={{ padding: '0.75rem' }}>Time</th>
+                                <th style={{ padding: '0.75rem' }}>Entity</th>
+                                <th style={{ padding: '0.75rem' }}>Full ID/Ref</th>
+                                <th style={{ padding: '0.75rem' }}>Action</th>
+                                <th style={{ padding: '0.75rem' }}>Status</th>
+                                <th style={{ padding: '0.75rem' }}>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {logs.length === 0 ? (
+                                <tr><td colSpan={6} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>No logs found.</td></tr>
+                            ) : (
+                                logs.map(log => (
+                                    <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                        <td style={{ padding: '0.75rem' }}>
+                                            {new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString()}
+                                        </td>
+                                        <td style={{ padding: '0.75rem' }}>{log.entityType}</td>
+                                        <td style={{ padding: '0.75rem' }}>#{log.entityId}</td>
+                                        <td style={{ padding: '0.75rem' }}>{log.action}</td>
+                                        <td style={{ padding: '0.75rem' }}>
+                                            <span style={{
+                                                color: log.status === 'Success' ? '#10b981' : '#ef4444',
+                                                fontWeight: 500
+                                            }}>
+                                                {log.status}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{log.message}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );

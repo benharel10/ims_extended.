@@ -238,7 +238,7 @@ export default function PODetailPage() {
                             </label>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: isNewItem ? '1fr 1fr 1fr 100px auto' : '1fr 150px auto', gap: '1rem', alignItems: 'end' }}>
+                        <div className={isNewItem ? "grid-cols-4" : "grid-cols-3"} style={{ alignItems: 'end', gap: '1rem' }}>
 
                             {!isNewItem ? (
                                 <div>
@@ -318,62 +318,64 @@ export default function PODetailPage() {
                 {/* Lines Table */}
                 {
                     po.lines && po.lines.length > 0 ? (
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                                    <th style={{ padding: '1rem' }}>SKU</th>
-                                    <th style={{ padding: '1rem' }}>Item</th>
-                                    <th style={{ padding: '1rem' }}>Unit Cost</th>
-                                    <th style={{ padding: '1rem' }}>Quantity</th>
-                                    <th style={{ padding: '1rem' }}>Received</th>
-                                    <th style={{ padding: '1rem' }}>Pending</th>
-                                    <th style={{ padding: '1rem' }}>Subtotal</th>
-                                    <th style={{ padding: '1rem' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {po.lines.map((line: any) => {
-                                    const pending = line.quantity - line.received;
-                                    const isComplete = pending <= 0;
-                                    return (
-                                        <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: isComplete ? 0.6 : 1 }}>
-                                            <td style={{ padding: '1rem', fontWeight: 500 }}>
-                                                {line.item?.sku || line.newItemSku || <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>New Item</span>}
-                                            </td>
-                                            <td style={{ padding: '1rem' }}>
-                                                {line.item?.name || line.newItemName || 'Unknown Item'}
-                                                {!line.item && <span className="badge badge-secondary" style={{ marginLeft: '0.5rem', fontSize: '0.7em' }}>Pending Creation</span>}
-                                            </td>
-                                            <td style={{ padding: '1rem' }}>${line.unitCost.toFixed(2)}</td>
-                                            <td style={{ padding: '1rem' }}>{line.quantity}</td>
-                                            <td style={{ padding: '1rem', color: 'var(--success)' }}>{line.received}</td>
-                                            <td style={{ padding: '1rem', color: pending > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
-                                                {pending > 0 ? pending : '✓'}
-                                            </td>
-                                            <td style={{ padding: '1rem', fontWeight: 600 }}>${(line.quantity * line.unitCost).toFixed(2)}</td>
-                                            <td style={{ padding: '1rem' }}>
-                                                {po.status !== 'Completed' && line.received === 0 && (
-                                                    <button
-                                                        onClick={() => handleRemoveLine(line.id, line.item?.name || line.newItemName || 'Item')}
-                                                        style={{
-                                                            background: 'transparent',
-                                                            border: 'none',
-                                                            color: '#ef4444',
-                                                            cursor: 'pointer',
-                                                            padding: '0.25rem',
-                                                            display: 'flex',
-                                                            alignItems: 'center'
-                                                        }}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                        <th style={{ padding: '1rem' }}>SKU</th>
+                                        <th style={{ padding: '1rem' }}>Item</th>
+                                        <th style={{ padding: '1rem' }}>Unit Cost</th>
+                                        <th style={{ padding: '1rem' }}>Quantity</th>
+                                        <th style={{ padding: '1rem' }}>Received</th>
+                                        <th style={{ padding: '1rem' }}>Pending</th>
+                                        <th style={{ padding: '1rem' }}>Subtotal</th>
+                                        <th style={{ padding: '1rem' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {po.lines.map((line: any) => {
+                                        const pending = line.quantity - line.received;
+                                        const isComplete = pending <= 0;
+                                        return (
+                                            <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: isComplete ? 0.6 : 1 }}>
+                                                <td style={{ padding: '1rem', fontWeight: 500 }}>
+                                                    {line.item?.sku || line.newItemSku || <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>New Item</span>}
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    {line.item?.name || line.newItemName || 'Unknown Item'}
+                                                    {!line.item && <span className="badge badge-secondary" style={{ marginLeft: '0.5rem', fontSize: '0.7em' }}>Pending Creation</span>}
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>${line.unitCost.toFixed(2)}</td>
+                                                <td style={{ padding: '1rem' }}>{line.quantity}</td>
+                                                <td style={{ padding: '1rem', color: 'var(--success)' }}>{line.received}</td>
+                                                <td style={{ padding: '1rem', color: pending > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                                                    {pending > 0 ? pending : '✓'}
+                                                </td>
+                                                <td style={{ padding: '1rem', fontWeight: 600 }}>${(line.quantity * line.unitCost).toFixed(2)}</td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    {po.status !== 'Completed' && line.received === 0 && (
+                                                        <button
+                                                            onClick={() => handleRemoveLine(line.id, line.item?.name || line.newItemName || 'Item')}
+                                                            style={{
+                                                                background: 'transparent',
+                                                                border: 'none',
+                                                                color: '#ef4444',
+                                                                cursor: 'pointer',
+                                                                padding: '0.25rem',
+                                                                display: 'flex',
+                                                                alignItems: 'center'
+                                                            }}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     ) : (
                         <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                             <p>No items in this PO yet. Click "Add Item" to get started.</p>

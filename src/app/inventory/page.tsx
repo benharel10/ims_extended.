@@ -636,7 +636,7 @@ export default function InventoryPage() {
     return (
         <>
             <div className="animate-fade-in">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div className="flex-header">
                     <div>
                         <h1>Inventory Management</h1>
                         <p>Track items, BOMs, and stock levels.</p>
@@ -685,8 +685,8 @@ export default function InventoryPage() {
                 <div className="card" style={{ marginBottom: '2rem' }}>
 
 
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center' }}>
-                        <div style={{ position: 'relative', flex: 1 }}>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                             <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                             <input
                                 type="text"
@@ -832,216 +832,218 @@ export default function InventoryPage() {
                     {loading ? (
                         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading inventory...</div>
                     ) : (
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                                    <th style={{ padding: '1rem' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={filteredItems.length > 0 && filteredItems.every(i => selectedItemIds.includes(i.id))}
-                                            onChange={() => {
-                                                if (filteredItems.every(i => selectedItemIds.includes(i.id))) {
-                                                    setSelectedItemIds([]);
-                                                } else {
-                                                    setSelectedItemIds(filteredItems.map(i => i.id));
-                                                }
-                                            }}
-                                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                                        />
-                                    </th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('sku')}>SKU {sortConfig?.key === 'sku' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('revision')}>Rev {sortConfig?.key === 'revision' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('name')}>Name {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('brand')}>Brand {sortConfig?.key === 'brand' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('type')}>Type {sortConfig?.key === 'type' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('warehouse')}>Warehouse {sortConfig?.key === 'warehouse' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('currentStock')}>Stock {sortConfig?.key === 'currentStock' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('cost')}>Cost {sortConfig?.key === 'cost' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                    <th style={{ padding: '1rem' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredItems.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                                            No items found. Import BOM or create a new item.
-                                        </td>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                        <th style={{ padding: '1rem' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={filteredItems.length > 0 && filteredItems.every(i => selectedItemIds.includes(i.id))}
+                                                onChange={() => {
+                                                    if (filteredItems.every(i => selectedItemIds.includes(i.id))) {
+                                                        setSelectedItemIds([]);
+                                                    } else {
+                                                        setSelectedItemIds(filteredItems.map(i => i.id));
+                                                    }
+                                                }}
+                                                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                                            />
+                                        </th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('sku')}>SKU {sortConfig?.key === 'sku' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('revision')}>Rev {sortConfig?.key === 'revision' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('name')}>Name {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('brand')}>Brand {sortConfig?.key === 'brand' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('type')}>Type {sortConfig?.key === 'type' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('warehouse')}>Warehouse {sortConfig?.key === 'warehouse' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('currentStock')}>Stock {sortConfig?.key === 'currentStock' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('cost')}>Cost {sortConfig?.key === 'cost' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem' }}>Actions</th>
                                     </tr>
-                                ) : (
-                                    filteredItems.map((item, index) => {
-                                        const isNearBottom = filteredItems.length > 3 && index >= filteredItems.length - 2;
-                                        return (
-                                            <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedItemIds.includes(item.id) ? 'rgba(16, 185, 129, 0.05)' : undefined }}>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedItemIds.includes(item.id)}
-                                                        onChange={() => {
-                                                            if (selectedItemIds.includes(item.id)) {
-                                                                setSelectedItemIds(prev => prev.filter(id => id !== item.id));
-                                                            } else {
-                                                                setSelectedItemIds(prev => [...prev, item.id]);
-                                                            }
-                                                        }}
-                                                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                                                    />
-                                                </td>
-                                                <td style={{ padding: '1rem', fontWeight: 500 }}>{item.sku}</td>
-                                                <td style={{ padding: '1rem' }}>{item.revision}</td>
-                                                <td style={{ padding: '1rem' }}>{item.name}</td>
-                                                <td style={{ padding: '1rem' }}>{item.brand}</td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <span className={`badge ${item.type === 'Product' ? 'badge-success' : item.type === 'Assembly' ? 'badge-warning' : 'badge-danger'}`} style={{ color: item.type === 'Raw' ? 'var(--text-muted)' : undefined, border: item.type === 'Raw' ? '1px solid var(--border-color)' : undefined, background: item.type === 'Raw' ? 'transparent' : undefined }}>
-                                                        {item.type}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <div style={{ fontWeight: 500 }}>{item.warehouse || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Unassigned</span>}</div>
-                                                    {item.stocks && item.stocks.length > 0 && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setViewStockItem(item); }}
-                                                            style={{
-                                                                background: 'none',
-                                                                border: 'none',
-                                                                padding: 0,
-                                                                marginTop: '0.25rem',
-                                                                color: 'var(--primary)',
-                                                                cursor: 'pointer',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '0.25rem',
-                                                                fontSize: '0.75rem',
-                                                                fontWeight: 500
+                                </thead>
+                                <tbody>
+                                    {filteredItems.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                                No items found. Import BOM or create a new item.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredItems.map((item, index) => {
+                                            const isNearBottom = filteredItems.length > 3 && index >= filteredItems.length - 2;
+                                            return (
+                                                <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedItemIds.includes(item.id) ? 'rgba(16, 185, 129, 0.05)' : undefined }}>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedItemIds.includes(item.id)}
+                                                            onChange={() => {
+                                                                if (selectedItemIds.includes(item.id)) {
+                                                                    setSelectedItemIds(prev => prev.filter(id => id !== item.id));
+                                                                } else {
+                                                                    setSelectedItemIds(prev => [...prev, item.id]);
+                                                                }
                                                             }}
-                                                        >
-                                                            <MapPin size={12} />
-                                                            View {item.stocks.length} Locations
-                                                        </button>
-                                                    )}
-                                                </td>
-
-                                                {/* Stock Cell with Modal Trigger */}
-                                                <td style={{ padding: '1rem' }} className="group">
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                            {selectedWarehouse && !isNaN(parseInt(selectedWarehouse)) ? (
-                                                                // Show filtered warehouse stock
-                                                                <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
-                                                                    {item.stocks?.find((s: any) => s.warehouseId === parseInt(selectedWarehouse))?.quantity || 0}
-                                                                </span>
-                                                            ) : (
-                                                                // Show Total
-                                                                <span>{item.currentStock ?? 0}</span>
-                                                            )}
-
+                                                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                                                        />
+                                                    </td>
+                                                    <td style={{ padding: '1rem', fontWeight: 500 }}>{item.sku}</td>
+                                                    <td style={{ padding: '1rem' }}>{item.revision}</td>
+                                                    <td style={{ padding: '1rem' }}>{item.name}</td>
+                                                    <td style={{ padding: '1rem' }}>{item.brand}</td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <span className={`badge ${item.type === 'Product' ? 'badge-success' : item.type === 'Assembly' ? 'badge-warning' : 'badge-danger'}`} style={{ color: item.type === 'Raw' ? 'var(--text-muted)' : undefined, border: item.type === 'Raw' ? '1px solid var(--border-color)' : undefined, background: item.type === 'Raw' ? 'transparent' : undefined }}>
+                                                            {item.type}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        <div style={{ fontWeight: 500 }}>{item.warehouse || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Unassigned</span>}</div>
+                                                        {item.stocks && item.stocks.length > 0 && (
                                                             <button
-                                                                onClick={() => openStockModal(item)}
-                                                                style={{ opacity: 0.3, transition: 'opacity 0.2s', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
-                                                                onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                                                                onMouseLeave={e => e.currentTarget.style.opacity = '0.3'}
-                                                                title="Adjust Stock"
-                                                            >
-                                                                <Edit2 size={14} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                <td style={{ padding: '1rem' }} className="group">
-                                                    {editingCostId === item.id ? (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                            <span style={{ color: 'var(--text-muted)' }}>$</span>
-                                                            <input
-                                                                type="number"
-                                                                value={costValue}
-                                                                onChange={e => setCostValue(e.target.value)}
-                                                                autoFocus
-                                                                style={{ width: '80px', padding: '0.25rem', background: 'var(--bg-card)', border: '1px solid var(--primary)', borderRadius: '4px', color: 'white' }}
-                                                                onKeyDown={e => {
-                                                                    if (e.key === 'Enter') saveCost(item.id);
-                                                                    if (e.key === 'Escape') setEditingCostId(null);
+                                                                onClick={(e) => { e.stopPropagation(); setViewStockItem(item); }}
+                                                                style={{
+                                                                    background: 'none',
+                                                                    border: 'none',
+                                                                    padding: 0,
+                                                                    marginTop: '0.25rem',
+                                                                    color: 'var(--primary)',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.25rem',
+                                                                    fontSize: '0.75rem',
+                                                                    fontWeight: 500
                                                                 }}
-                                                                onBlur={() => saveCost(item.id)}
-                                                            />
-                                                        </div>
-                                                    ) : (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                            <span>${item.cost?.toFixed(2) ?? '0.00'}</span>
-                                                            <button
-                                                                onClick={() => startEditingCost(item)}
-                                                                style={{ opacity: 0.3, transition: 'opacity 0.2s', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
-                                                                onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                                                                onMouseLeave={e => e.currentTarget.style.opacity = '0.3'}
                                                             >
-                                                                <Edit2 size={14} />
+                                                                <MapPin size={12} />
+                                                                View {item.stocks.length} Locations
                                                             </button>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td style={{ padding: '1rem', overflow: 'visible' }}>
-                                                    <div className="actions-menu-container" style={{ position: 'relative', zIndex: activeActionId === item.id ? 999 : 'auto' }}>
-                                                        <button
-                                                            type="button"
-                                                            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.25rem' }}
-                                                            onClick={() => {
-                                                                setActiveActionId(activeActionId === item.id ? null : item.id);
-                                                            }}
-                                                        >
-                                                            <MoreHorizontal size={20} style={{ pointerEvents: 'none' }} />
-                                                        </button>
-                                                        {activeActionId === item.id && (
-                                                            <div style={{
-                                                                position: 'absolute',
-                                                                right: 0,
-                                                                top: isNearBottom ? 'auto' : '100%',
-                                                                bottom: isNearBottom ? '100%' : 'auto',
-                                                                marginBottom: isNearBottom ? '0.25rem' : 0,
-                                                                marginTop: isNearBottom ? 0 : '0.25rem',
-                                                                background: 'var(--bg-card)',
-                                                                border: '1px solid var(--border-color)',
-                                                                borderRadius: 'var(--radius-md)',
-                                                                zIndex: 1000,
-                                                                minWidth: '160px',
-                                                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3)'
-                                                            }} className="animate-in fade-in zoom-in-95 duration-100">
-                                                                <button
-                                                                    type="button"
-                                                                    style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        openEditModal(item);
-                                                                        setActiveActionId(null);
-                                                                    }}
-                                                                >
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                        <Edit2 size={14} /> Edit Item
-                                                                    </div>
-                                                                </button>
+                                                        )}
+                                                    </td>
 
-                                                                {isAdmin && (
+                                                    {/* Stock Cell with Modal Trigger */}
+                                                    <td style={{ padding: '1rem' }} className="group">
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                {selectedWarehouse && !isNaN(parseInt(selectedWarehouse)) ? (
+                                                                    // Show filtered warehouse stock
+                                                                    <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                                                                        {item.stocks?.find((s: any) => s.warehouseId === parseInt(selectedWarehouse))?.quantity || 0}
+                                                                    </span>
+                                                                ) : (
+                                                                    // Show Total
+                                                                    <span>{item.currentStock ?? 0}</span>
+                                                                )}
+
+                                                                <button
+                                                                    onClick={() => openStockModal(item)}
+                                                                    style={{ opacity: 0.3, transition: 'opacity 0.2s', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
+                                                                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                                                                    onMouseLeave={e => e.currentTarget.style.opacity = '0.3'}
+                                                                    title="Adjust Stock"
+                                                                >
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    <td style={{ padding: '1rem' }} className="group">
+                                                        {editingCostId === item.id ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <span style={{ color: 'var(--text-muted)' }}>$</span>
+                                                                <input
+                                                                    type="number"
+                                                                    value={costValue}
+                                                                    onChange={e => setCostValue(e.target.value)}
+                                                                    autoFocus
+                                                                    style={{ width: '80px', padding: '0.25rem', background: 'var(--bg-card)', border: '1px solid var(--primary)', borderRadius: '4px', color: 'white' }}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Enter') saveCost(item.id);
+                                                                        if (e.key === 'Escape') setEditingCostId(null);
+                                                                    }}
+                                                                    onBlur={() => saveCost(item.id)}
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <span>${item.cost?.toFixed(2) ?? '0.00'}</span>
+                                                                <button
+                                                                    onClick={() => startEditingCost(item)}
+                                                                    style={{ opacity: 0.3, transition: 'opacity 0.2s', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
+                                                                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                                                                    onMouseLeave={e => e.currentTarget.style.opacity = '0.3'}
+                                                                >
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '1rem', overflow: 'visible' }}>
+                                                        <div className="actions-menu-container" style={{ position: 'relative', zIndex: activeActionId === item.id ? 999 : 'auto' }}>
+                                                            <button
+                                                                type="button"
+                                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.25rem' }}
+                                                                onClick={() => {
+                                                                    setActiveActionId(activeActionId === item.id ? null : item.id);
+                                                                }}
+                                                            >
+                                                                <MoreHorizontal size={20} style={{ pointerEvents: 'none' }} />
+                                                            </button>
+                                                            {activeActionId === item.id && (
+                                                                <div style={{
+                                                                    position: 'absolute',
+                                                                    right: 0,
+                                                                    top: isNearBottom ? 'auto' : '100%',
+                                                                    bottom: isNearBottom ? '100%' : 'auto',
+                                                                    marginBottom: isNearBottom ? '0.25rem' : 0,
+                                                                    marginTop: isNearBottom ? 0 : '0.25rem',
+                                                                    background: 'var(--bg-card)',
+                                                                    border: '1px solid var(--border-color)',
+                                                                    borderRadius: 'var(--radius-md)',
+                                                                    zIndex: 1000,
+                                                                    minWidth: '160px',
+                                                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3)'
+                                                                }} className="animate-in fade-in zoom-in-95 duration-100">
                                                                     <button
-                                                                        style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', borderTop: '1px solid var(--border-color)', color: '#ef4444', cursor: 'pointer', fontSize: '0.875rem' }}
+                                                                        type="button"
+                                                                        style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            handleDeleteItem(item.id, item.sku);
+                                                                            openEditModal(item);
                                                                             setActiveActionId(null);
                                                                         }}
                                                                     >
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                            <X size={14} /> Delete
+                                                                            <Edit2 size={14} /> Edit Item
                                                                         </div>
                                                                     </button>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
+
+                                                                    {isAdmin && (
+                                                                        <button
+                                                                            style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', borderTop: '1px solid var(--border-color)', color: '#ef4444', cursor: 'pointer', fontSize: '0.875rem' }}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteItem(item.id, item.sku);
+                                                                                setActiveActionId(null);
+                                                                            }}
+                                                                        >
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                <X size={14} /> Delete
+                                                                            </div>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
 
@@ -1062,7 +1064,7 @@ export default function InventoryPage() {
                                 </button>
                             </div>
                             <form onSubmit={handleSubmitItem}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div className="grid-cols-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>SKU</label>
                                         <input
@@ -1147,7 +1149,7 @@ export default function InventoryPage() {
                                     />
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                <div className="grid-cols-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Brand</label>
                                         <input
@@ -1171,7 +1173,7 @@ export default function InventoryPage() {
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div className="grid-cols-3" style={{ gap: '1rem', marginBottom: '1.5rem' }}>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Cost</label>
                                         <input
@@ -1335,32 +1337,34 @@ export default function InventoryPage() {
                             </div>
 
                             <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                    <thead>
-                                        <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                                            <th style={{ padding: '0.75rem' }}>Warehouse</th>
-                                            <th style={{ padding: '0.75rem', textAlign: 'right' }}>Quantity</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {viewStockItem.stocks?.sort((a: any, b: any) => b.quantity - a.quantity).map((s: any) => (
-                                            <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '0.75rem', fontWeight: 500 }}>
-                                                    {s.warehouse.name}
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: s.quantity < 0 ? 'var(--danger)' : 'var(--text-main)' }}>
-                                                    {s.quantity}
+                                <div className="table-responsive">
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                        <thead>
+                                            <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                                                <th style={{ padding: '0.75rem' }}>Warehouse</th>
+                                                <th style={{ padding: '0.75rem', textAlign: 'right' }}>Quantity</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {viewStockItem.stocks?.sort((a: any, b: any) => b.quantity - a.quantity).map((s: any) => (
+                                                <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 500 }}>
+                                                        {s.warehouse.name}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: s.quantity < 0 ? 'var(--danger)' : 'var(--text-main)' }}>
+                                                        {s.quantity}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            <tr style={{ borderTop: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+                                                <td style={{ padding: '0.75rem', fontWeight: 600 }}>Total</td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700 }}>
+                                                    {viewStockItem.stocks?.reduce((acc: number, s: any) => acc + s.quantity, 0)}
                                                 </td>
                                             </tr>
-                                        ))}
-                                        <tr style={{ borderTop: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                                            <td style={{ padding: '0.75rem', fontWeight: 600 }}>Total</td>
-                                            <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700 }}>
-                                                {viewStockItem.stocks?.reduce((acc: number, s: any) => acc + s.quantity, 0)}
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
 
                             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
