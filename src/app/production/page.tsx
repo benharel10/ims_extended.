@@ -634,7 +634,8 @@ export default function ProductionPage() {
                                     style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
                                     value={runQuantity}
                                     onChange={(e) => setRunQuantity(parseFloat(e.target.value))}
-                                    min="1"
+                                    min="0.0001"
+                                    step="any"
                                 />
                             </div>
 

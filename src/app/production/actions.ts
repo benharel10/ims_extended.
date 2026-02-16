@@ -144,6 +144,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
 
                 if (!childItem) throw new Error(`Component item ID ${line.childId} not found`);
 
+                // Fail if ANY component has insufficient stock
                 if (childItem.currentStock < requiredQty) {
                     throw new Error(`Insufficient stock for component ${childItem.sku}. Required: ${requiredQty}, Available: ${childItem.currentStock}`);
                 }
@@ -163,6 +164,12 @@ export async function runProduction(parentId: number, quantity: number, serialNu
 
             // 3b. Verify Serialization
             if (parentItem?.isSerialized) {
+                // For fractional quantities, serialization logic is tricky. 
+                // Usually only integers are serialized. 
+                // We enforce integer check for serialized items.
+                if (!Number.isInteger(quantity)) {
+                    throw new Error(`Serialized items must be produced in whole numbers.`);
+                }
                 if (serialNumbers.length !== quantity) {
                     throw new Error(`Item is serialized. You must provide ${quantity} serial numbers.`);
                 }
