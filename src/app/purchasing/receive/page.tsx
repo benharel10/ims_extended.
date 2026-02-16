@@ -173,7 +173,9 @@ export default function ReceivePOPage() {
 
                                                     return (
                                                         <tr key={line.id} style={{ opacity: isComplete ? 0.5 : 1 }}>
-                                                            <td style={{ padding: '0.5rem' }}>{line.item.sku} - {line.item.name}</td>
+                                                            <td style={{ padding: '0.5rem' }}>
+                                                                {line.item?.sku || line.newItemSku || <span style={{ opacity: 0.7 }}>New Item</span>} - {line.item?.name || line.newItemName}
+                                                            </td>
                                                             <td style={{ padding: '0.5rem' }}>{line.quantity}</td>
                                                             <td style={{ padding: '0.5rem' }}>{line.received}</td>
                                                             <td style={{ padding: '0.5rem' }}>{Math.max(0, pending)}</td>
