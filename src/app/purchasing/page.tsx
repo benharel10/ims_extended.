@@ -182,6 +182,7 @@ export default function PurchasingPage() {
                                 <th style={{ padding: '1rem' }}>Status</th>
                                 <th style={{ padding: '1rem' }}>Items</th>
                                 <th style={{ padding: '1rem' }}>Created</th>
+                                <th style={{ padding: '1rem' }}>Due Date</th>
                                 <th style={{ padding: '1rem' }}>Actions</th>
                             </tr>
                         </thead>
@@ -198,6 +199,23 @@ export default function PurchasingPage() {
                                     <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
                                     <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
                                         {new Date(po.createdAt).toLocaleDateString()}
+                                    </td>
+                                    <td style={{ padding: '1rem' }}>
+                                        {(() => {
+                                            if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
+                                            const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
+                                            const isOverdue = new Date() > due && po.status !== 'Completed';
+                                            return (
+                                                <span style={{
+                                                    color: isOverdue ? 'var(--error)' : 'inherit',
+                                                    fontWeight: isOverdue ? 600 : 400,
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem'
+                                                }}>
+                                                    {due.toLocaleDateString()}
+                                                    {isOverdue && <AlertTriangle size={14} />}
+                                                </span>
+                                            );
+                                        })()}
                                     </td>
                                     <td style={{ padding: '1rem' }}>
                                         <Link href={`/purchasing/${po.id}`} className="btn btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
