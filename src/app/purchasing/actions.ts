@@ -44,7 +44,15 @@ export async function getLowStockItems() {
     }
 }
 
-export async function generatePurchaseOrder(items: { itemId: number, quantity: number }[]) {
+export async function generatePurchaseOrder(
+    items: {
+        itemId?: number,
+        newItemName?: string,
+        newItemSku?: string,
+        quantity: number
+    }[],
+    leadTime?: string
+) {
     try {
         if (items.length === 0) return { success: false, error: 'No items selected' };
 
@@ -56,9 +64,12 @@ export async function generatePurchaseOrder(items: { itemId: number, quantity: n
                 poNumber,
                 supplier: 'General Supplier', // Default
                 status: 'Draft',
+                leadTime: leadTime || null,
                 lines: {
                     create: items.map(i => ({
-                        itemId: i.itemId,
+                        itemId: i.itemId || null, // Allow null for new items
+                        newItemName: i.newItemName, // Store ad-hoc name
+                        newItemSku: i.newItemSku,   // Store ad-hoc SKU
                         quantity: i.quantity,
                         unitCost: 0 // Fetch from item or default
                     }))
@@ -74,14 +85,15 @@ export async function generatePurchaseOrder(items: { itemId: number, quantity: n
     }
 }
 
-export async function createEmptyPO(supplier: string) {
+export async function createEmptyPO(supplier: string, leadTime?: string) {
     try {
         const poNumber = `PO-${Date.now()}`;
         const po = await prisma.purchaseOrder.create({
             data: {
                 poNumber,
                 supplier,
-                status: 'Draft'
+                status: 'Draft',
+                leadTime: leadTime || null
             }
         });
         return { success: true, data: po };
@@ -90,12 +102,25 @@ export async function createEmptyPO(supplier: string) {
     }
 }
 
-export async function addPOLine(poId: number, itemId: number, quantity: number, cost: number) {
+export async function addPOLine(
+    poId: number,
+    quantity: number,
+    cost: number,
+    itemId?: number,
+    newItemName?: string,
+    newItemSku?: string
+) {
     try {
-        // Check if item already exists in PO, if so update qty
-        const existing = await prisma.pOLine.findFirst({
-            where: { poId, itemId }
-        });
+        // Validation
+        if (!itemId && !newItemName) return { success: false, error: 'Item ID or Name required' };
+
+        // Check if item already exists in PO, if so update qty (Only for existing items)
+        let existing = null;
+        if (itemId) {
+            existing = await prisma.pOLine.findFirst({
+                where: { poId, itemId }
+            });
+        }
 
         if (existing) {
             await prisma.pOLine.update({
@@ -106,7 +131,9 @@ export async function addPOLine(poId: number, itemId: number, quantity: number, 
             await prisma.pOLine.create({
                 data: {
                     poId,
-                    itemId,
+                    itemId: itemId || null,
+                    newItemName: newItemName || null,
+                    newItemSku: newItemSku || null,
                     quantity,
                     unitCost: cost,
                     received: 0
@@ -116,6 +143,7 @@ export async function addPOLine(poId: number, itemId: number, quantity: number, 
         revalidatePath(`/purchasing/${poId}`);
         return { success: true };
     } catch (error) {
+        console.error('Add Line Error:', error);
         return { success: false, error: 'Failed to add line item' };
     }
 }
@@ -205,6 +233,48 @@ export async function receivePOItems(poId: number, items: { lineId: number, qty:
                 const line = po.lines.find(l => l.id === rec.lineId);
                 if (!line) continue;
 
+                // HANDLE AD-HOC ITEMS
+                let targetItemId = line.itemId;
+
+                if (!targetItemId && (line as any).newItemName) {
+                    console.log(`[receivePO] Found ad-hoc item: ${(line as any).newItemName}`);
+
+                    // Check if item already exists by name
+                    const existingItem = await tx.item.findFirst({
+                        where: { name: (line as any).newItemName }
+                    });
+
+                    if (existingItem) {
+                        targetItemId = existingItem.id;
+                    } else {
+                        // Create new item
+                        const newItem = await tx.item.create({
+                            data: {
+                                name: (line as any).newItemName,
+                                sku: (line as any).newItemSku || `ADHOC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                                type: 'Component', // Default type
+                                minStock: 0,
+                                currentStock: 0,
+                                cost: line.unitCost || 0,
+                                price: 0
+                            }
+                        });
+                        targetItemId = newItem.id;
+                        console.log(`[receivePO] Created new item: ${newItem.name} (ID: ${newItem.id})`);
+                    }
+
+                    // Link PO Line to new Item
+                    await tx.pOLine.update({
+                        where: { id: line.id },
+                        data: { itemId: targetItemId }
+                    });
+                }
+
+                if (!targetItemId) {
+                    console.error(`[receivePO] Line ${line.id} has no Item ID and no New Item Name`);
+                    continue;
+                }
+
                 const newReceived = line.received + rec.qty;
 
                 // Update Line
@@ -215,7 +285,7 @@ export async function receivePOItems(poId: number, items: { lineId: number, qty:
 
                 // Add to Global Stock
                 await tx.item.update({
-                    where: { id: line.itemId },
+                    where: { id: targetItemId },
                     data: { currentStock: { increment: rec.qty } }
                 });
 
@@ -223,7 +293,7 @@ export async function receivePOItems(poId: number, items: { lineId: number, qty:
                 await tx.itemStock.upsert({
                     where: {
                         itemId_warehouseId: {
-                            itemId: line.itemId,
+                            itemId: targetItemId,
                             warehouseId: warehouseId
                         }
                     },
@@ -231,7 +301,7 @@ export async function receivePOItems(poId: number, items: { lineId: number, qty:
                         quantity: { increment: rec.qty }
                     },
                     create: {
-                        itemId: line.itemId,
+                        itemId: targetItemId,
                         warehouseId: warehouseId,
                         quantity: rec.qty
                     }

@@ -114,7 +114,8 @@ model PurchaseOrder {
   poNumber  String    @unique // E.g., PO-2024-001
   supplier  String
   status    String    @default("Draft") // "Draft", "Sent", "Partial", "Completed", "Cancelled"
-  
+  leadTime  String?   // New field: Lead time for the order
+
   lines     POLine[]
   
   createdAt DateTime  @default(now())
@@ -125,9 +126,12 @@ model POLine {
   id        Int  @id @default(autoincrement())
   poId      Int
   po        PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  itemId    Int
-  item      Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId    Int?      // Nullable for new items
+  item      Item?     @relation(fields: [itemId], references: [id], onDelete: Cascade)
   
+  newItemName String? // For items not yet in inventory
+  newItemSku  String? // For items not yet in inventory
+
   quantity  Int
   received  Int @default(0)
   unitCost  Float

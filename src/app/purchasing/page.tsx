@@ -18,6 +18,7 @@ export default function PurchasingPage() {
     const [quantities, setQuantities] = useState<{ [id: number]: number }>({});
     const [showCreatePO, setShowCreatePO] = useState(false);
     const [newSupplier, setNewSupplier] = useState('');
+    const [leadTime, setLeadTime] = useState('');
 
     useEffect(() => {
         loadData();
@@ -90,11 +91,12 @@ export default function PurchasingPage() {
             return;
         }
 
-        const res = await createEmptyPO(newSupplier);
+        const res = await createEmptyPO(newSupplier, leadTime);
         if (res.success && res.data) {
             showAlert('PO created', 'success');
             setShowCreatePO(false);
             setNewSupplier('');
+            setLeadTime('');
             router.push(`/purchasing/${res.data.id}`);
         } else {
             showAlert(res.error || 'Failed to create PO', 'error');
@@ -137,6 +139,16 @@ export default function PurchasingPage() {
                                 value={newSupplier}
                                 onChange={e => setNewSupplier(e.target.value)}
                                 autoFocus
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Expected Lead Time (Optional)</label>
+                            <input
+                                type="text"
+                                className="input-group"
+                                placeholder="e.g. 2 Weeks, 30 Days"
+                                value={leadTime}
+                                onChange={e => setLeadTime(e.target.value)}
                             />
                         </div>
                         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
