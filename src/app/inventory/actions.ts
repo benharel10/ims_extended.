@@ -20,11 +20,24 @@ export async function getItems() {
             orderBy: { createdAt: 'desc' }
         });
 
+        // Convert Decimal types to numbers for JSON serialization
+        const serializedItems = items.map(item => ({
+            ...item,
+            minStock: Number(item.minStock),
+            currentStock: Number(item.currentStock),
+            cost: Number(item.cost),
+            price: Number(item.price),
+            stocks: item.stocks.map(stock => ({
+                ...stock,
+                quantity: Number(stock.quantity)
+            }))
+        }));
+
         if (!isAdmin) {
             // Filter confidential data
             return {
                 success: true,
-                data: items.map(i => ({
+                data: serializedItems.map(i => ({
                     ...i,
                     cost: 0, // Hidden
                     price: 0, // Hidden (or maybe price is public? User said cost prices. Let's hide cost)
@@ -38,7 +51,7 @@ export async function getItems() {
             };
         }
 
-        return { success: true, data: items };
+        return { success: true, data: serializedItems };
     } catch (error) {
         console.error('Failed to fetch items:', error);
         return { success: false, error: 'Failed to fetch items' };

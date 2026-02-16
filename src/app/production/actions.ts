@@ -22,7 +22,16 @@ export async function getAssemblyParents() {
                 price: true
             }
         });
-        return { success: true, data: items };
+
+        // Convert Decimals to numbers
+        const serialized = items.map(item => ({
+            ...item,
+            currentStock: Number(item.currentStock),
+            cost: Number(item.cost),
+            price: Number(item.price)
+        }));
+
+        return { success: true, data: serialized };
     } catch (error) {
         return { success: false, error: 'Failed to fetch assembly parents' };
     }
@@ -237,7 +246,21 @@ export async function getProductionRuns() {
                 item: true
             }
         });
-        return { success: true, data: runs };
+
+        // Convert Decimals to numbers for JSON serialization
+        const serializedRuns = runs.map(run => ({
+            ...run,
+            quantity: Number(run.quantity),
+            item: run.item ? {
+                ...run.item,
+                minStock: Number(run.item.minStock),
+                currentStock: Number(run.item.currentStock),
+                cost: Number(run.item.cost),
+                price: Number(run.item.price)
+            } : null
+        }));
+
+        return { success: true, data: serializedRuns };
     } catch (error) {
         return { success: false, error: 'Failed to fetch production history' };
     }
