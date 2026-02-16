@@ -149,8 +149,10 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             }
 
             // 2. Check and Deduct Stock for Components
+            console.log(`[runProduction] Processing ${bom.length} BOM lines for qty=${quantity}`);
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
+                console.log(`[runProduction] Component ${line.childId}: BOM qty=${line.quantity}, Required=${requiredQty}`);
 
                 const childItem = await tx.item.findUnique({
                     where: { id: line.childId }
@@ -158,16 +160,20 @@ export async function runProduction(parentId: number, quantity: number, serialNu
 
                 if (!childItem) throw new Error(`Component item ID ${line.childId} not found`);
 
+                console.log(`[runProduction] Component ${childItem.sku}: Current stock=${childItem.currentStock} (type: ${typeof childItem.currentStock})`);
+
                 // Fail if ANY component has insufficient stock
                 if (Number(childItem.currentStock) < requiredQty) {
                     throw new Error(`Insufficient stock for component ${childItem.sku}. Required: ${requiredQty}, Available: ${childItem.currentStock}`);
                 }
 
                 // Deduct component stock
+                console.log(`[runProduction] Decrementing ${childItem.sku} by ${requiredQty}`);
                 await tx.item.update({
                     where: { id: line.childId },
                     data: { currentStock: { decrement: requiredQty } }
                 });
+                console.log(`[runProduction] ✓ Deducted ${requiredQty} from ${childItem.sku}`);
             }
 
             // 3. Add Stock for Parent Item
@@ -227,6 +233,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             // });
         });
 
+        console.log(`[runProduction] ✅ Production transaction completed successfully!`);
         revalidatePath('/production');
         revalidatePath('/inventory'); // Inventory also changes
         return { success: true };
