@@ -30,7 +30,7 @@ model ItemStock {
   id          Int @id @default(autoincrement())
   itemId      Int
   warehouseId Int
-  quantity    Int @default(0)
+  quantity    Decimal @default(0) @db.Decimal(10, 3)
   
   item        Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
@@ -45,8 +45,9 @@ model Item {
   name        String
   description String?
   type        String   @default("Raw") // "Raw", "Assembly", "Product", "Raw Material"
-  minStock    Int      @default(0)
-  currentStock Int     @default(0) // Physical stock count roughly (Global total)
+  minStock    Decimal  @default(0) @db.Decimal(10, 3)
+  currentStock Decimal @default(0) @db.Decimal(10, 3) // Physical stock count roughly (Global total)
+  uom         String   @default("Units") // Unit of Measure: Units, Liters, Grams, etc.
   cost        Float    @default(0.0)
   price       Float    @default(0.0)
   isSerialized Boolean @default(false)
@@ -75,7 +76,7 @@ model BOM {
   id        Int  @id @default(autoincrement())
   parentId  Int
   childId   Int
-  quantity  Float // Should support fractional? Usually integer for antennas but let's say float for flexibility
+  quantity  Decimal @default(1.0) @db.Decimal(10, 3)  // How many units of child are needed per unit of parent
   
   parent    Item @relation("Parent", fields: [parentId], references: [id], onDelete: Cascade)
   child     Item @relation("Child", fields: [childId], references: [id], onDelete: Cascade)
@@ -229,7 +230,7 @@ model ProductionRun {
   itemId    Int
   item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
   
-  quantity  Int      // Quantity Produced
+  quantity  Decimal  @db.Decimal(10, 3) // Quantity Produced
   serializedItems SerializedItem[]
   status    String   @default("Completed") // Completed (stock deducted), or Draft/Planned? Let's assume completed for now as per "take them" request.
   

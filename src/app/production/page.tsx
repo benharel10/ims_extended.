@@ -633,8 +633,9 @@ export default function ProductionPage() {
                                     className="input-group"
                                     style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
                                     value={runQuantity}
-                                    onChange={(e) => setRunQuantity(parseInt(e.target.value) || 0)}
-                                    min="1"
+                                    onChange={(e) => setRunQuantity(parseFloat(e.target.value) || 0)}
+                                    min="0.001"
+                                    step="0.001"
                                 />
                             </div>
 
