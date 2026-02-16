@@ -51,7 +51,7 @@ export async function generatePurchaseOrder(
         newItemSku?: string,
         quantity: number
     }[],
-    leadTime?: string
+    leadTimeDays?: number
 ) {
     try {
         if (items.length === 0) return { success: false, error: 'No items selected' };
@@ -64,7 +64,7 @@ export async function generatePurchaseOrder(
                 poNumber,
                 supplier: 'General Supplier', // Default
                 status: 'Draft',
-                leadTime: leadTime || null,
+                leadTimeDays: leadTimeDays || null,
                 lines: {
                     create: items.map(i => ({
                         itemId: i.itemId || null, // Allow null for new items
@@ -85,7 +85,7 @@ export async function generatePurchaseOrder(
     }
 }
 
-export async function createEmptyPO(supplier: string, leadTime?: string) {
+export async function createEmptyPO(supplier: string, leadTimeDays?: number) {
     try {
         const poNumber = `PO-${Date.now()}`;
         const po = await prisma.purchaseOrder.create({
@@ -93,7 +93,7 @@ export async function createEmptyPO(supplier: string, leadTime?: string) {
                 poNumber,
                 supplier,
                 status: 'Draft',
-                leadTime: leadTime || null
+                leadTimeDays: leadTimeDays || null
             }
         });
         return { success: true, data: po };

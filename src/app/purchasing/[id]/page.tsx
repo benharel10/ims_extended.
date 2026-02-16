@@ -142,6 +142,28 @@ export default function PODetailPage() {
     const totalReceived = po.lines?.reduce((sum: number, line: any) => sum + line.received, 0) || 0;
     const totalOrdered = po.lines?.reduce((sum: number, line: any) => sum + line.quantity, 0) || 0;
 
+    const poDate = new Date(po.createdAt);
+    let dueElement = null;
+
+    if (po.leadTimeDays) {
+        const dueDate = new Date(poDate);
+        dueDate.setDate(dueDate.getDate() + po.leadTimeDays);
+        const now = new Date();
+        const diffTime = dueDate.getTime() - now.getTime();
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const isOverdue = daysLeft < 0;
+
+        dueElement = (
+            <span style={{
+                color: isOverdue ? 'var(--error)' : daysLeft <= 2 ? 'var(--warning)' : 'var(--text-muted)',
+                fontWeight: isOverdue ? 700 : 400
+            }}>
+                • Due: {dueDate.toISOString().split('T')[0]}
+                ({isOverdue ? `Overdue by ${Math.abs(daysLeft)} days` : `${daysLeft} days left`})
+            </span>
+        );
+    }
+
     return (
         <div className="animate-fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -157,8 +179,8 @@ export default function PODetailPage() {
                     </div>
                     <p>
                         Supplier: <strong>{po.supplier}</strong> •
-                        Created: {new Date(po.createdAt).toLocaleDateString()}
-                        {po.leadTime && <span> • Lead Time: <strong>{po.leadTime}</strong></span>}
+                        Created: <span>{poDate.toISOString().split('T')[0]}</span>
+                        {dueElement}
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>

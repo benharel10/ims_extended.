@@ -86,12 +86,13 @@ export default function PurchasingPage() {
     }
 
     async function handleCreateEmptyPO() {
-        if (!newSupplier.trim()) {
+        if (!newSupplier) {
             showAlert('Enter supplier name', 'warning');
             return;
         }
 
-        const res = await createEmptyPO(newSupplier, leadTime);
+        const days = leadTime ? parseInt(leadTime) : undefined;
+        const res = await createEmptyPO(newSupplier, days);
         if (res.success && res.data) {
             showAlert('PO created', 'success');
             setShowCreatePO(false);
@@ -142,11 +143,11 @@ export default function PurchasingPage() {
                             />
                         </div>
                         <div className="form-group">
-                            <label>Expected Lead Time (Optional)</label>
+                            <label>Expected Lead Time (Days)</label>
                             <input
-                                type="text"
+                                type="number"
                                 className="input-group"
-                                placeholder="e.g. 2 Weeks, 30 Days"
+                                placeholder="e.g. 14"
                                 value={leadTime}
                                 onChange={e => setLeadTime(e.target.value)}
                             />

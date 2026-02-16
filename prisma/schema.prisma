@@ -114,7 +114,7 @@ model PurchaseOrder {
   poNumber  String    @unique // E.g., PO-2024-001
   supplier  String
   status    String    @default("Draft") // "Draft", "Sent", "Partial", "Completed", "Cancelled"
-  leadTime  String?   // New field: Lead time for the order
+  leadTimeDays Int?      // Lead time in days
 
   lines     POLine[]
   
