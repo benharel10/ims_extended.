@@ -30,7 +30,7 @@ model ItemStock {
   id          Int @id @default(autoincrement())
   itemId      Int
   warehouseId Int
-  quantity    Int @default(0)
+  quantity    Float @default(0.0) // Changed to Float for fractional stock (e.g., 0.1 glue)
   
   item        Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
@@ -44,9 +44,9 @@ model Item {
   icountId    Int?     @unique // Foreign key to iCount system
   name        String
   description String?
-  type        String   @default("Raw") // "Raw", "Assembly", "Product"
-  minStock    Int      @default(0)
-  currentStock Int     @default(0) // Physical stock count roughly (Global total)
+  type        String   @default("Raw") // "Raw", "Assembly", "Product", "Raw Material"
+  minStock    Float    @default(0.0)
+  currentStock Float   @default(0.0) // Physical stock count roughly (Global total)
   cost        Float    @default(0.0)
   price       Float    @default(0.0)
   isSerialized Boolean @default(false)
@@ -229,7 +229,7 @@ model ProductionRun {
   itemId    Int
   item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
   
-  quantity  Int      // Quantity Produced
+  quantity  Float      // Quantity Produced
   serializedItems SerializedItem[]
   status    String   @default("Completed") // Completed (stock deducted), or Draft/Planned? Let's assume completed for now as per "take them" request.
   
