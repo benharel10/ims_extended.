@@ -89,16 +89,16 @@ export async function createItem(data: { sku: string, name: string, type: string
             }
         });
 
-        // Audit Log
-        await prisma.systemLog.create({
-            data: {
-                userId: session.user.id,
-                action: 'Create Item',
-                entity: 'Item',
-                entityId: item.id,
-                details: `Created item ${item.sku} - ${item.name}`
-            }
-        });
+        // Audit Log (Optional)
+        // await prisma.systemLog.create({
+        //     data: {
+        //         userId: session.user.id,
+        //         action: 'Create Item',
+        //         entity: 'Item',
+        //         entityId: item.id,
+        //         details: `Created item ${item.sku} - ${item.name}`
+        //     }
+        // });
 
         revalidatePath('/inventory');
         return { success: true, data: item };
@@ -191,15 +191,15 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
                 });
 
                 // Audit Log
-                await tx.systemLog.create({
-                    data: {
-                        userId: session.user.id,
-                        action: 'Update Stock',
-                        entity: 'Item',
-                        entityId: id,
-                        details: `Updated stock (Warehouse ${warehouseId}): ${oldQty} -> ${quantity}`
-                    }
-                });
+                // await tx.systemLog.create({
+                //     data: {
+                //         userId: session.user.id,
+                //         action: 'Update Stock',
+                //         entity: 'Item',
+                //         entityId: id,
+                //         details: `Updated stock (Warehouse ${warehouseId}): ${oldQty} -> ${quantity}`
+                //     }
+                // });
 
             } else {
                 // Legacy/Fallback
@@ -209,15 +209,15 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
                     data: { currentStock: quantity }
                 });
 
-                await tx.systemLog.create({
-                    data: {
-                        userId: session.user.id,
-                        action: 'Update Stock',
-                        entity: 'Item',
-                        entityId: id,
-                        details: `Updated total stock (Legacy): ${item?.currentStock} -> ${quantity}`
-                    }
-                });
+                // await tx.systemLog.create({
+                //     data: {
+                //         userId: session.user.id,
+                //         action: 'Update Stock',
+                //         entity: 'Item',
+                //         entityId: id,
+                //         details: `Updated total stock (Legacy): ${item?.currentStock} -> ${quantity}`
+                //     }
+                // });
             }
         });
 

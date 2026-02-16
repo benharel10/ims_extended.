@@ -215,16 +215,16 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 }
             }
 
-            // 5. Audit Log
-            await tx.systemLog.create({
-                data: {
-                    userId: session.user.id,
-                    action: 'Run Production',
-                    entity: 'ProductionRun',
-                    entityId: run.id,
-                    details: `Produced ${quantity} x ${parentItem.sku}`
-                }
-            });
+            // 5. Audit Log (Optional - comment out if SystemLog not in use)
+            // await tx.systemLog.create({
+            //     data: {
+            //         userId: session.user.id,
+            //         action: 'Run Production',
+            //         entity: 'ProductionRun',
+            //         entityId: run.id,
+            //         details: `Produced ${quantity} x ${parentItem.sku}`
+            //     }
+            // });
         });
 
         revalidatePath('/production');
