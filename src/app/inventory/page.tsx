@@ -1450,16 +1450,15 @@ export default function InventoryPage() {
                                                 className="input-group"
                                                 style={{ width: '100%', padding: '0.75rem', fontSize: '1.2rem', background: 'var(--bg-dark)', border: '1px solid var(--primary)', borderRadius: '0.375rem', color: 'white' }}
                                                 value={stockModalData.quantity}
-                                                onChange={e => setStockModalData(prev => ({ ...prev, quantity: parseFloat(e.target.value) || 0 }))}
+                                                onChange={e => setStockModalData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
                                                 autoFocus
                                                 min="0"
-                                                step="0.01"
                                             />
                                             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'right' }}>
                                                 Resulting Stock: <strong style={{ color: 'var(--primary)' }}>
                                                     {stockModalData.mode === 'set' ? stockModalData.quantity :
-                                                        stockModalData.mode === 'add' ? (stockModalData.currentWhStock + stockModalData.quantity).toFixed(2) :
-                                                            (stockModalData.currentWhStock - stockModalData.quantity).toFixed(2)}
+                                                        stockModalData.mode === 'add' ? stockModalData.currentWhStock + stockModalData.quantity :
+                                                            stockModalData.currentWhStock - stockModalData.quantity}
                                                 </strong>
                                             </div>
                                         </div>
