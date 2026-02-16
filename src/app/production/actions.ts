@@ -121,7 +121,12 @@ export async function runProduction(parentId: number, quantity: number, serialNu
     const session = await getSession();
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
+    console.log(`[runProduction] Received request: Item=${parentId}, Qty=${quantity} (Type: ${typeof quantity})`);
+
+    if (quantity <= 0) {
+        console.error(`[runProduction] Invalid quantity: ${quantity}`);
+        return { success: false, error: 'Quantity must be positive' };
+    }
 
     try {
         await prisma.$transaction(async (tx) => {
