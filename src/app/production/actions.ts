@@ -155,20 +155,49 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 console.log(`[runProduction] Component ${line.childId}: BOM qty=${line.quantity}, Required=${requiredQty}`);
 
                 const childItem = await tx.item.findUnique({
-                    where: { id: line.childId }
+                    where: { id: line.childId },
+                    include: { stocks: true } // Include warehouse stocks
                 });
 
                 if (!childItem) throw new Error(`Component item ID ${line.childId} not found`);
 
-                console.log(`[runProduction] Component ${childItem.sku}: Current stock=${childItem.currentStock} (type: ${typeof childItem.currentStock})`);
+                console.log(`[runProduction] Component ${childItem.sku}: Total stock=${childItem.currentStock}`);
 
-                // Fail if ANY component has insufficient stock
+                // Check total availability first
                 if (Number(childItem.currentStock) < requiredQty) {
                     throw new Error(`Insufficient stock for component ${childItem.sku}. Required: ${requiredQty}, Available: ${childItem.currentStock}`);
                 }
 
-                // Deduct component stock
-                console.log(`[runProduction] Decrementing ${childItem.sku} by ${requiredQty}`);
+                // Deduct from warehouses (ItemStock)
+                let remainingToDeduct = requiredQty;
+
+                // Prioritize KSW (ID 2) or similar logic if needed, otherwise just take from available
+                // Let's sort to take from largest stock first or specific warehouse? 
+                // For now, simple iteration: take from where available.
+                for (const stock of childItem.stocks) {
+                    if (remainingToDeduct <= 0) break;
+
+                    const stockQty = Number(stock.quantity);
+                    if (stockQty > 0) {
+                        const deduct = Math.min(stockQty, remainingToDeduct);
+
+                        console.log(`[runProduction] Deducting ${deduct} from Warehouse ${stock.warehouseId}`);
+
+                        await tx.itemStock.update({
+                            where: { id: stock.id },
+                            data: { quantity: { decrement: deduct } }
+                        });
+
+                        remainingToDeduct -= deduct;
+                    }
+                }
+
+                if (remainingToDeduct > 0.0001) { // Floating point tolerance
+                    throw new Error(`Stock inconsistency for ${childItem.sku}. Total says enough, but warehouses don't have it.`);
+                }
+
+                // Deduct from main Item.currentStock
+                console.log(`[runProduction] Decrementing total ${childItem.sku} by ${requiredQty}`);
                 await tx.item.update({
                     where: { id: line.childId },
                     data: { currentStock: { decrement: requiredQty } }
@@ -177,6 +206,31 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             }
 
             // 3. Add Stock for Parent Item
+            // Decide where to put it. KSW (ID 2) is a good default for production output based on user feedback.
+            // Or use the first existing warehouse stock record.
+            const targetWarehouseId = 2; // Default to KSW
+
+            // Update/Create ItemStock
+            const existingStock = await tx.itemStock.findUnique({
+                where: { itemId_warehouseId: { itemId: parentId, warehouseId: targetWarehouseId } }
+            });
+
+            if (existingStock) {
+                await tx.itemStock.update({
+                    where: { id: existingStock.id },
+                    data: { quantity: { increment: quantity } }
+                });
+            } else {
+                await tx.itemStock.create({
+                    data: {
+                        itemId: parentId,
+                        warehouseId: targetWarehouseId,
+                        quantity: quantity
+                    }
+                });
+            }
+
+            // Update Parent Total
             const parentItem = await tx.item.update({
                 where: { id: parentId },
                 data: { currentStock: { increment: quantity } }
@@ -185,7 +239,6 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             // 3b. Verify Serialization
             if (parentItem?.isSerialized) {
                 // For fractional quantities, serialization logic is tricky. 
-                // Usually only integers are serialized. 
                 // We enforce integer check for serialized items.
                 if (!Number.isInteger(quantity)) {
                     throw new Error(`Serialized items must be produced in whole numbers.`);
@@ -220,6 +273,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                     });
                 }
             }
+
 
             // 5. Audit Log (Optional - comment out if SystemLog not in use)
             // await tx.systemLog.create({
