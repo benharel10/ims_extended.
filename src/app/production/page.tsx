@@ -198,7 +198,7 @@ export default function ProductionPage() {
         if (res.success && res.data) {
             setBomLines(res.data.map(line => ({
                 childId: String(line.childId),
-                quantity: line.quantity
+                quantity: Number(line.quantity)
             })));
         } else {
             setBomLines([]);

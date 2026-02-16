@@ -26,7 +26,7 @@ export async function getFinancialSummary() {
         });
 
         const summary = items.reduce((acc, item) => {
-            const value = item.cost * item.currentStock;
+            const value = Number(item.cost) * Number(item.currentStock);
             if (item.type === 'Raw') acc.rawMaterialValue += value;
             else if (item.type === 'Product' || item.type === 'Assembly') acc.finishedGoodsValue += value;
 
@@ -78,8 +78,8 @@ export async function getFinancialDataForChart() {
                 };
             }
 
-            const revenue = line.quantity * line.unitPrice;
-            const cost = line.quantity * (line.item.cost || 0);
+            const revenue = Number(line.quantity) * Number(line.unitPrice);
+            const cost = Number(line.quantity) * Number(line.item.cost || 0);
 
             acc[monthKey].revenue += revenue;
             acc[monthKey].cost += cost;

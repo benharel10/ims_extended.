@@ -40,7 +40,7 @@ export async function getDashboardStats() {
         });
 
         const totalValue = allItems.reduce((sum, item) => {
-            return sum + (item.cost * item.currentStock);
+            return sum + (Number(item.cost) * Number(item.currentStock));
         }, 0);
 
         // 2. Low Stock Items
@@ -81,7 +81,7 @@ export async function getDashboardStats() {
         allItems.forEach(item => {
             item.stocks?.forEach(stock => {
                 const whName = stock.warehouse.name;
-                const value = item.cost * stock.quantity;
+                const value = Number(item.cost) * Number(stock.quantity);
                 warehouseValues[whName] = (warehouseValues[whName] || 0) + value;
             });
         });

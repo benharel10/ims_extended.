@@ -480,7 +480,7 @@ export default function InventoryPage() {
 
         const matchesType = !filterType || item.type === filterType;
         const matchesBrand = !filterBrand || item.brand === filterBrand;
-        const matchesLowStock = !filterLowStock || (item.currentStock < item.minStock);
+        const matchesLowStock = !filterLowStock || (Number(item.currentStock) < Number(item.minStock));
 
         return matchesSearch && matchesWarehouse && matchesType && matchesBrand && matchesLowStock;
     }).sort((a, b) => {

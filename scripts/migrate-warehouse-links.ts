@@ -37,7 +37,7 @@ async function migrateWarehouseLinks() {
             // Check if stock link already exists
             const existingStock = item.stocks.find(s => s.warehouseId === warehouse.id);
 
-            if (!existingStock && item.currentStock > 0) {
+            if (!existingStock && Number(item.currentStock) > 0) {
                 // Create stock link
                 await prisma.itemStock.create({
                     data: {

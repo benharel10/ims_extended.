@@ -160,7 +160,7 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
                 const oldStock = await tx.itemStock.findUnique({
                     where: { itemId_warehouseId: { itemId: id, warehouseId } }
                 });
-                oldQty = oldStock?.quantity || 0;
+                oldQty = Number(oldStock?.quantity || 0);
 
                 // 1. Update/Create ItemStock for specific warehouse
                 await tx.itemStock.upsert({
@@ -182,7 +182,7 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
                 const allStocks = await tx.itemStock.findMany({
                     where: { itemId: id }
                 });
-                const totalStock = allStocks.reduce((sum, s) => sum + s.quantity, 0);
+                const totalStock = allStocks.reduce((sum, s) => sum + Number(s.quantity), 0);
 
                 // 3. Update Item Total
                 await tx.item.update({
@@ -300,7 +300,7 @@ export async function bulkUpdateStock(updates: { itemId: number, quantity: numbe
                 const allStocks = await tx.itemStock.findMany({
                     where: { itemId: update.itemId }
                 });
-                const totalStock = allStocks.reduce((sum, s) => sum + s.quantity, 0);
+                const totalStock = allStocks.reduce((sum, s) => sum + Number(s.quantity), 0);
 
                 await tx.item.update({
                     where: { id: update.itemId },

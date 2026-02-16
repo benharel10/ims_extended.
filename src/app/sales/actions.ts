@@ -43,8 +43,8 @@ export async function createSalesOrder(data: { customer: string, soNumber: strin
                     data: {
                         soId: order.id,
                         itemId: run.itemId,
-                        quantity: run.quantity,
-                        unitPrice: run.item.price || 0
+                        quantity: Number(run.quantity),
+                        unitPrice: Number(run.item.price) || 0
                     }
                 });
             }
@@ -159,7 +159,15 @@ export async function getSellableItems() {
                 name: 'asc'
             }
         });
-        return { success: true, data: items };
+
+        // Convert Decimals
+        const serialized = items.map(item => ({
+            ...item,
+            currentStock: Number(item.currentStock),
+            price: Number(item.price)
+        }));
+
+        return { success: true, data: serialized };
     } catch (error) {
         return { success: false, error: 'Failed to fetch items' };
     }

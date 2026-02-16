@@ -14,9 +14,9 @@ export async function getInventoryValuation() {
             sku: item.sku,
             name: item.name,
             type: item.type,
-            quantity: item.currentStock,
-            unitCost: item.cost,
-            totalValue: item.currentStock * item.cost
+            quantity: Number(item.currentStock),
+            unitCost: Number(item.cost),
+            totalValue: Number(item.currentStock) * Number(item.cost)
         })).sort((a, b) => b.totalValue - a.totalValue);
 
         return { success: true, data: report };
@@ -42,10 +42,10 @@ export async function getSalesPerformance() {
             let cost = 0;
 
             order.lines.forEach(line => {
-                revenue += line.quantity * line.unitPrice;
+                revenue += Number(line.quantity) * Number(line.unitPrice);
                 // Use current item cost as proxy for historical cost
                 if (line.item) {
-                    cost += line.quantity * line.item.cost;
+                    cost += Number(line.quantity) * Number(line.item.cost);
                 }
             });
 
@@ -78,7 +78,8 @@ export async function getProductionReport() {
 
         const report = runs.map(run => ({
             ...run,
-            valueProduced: run.quantity * (run.item?.cost || 0)
+            quantity: Number(run.quantity),
+            valueProduced: Number(run.quantity) * Number(run.item?.cost || 0)
         }));
 
         return { success: true, data: report };
@@ -144,20 +145,20 @@ export async function getLowStockReport() {
         });
 
         const report = items.map(item => {
-            const deficit = item.minStock - item.currentStock;
-            const deficitValue = deficit * item.cost;
+            const deficit = Number(item.minStock) - Number(item.currentStock);
+            const deficitValue = deficit * Number(item.cost);
 
             return {
                 id: item.id,
                 sku: item.sku,
                 name: item.name,
                 type: item.type,
-                currentStock: item.currentStock,
-                minStock: item.minStock,
+                currentStock: Number(item.currentStock),
+                minStock: Number(item.minStock),
                 deficit,
-                unitCost: item.cost,
+                unitCost: Number(item.cost),
                 deficitValue,
-                urgency: item.currentStock === 0 ? 'Critical' : item.currentStock < item.minStock * 0.5 ? 'High' : 'Medium'
+                urgency: Number(item.currentStock) === 0 ? 'Critical' : Number(item.currentStock) < Number(item.minStock) * 0.5 ? 'High' : 'Medium'
             };
         });
 
@@ -184,8 +185,8 @@ export async function getWarehouseComparison() {
 
             wh.stocks.forEach(stock => {
                 totalItems++;
-                totalUnits += stock.quantity;
-                totalValue += stock.quantity * (stock.item?.cost || 0);
+                totalUnits += Number(stock.quantity);
+                totalValue += Number(stock.quantity) * Number(stock.item?.cost || 0);
             });
 
             return {
@@ -216,8 +217,8 @@ export async function getReportSummary() {
             prisma.warehouse.count()
         ]);
 
-        const totalInventoryValue = items.reduce((sum, item) => sum + (item.currentStock * item.cost), 0);
-        const lowStockCount = items.filter(item => item.currentStock < item.minStock).length;
+        const totalInventoryValue = items.reduce((sum, item) => sum + (Number(item.currentStock) * Number(item.cost)), 0);
+        const lowStockCount = items.filter(item => Number(item.currentStock) < Number(item.minStock)).length;
 
         let totalRevenue = 0;
         sales.forEach(so => {
@@ -227,7 +228,7 @@ export async function getReportSummary() {
         });
 
         const totalProductionValue = production.reduce((sum, run) => {
-            return sum + (run.quantity * (run.item?.cost || 0));
+            return sum + (Number(run.quantity) * Number(run.item?.cost || 0));
         }, 0);
 
         return {
@@ -308,10 +309,10 @@ export async function getProfitLossReport(year?: number, month?: number) {
 
         salesOrders.forEach(so => {
             so.lines.forEach(line => {
-                totalRevenue += line.quantity * line.unitPrice;
+                totalRevenue += Number(line.quantity) * Number(line.unitPrice);
                 // COGS is the cost of items sold
                 if (line.item) {
-                    totalCOGS += line.quantity * line.item.cost;
+                    totalCOGS += Number(line.quantity) * Number(line.item.cost);
                 }
             });
         });
@@ -320,7 +321,7 @@ export async function getProfitLossReport(year?: number, month?: number) {
         let totalProductionCost = 0;
         productionRuns.forEach(run => {
             if (run.item) {
-                totalProductionCost += run.quantity * run.item.cost;
+                totalProductionCost += Number(run.quantity) * Number(run.item.cost);
             }
         });
 
@@ -370,9 +371,9 @@ export async function getProfitLossReport(year?: number, month?: number) {
 
                 monthSales.forEach(so => {
                     so.lines.forEach(line => {
-                        monthRevenue += line.quantity * line.unitPrice;
+                        monthRevenue += Number(line.quantity) * Number(line.unitPrice);
                         if (line.item) {
-                            monthCOGS += line.quantity * line.item.cost;
+                            monthCOGS += Number(line.quantity) * Number(line.item.cost);
                         }
                     });
                 });

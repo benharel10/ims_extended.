@@ -150,7 +150,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
 
             // 2. Check and Deduct Stock for Components
             for (const line of bom) {
-                const requiredQty = line.quantity * quantity;
+                const requiredQty = Number(line.quantity) * quantity;
 
                 const childItem = await tx.item.findUnique({
                     where: { id: line.childId }
@@ -159,7 +159,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 if (!childItem) throw new Error(`Component item ID ${line.childId} not found`);
 
                 // Fail if ANY component has insufficient stock
-                if (childItem.currentStock < requiredQty) {
+                if (Number(childItem.currentStock) < requiredQty) {
                     throw new Error(`Insufficient stock for component ${childItem.sku}. Required: ${requiredQty}, Available: ${childItem.currentStock}`);
                 }
 
@@ -278,7 +278,7 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
 
             if (!run) throw new Error('Production Run not found');
 
-            const diff = newQuantity - run.quantity;
+            const diff = newQuantity - Number(run.quantity);
             if (diff === 0) return; // No change
 
             // Get BOM for the Item (Parent)
@@ -293,11 +293,11 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
             if (diff > 0) {
                 // INCREASE PRODUCTION: Need more components
                 for (const line of bom) {
-                    const paramsNeeded = line.quantity * diff;
+                    const paramsNeeded = Number(line.quantity) * diff;
                     const child = await tx.item.findUnique({ where: { id: line.childId } });
                     if (!child) throw new Error(`Component ${line.childId} missing`);
 
-                    if (child.currentStock < paramsNeeded) {
+                    if (Number(child.currentStock) < paramsNeeded) {
                         throw new Error(`Insufficient stock key component ${child.sku} to increase production by ${diff}. Need ${paramsNeeded}.`);
                     }
 
@@ -327,7 +327,7 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
 
                 // Return Components
                 for (const line of bom) {
-                    const paramsReturning = line.quantity * removeQty;
+                    const paramsReturning = Number(line.quantity) * removeQty;
                     await tx.item.update({
                         where: { id: line.childId },
                         data: { currentStock: { increment: paramsReturning } }
