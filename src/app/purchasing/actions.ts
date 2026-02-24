@@ -3,17 +3,26 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
+import { logError } from '@/lib/errorLogger';
 
-// Reusing warehouse fetching logic
+/** Active (non-soft-deleted) items only */
+const ACTIVE = { deletedAt: null };
+
+// ─── Read ─────────────────────────────────────────────────────────────────────
+
 export async function getItems() {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const items = await prisma.item.findMany({ orderBy: { name: 'asc' } });
+        const items = await prisma.item.findMany({
+            where: ACTIVE,
+            orderBy: { name: 'asc' }
+        });
         return { success: true, data: items };
     } catch (error) {
-        return { success: false, error: 'Failed' };
+        await logError('purchasing.getItems', error);
+        return { success: false, error: 'Failed to fetch items. Please try again.' };
     }
 }
 
@@ -22,12 +31,11 @@ export async function getWarehouses() {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const warehouses = await prisma.warehouse.findMany({
-            orderBy: { name: 'asc' }
-        });
+        const warehouses = await prisma.warehouse.findMany({ orderBy: { name: 'asc' } });
         return { success: true, data: warehouses };
     } catch (error) {
-        return { success: false, error: 'Failed to fetch warehouses' };
+        await logError('purchasing.getWarehouses', error);
+        return { success: false, error: 'Failed to fetch warehouses. Please try again.' };
     }
 }
 
@@ -36,65 +44,103 @@ export async function getLowStockItems() {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const items = await prisma.item.findMany({
-            where: {
-                currentStock: {
-                    lt: prisma.item.fields.minStock
-                }
-            },
-            orderBy: {
-                currentStock: 'asc' // Most critical first (lowest stock)
-            }
-        });
+        // Raw query works around the Prisma limitation of comparing two columns
+        const items = await prisma.$queryRaw<{ id: number; sku: string; name: string; currentStock: number; minStock: number }[]>`
+            SELECT id, sku, name, "currentStock"::float, "minStock"::float
+            FROM "Item"
+            WHERE "deletedAt" IS NULL
+              AND "currentStock" < "minStock"
+            ORDER BY "currentStock" ASC
+        `;
 
         return { success: true, data: items };
     } catch (error) {
-        console.error('Failed to get low stock items:', error);
-        return { success: false, error: 'Failed to retrieve low stock items' };
+        await logError('purchasing.getLowStockItems', error);
+        return { success: false, error: 'Failed to retrieve low stock items. Please try again.' };
     }
 }
 
+export async function getOpenPurchaseOrders() {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const pos = await prisma.purchaseOrder.findMany({
+            where: { status: { not: 'Completed' } },
+            include: { lines: { include: { item: true } } },
+            orderBy: { createdAt: 'desc' }
+        });
+        return { success: true, data: pos };
+    } catch (error) {
+        await logError('purchasing.getOpenPurchaseOrders', error);
+        return { success: false, error: 'Failed to fetch purchase orders. Please try again.' };
+    }
+}
+
+export async function getPurchaseOrder(id: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const po = await prisma.purchaseOrder.findUnique({
+            where: { id },
+            include: { lines: { include: { item: true } } }
+        });
+        return { success: true, data: po };
+    } catch (error) {
+        await logError('purchasing.getPurchaseOrder', error);
+        return { success: false, error: 'Failed to fetch purchase order. Please try again.' };
+    }
+}
+
+// ─── Create ───────────────────────────────────────────────────────────────────
+
 export async function generatePurchaseOrder(
     items: {
-        itemId?: number,
-        newItemName?: string,
-        newItemSku?: string,
-        quantity: number
+        itemId?: number;
+        newItemName?: string;
+        newItemSku?: string;
+        quantity: number;
     }[],
     leadTimeDays?: number
 ) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
-
         if (items.length === 0) return { success: false, error: 'No items selected' };
 
-        const poNumber = `PO-${Date.now()}`; // Simple unique ID
+        // ── Validate every line ──
+        for (const item of items) {
+            if (item.quantity <= 0) return { success: false, error: 'All quantities must be positive' };
+            if (!item.itemId && !item.newItemName) return { success: false, error: 'Each line needs an item or a new item name' };
+        }
 
-        // Create PO
+        const poNumber = `PO-${Date.now()}`;
+
         const po = await prisma.purchaseOrder.create({
             data: {
                 poNumber,
-                supplier: 'General Supplier', // Default
+                supplier: 'General Supplier',
                 status: 'Draft',
-                leadTimeDays: leadTimeDays || null,
+                leadTimeDays: leadTimeDays ?? null,
                 lines: {
                     create: items.map(i => ({
-                        itemId: i.itemId || null, // Allow null for new items
-                        newItemName: i.newItemName, // Store ad-hoc name
-                        newItemSku: i.newItemSku,   // Store ad-hoc SKU
+                        itemId: i.itemId ?? null,
+                        newItemName: i.newItemName ?? null,
+                        newItemSku: i.newItemSku ?? null,
                         quantity: i.quantity,
-                        unitCost: 0 // Fetch from item or default
+                        unitCost: 0,
+                        received: 0
                     }))
                 }
             }
         });
 
+        revalidatePath('/purchasing');
         return { success: true, data: po };
-
-    } catch (error: any) {
-        console.error('Failed to generate PO:', error);
-        return { success: false, error: error.message || 'Failed to generate PO' };
+    } catch (error) {
+        await logError('purchasing.generatePurchaseOrder', error);
+        return { success: false, error: 'Failed to generate purchase order. Please try again.' };
     }
 }
 
@@ -102,21 +148,26 @@ export async function createEmptyPO(supplier: string, leadTimeDays?: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
+        if (!supplier?.trim()) return { success: false, error: 'Supplier name is required' };
 
         const poNumber = `PO-${Date.now()}`;
         const po = await prisma.purchaseOrder.create({
             data: {
                 poNumber,
-                supplier,
+                supplier: supplier.trim(),
                 status: 'Draft',
-                leadTimeDays: leadTimeDays || null
+                leadTimeDays: leadTimeDays ?? null
             }
         });
+        revalidatePath('/purchasing');
         return { success: true, data: po };
     } catch (error) {
-        return { success: false, error: 'Failed to create PO' };
+        await logError('purchasing.createEmptyPO', error);
+        return { success: false, error: 'Failed to create purchase order. Please try again.' };
     }
 }
+
+// ─── PO Lines ─────────────────────────────────────────────────────────────────
 
 export async function addPOLine(
     poId: number,
@@ -130,41 +181,39 @@ export async function addPOLine(
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // Validation
-        if (!itemId && !newItemName) return { success: false, error: 'Item ID or Name required' };
+        if (!itemId && !newItemName) return { success: false, error: 'Item ID or new item name is required' };
         if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
+        if (cost < 0) return { success: false, error: 'Unit cost cannot be negative' };
 
-        // Check if item already exists in PO, if so update qty (Only for existing items)
         let existing = null;
         if (itemId) {
-            existing = await prisma.pOLine.findFirst({
-                where: { poId, itemId }
-            });
+            existing = await prisma.pOLine.findFirst({ where: { poId, itemId } });
         }
 
         if (existing) {
             await prisma.pOLine.update({
                 where: { id: existing.id },
-                data: { quantity: { increment: quantity } } // Add to existing
+                data: { quantity: { increment: quantity } }
             });
         } else {
             await prisma.pOLine.create({
                 data: {
                     poId,
-                    itemId: itemId || null,
-                    newItemName: newItemName || null,
-                    newItemSku: newItemSku || null,
+                    itemId: itemId ?? null,
+                    newItemName: newItemName ?? null,
+                    newItemSku: newItemSku ?? null,
                     quantity,
                     unitCost: cost,
                     received: 0
                 }
             });
         }
+
         revalidatePath(`/purchasing/${poId}`);
         return { success: true };
     } catch (error) {
-        console.error('Add Line Error:', error);
-        return { success: false, error: 'Failed to add line item' };
+        await logError('purchasing.addPOLine', error);
+        return { success: false, error: 'Failed to add line item. Please try again.' };
     }
 }
 
@@ -174,93 +223,61 @@ export async function removePOLine(lineId: number) {
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
         await prisma.pOLine.delete({ where: { id: lineId } });
-        // revalidatePath determines which page to refresh. Since we don't know the PO ID easily here without an extra query, 
-        // we might rely on the client to refresh or revalidate a broader path.
         revalidatePath('/purchasing/[id]');
         return { success: true };
     } catch (error) {
-        return { success: false, error: 'Failed to remove line' };
+        await logError('purchasing.removePOLine', error);
+        return { success: false, error: 'Failed to remove line. Please try again.' };
     }
 }
 
-export async function getPurchaseOrder(id: number) {
-    try {
-        const session = await getSession();
-        if (!session?.user) return { success: false, error: 'Unauthorized' };
-
-        const po = await prisma.purchaseOrder.findUnique({
-            where: { id },
-            include: {
-                lines: {
-                    include: { item: true }
-                }
-            }
-        });
-        return { success: true, data: po };
-    } catch (error) {
-        return { success: false, error: 'Failed to fetch PO' };
-    }
-}
+// ─── Status Update ────────────────────────────────────────────────────────────
 
 export async function updatePOStatus(id: number, status: string) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
+        if (!['Draft', 'Sent', 'Partial', 'Completed', 'Cancelled'].includes(status)) {
+            return { success: false, error: 'Invalid status value' };
+        }
 
-        await prisma.purchaseOrder.update({
-            where: { id },
-            data: { status }
-        });
+        await prisma.purchaseOrder.update({ where: { id }, data: { status } });
         revalidatePath(`/purchasing/${id}`);
         revalidatePath('/purchasing');
         return { success: true };
     } catch (error) {
-        return { success: false, error: 'Failed to update status' };
+        await logError('purchasing.updatePOStatus', error);
+        return { success: false, error: 'Failed to update status. Please try again.' };
     }
 }
 
-export async function getOpenPurchaseOrders() {
+// ─── Receive Items (full transaction + version bump) ─────────────────────────
+
+export async function receivePOItems(
+    poId: number,
+    items: { lineId: number; qty: number }[],
+    warehouseId: number
+) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
-
-        const pos = await prisma.purchaseOrder.findMany({
-            where: {
-                status: { not: 'Completed' }
-            },
-            include: {
-                lines: {
-                    include: { item: true }
-                }
-            },
-            orderBy: { createdAt: 'desc' }
-        });
-        return { success: true, data: pos };
-    } catch (error) {
-        return { success: false, error: 'Failed to fetch POs' };
-    }
-}
-
-export async function receivePOItems(poId: number, items: { lineId: number, qty: number }[], warehouseId: number) {
-    try {
-        const session = await getSession();
-        if (!session?.user) return { success: false, error: 'Unauthorized' };
-
-        if (!warehouseId) throw new Error('Warehouse ID is required');
+        if (!warehouseId || warehouseId <= 0) return { success: false, error: 'A valid warehouse is required' };
+        if (items.every(i => i.qty <= 0)) return { success: false, error: 'At least one item with a positive quantity is required' };
 
         await prisma.$transaction(async (tx) => {
-            let allCompleted = true;
-
+            // Validate PO exists
             const po = await tx.purchaseOrder.findUnique({
                 where: { id: poId },
                 include: { lines: true }
             });
+            if (!po) throw new Error('Purchase order not found');
+            if (po.status === 'Cancelled') throw new Error('Cannot receive against a cancelled PO');
 
-            if (!po) throw new Error('PO not found');
-
-            // Verify warehouse exists
+            // Validate warehouse exists
             const warehouse = await tx.warehouse.findUnique({ where: { id: warehouseId } });
-            if (!warehouse) throw new Error('Warehouse not found');
+            if (!warehouse) throw new Error('Destination warehouse not found');
+
+            let allCompleted = true;
 
             for (const rec of items) {
                 if (rec.qty <= 0) continue;
@@ -268,84 +285,69 @@ export async function receivePOItems(poId: number, items: { lineId: number, qty:
                 const line = po.lines.find(l => l.id === rec.lineId);
                 if (!line) continue;
 
-                // HANDLE AD-HOC ITEMS
+                // Handle ad-hoc (new) items
                 let targetItemId = line.itemId;
 
-                if (!targetItemId && (line as any).newItemName) {
-                    console.log(`[receivePO] Found ad-hoc item: ${(line as any).newItemName}`);
+                if (!targetItemId && (line as { newItemName?: string | null }).newItemName) {
+                    const newItemName = (line as { newItemName: string }).newItemName;
+                    const newItemSku = (line as { newItemSku?: string | null }).newItemSku;
 
-                    // Check if item already exists by name
-                    const existingItem = await tx.item.findFirst({
-                        where: { name: (line as any).newItemName }
-                    });
+                    const existingItem = await tx.item.findFirst({ where: { name: newItemName, deletedAt: null } });
 
                     if (existingItem) {
                         targetItemId = existingItem.id;
                     } else {
-                        // Create new item
                         const newItem = await tx.item.create({
                             data: {
-                                name: (line as any).newItemName,
-                                sku: (line as any).newItemSku || `ADHOC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                                type: 'Component', // Default type
+                                name: newItemName,
+                                sku: newItemSku || `ADHOC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                                type: 'Raw',
                                 minStock: 0,
                                 currentStock: 0,
                                 cost: line.unitCost || 0,
-                                price: 0
+                                price: 0,
+                                version: 0
                             }
                         });
                         targetItemId = newItem.id;
-                        console.log(`[receivePO] Created new item: ${newItem.name} (ID: ${newItem.id})`);
                     }
 
-                    // Link PO Line to new Item
+                    // Link PO line to the new/found item
                     await tx.pOLine.update({
                         where: { id: line.id },
                         data: { itemId: targetItemId }
                     });
                 }
 
-                if (!targetItemId) {
-                    console.error(`[receivePO] Line ${line.id} has no Item ID and no New Item Name`);
-                    continue;
-                }
+                if (!targetItemId) continue;
 
                 const newReceived = line.received + rec.qty;
 
-                // Update Line
+                // Update received quantity on the PO line
                 await tx.pOLine.update({
                     where: { id: rec.lineId },
                     data: { received: newReceived }
                 });
 
-                // Add to Global Stock
+                // Increment global item stock + bump version (concurrency-safe)
                 await tx.item.update({
                     where: { id: targetItemId },
-                    data: { currentStock: { increment: rec.qty } }
+                    data: {
+                        currentStock: { increment: rec.qty },
+                        version: { increment: 1 }
+                    }
                 });
 
-                // Add to Specific Warehouse Stock
+                // Upsert warehouse-specific stock record
                 await tx.itemStock.upsert({
-                    where: {
-                        itemId_warehouseId: {
-                            itemId: targetItemId,
-                            warehouseId: warehouseId
-                        }
-                    },
-                    update: {
-                        quantity: { increment: rec.qty }
-                    },
-                    create: {
-                        itemId: targetItemId,
-                        warehouseId: warehouseId,
-                        quantity: rec.qty
-                    }
+                    where: { itemId_warehouseId: { itemId: targetItemId, warehouseId } },
+                    update: { quantity: { increment: rec.qty } },
+                    create: { itemId: targetItemId, warehouseId, quantity: rec.qty }
                 });
             }
 
-            // Check if PO is fully complete
+            // Determine new PO status
             const updatedLines = await tx.pOLine.findMany({ where: { poId } });
-
             for (const line of updatedLines) {
                 if (line.received < line.quantity) {
                     allCompleted = false;
@@ -360,10 +362,11 @@ export async function receivePOItems(poId: number, items: { lineId: number, qty:
         });
 
         revalidatePath('/purchasing');
-        revalidatePath('/inventory'); // Important to update inventory view too
+        revalidatePath('/inventory');
         return { success: true };
-    } catch (error: any) {
-        console.error('Failed to receive items:', error);
-        return { success: false, error: error.message };
+    } catch (error: unknown) {
+        await logError('purchasing.receivePOItems', error);
+        const msg = error instanceof Error ? error.message : 'Failed to receive items';
+        return { success: false, error: msg };
     }
 }

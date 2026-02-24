@@ -3,7 +3,10 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
+import { logError } from '@/lib/errorLogger';
+import { createInvoiceInICount } from '@/lib/icount';
 
+// ─── Read ─────────────────────────────────────────────────────────────────────
 
 export async function getSalesOrders() {
     try {
@@ -13,55 +16,48 @@ export async function getSalesOrders() {
         const orders = await prisma.salesOrder.findMany({
             include: {
                 lines: true,
-                productionRun: {
-                    include: { item: true }
-                }
+                productionRun: { include: { item: true } }
             },
-            orderBy: {
-                createdAt: 'desc'
-            }
+            orderBy: { createdAt: 'desc' }
         });
         return { success: true, data: orders };
     } catch (error) {
-        console.error('Failed to fetch sales orders:', error);
-        return { success: false, error: 'Failed to fetch sales orders' };
+        await logError('sales.getSalesOrders', error);
+        return { success: false, error: 'Failed to fetch sales orders. Please try again.' };
     }
 }
 
-export async function createSalesOrder(data: { customer: string, soNumber: string, productionRunId?: number }) {
+export async function getSellableItems() {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const order = await prisma.salesOrder.create({
-            data: {
-                customer: data.customer,
-                soNumber: data.soNumber,
-                status: 'Draft',
-                productionRunId: data.productionRunId
-            }
+        const items = await prisma.item.findMany({
+            where: { deletedAt: null },
+            select: {
+                id: true,
+                sku: true,
+                name: true,
+                type: true,
+                currentStock: true,
+                price: true,
+                brand: true,
+                isSerialized: true
+            },
+            orderBy: { name: 'asc' }
         });
 
-        // Auto-create line if linked to production
-        if (data.productionRunId) {
-            const run = await prisma.productionRun.findUnique({ where: { id: data.productionRunId }, include: { item: true } });
-            if (run) {
-                await prisma.salesLine.create({
-                    data: {
-                        soId: order.id,
-                        itemId: run.itemId,
-                        quantity: Number(run.quantity),
-                        unitPrice: Number(run.item.price) || 0
-                    }
-                });
-            }
-        }
-
-        revalidatePath('/sales');
-        return { success: true, data: order };
+        return {
+            success: true,
+            data: items.map(item => ({
+                ...item,
+                currentStock: Number(item.currentStock),
+                price: Number(item.price)
+            }))
+        };
     } catch (error) {
-        console.error('Failed to create sales order:', error);
-        return { success: false, error: 'Failed to create sales order' };
+        await logError('sales.getSellableItems', error);
+        return { success: false, error: 'Failed to fetch items. Please try again.' };
     }
 }
 
@@ -77,69 +73,86 @@ export async function getRecentProductionRuns() {
         });
         return { success: true, data: runs };
     } catch (error) {
-        return { success: false, error: 'Failed to get production runs' };
+        await logError('sales.getRecentProductionRuns', error);
+        return { success: false, error: 'Failed to get production runs. Please try again.' };
     }
 }
 
-import { createInvoiceInICount } from '@/lib/icount';
+// ─── Create ───────────────────────────────────────────────────────────────────
 
-export async function updateSalesOrderStatus(id: number, status: string) {
+export async function createSalesOrder(data: {
+    customer: string;
+    soNumber: string;
+    productionRunId?: number;
+}) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const order = await prisma.salesOrder.update({
-            where: { id },
-            data: { status }
-        });
+        if (!data.customer?.trim()) return { success: false, error: 'Customer name is required' };
+        if (!data.soNumber?.trim()) return { success: false, error: 'SO number is required' };
 
-        // Trigger iCount sync if status is 'Confirmed'
-        if (status === 'Confirmed') {
-            const result = await createInvoiceInICount(order);
-
-            // Log the sync attempt
-            await prisma.iCountSyncLog.create({
+        // Atomic: create order and auto-line together
+        const order = await prisma.$transaction(async (tx) => {
+            const created = await tx.salesOrder.create({
                 data: {
-                    entityType: 'Invoice',
-                    entityId: id,
-                    action: 'Create',
-                    status: result.success ? 'Success' : 'Failed',
-                    message: result.message || (result.success ? `Created iCount ID: ${result.icountId}` : 'Unknown error')
+                    customer: data.customer.trim(),
+                    soNumber: data.soNumber.trim(),
+                    status: 'Draft',
+                    productionRunId: data.productionRunId ?? null
                 }
             });
 
-            if (!result.success) {
-                return { success: true, data: order, warning: 'Order updated but iCount sync failed.' };
+            if (data.productionRunId) {
+                const run = await tx.productionRun.findUnique({
+                    where: { id: data.productionRunId },
+                    include: { item: true }
+                });
+                if (run) {
+                    await tx.salesLine.create({
+                        data: {
+                            soId: created.id,
+                            itemId: run.itemId,
+                            quantity: Number(run.quantity),
+                            unitPrice: Number(run.item.price) || 0
+                        }
+                    });
+                }
             }
-        }
+            return created;
+        });
 
         revalidatePath('/sales');
         return { success: true, data: order };
-    } catch (error) {
-        console.error('Failed to update sales order:', error);
-        return { success: false, error: 'Failed to update sales order' };
+    } catch (error: unknown) {
+        await logError('sales.createSalesOrder', error);
+        const msg = error instanceof Error && error.message.includes('Unique')
+            ? `SO number "${data.soNumber?.trim()}" already exists`
+            : 'Failed to create sales order. Please try again.';
+        return { success: false, error: msg };
     }
 }
 
+// ─── Lines ────────────────────────────────────────────────────────────────────
 
 export async function addSalesLine(soId: number, itemId: number, quantity: number, unitPrice: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        await prisma.salesLine.create({
-            data: {
-                soId,
-                itemId,
-                quantity,
-                unitPrice
-            }
-        });
+        if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
+        if (unitPrice < 0) return { success: false, error: 'Unit price cannot be negative' };
+
+        // Verify item is active
+        const item = await prisma.item.findFirst({ where: { id: itemId, deletedAt: null } });
+        if (!item) return { success: false, error: 'Item not found or has been deactivated' };
+
+        await prisma.salesLine.create({ data: { soId, itemId, quantity, unitPrice } });
         revalidatePath('/sales');
         return { success: true };
     } catch (error) {
-        console.error('Failed to add line:', error);
-        return { success: false, error: 'Failed to add line' };
+        await logError('sales.addSalesLine', error);
+        return { success: false, error: 'Failed to add sales line. Please try again.' };
     }
 }
 
@@ -148,79 +161,124 @@ export async function removeSalesLine(lineId: number) {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        await prisma.salesLine.delete({
-            where: { id: lineId }
-        });
+        await prisma.salesLine.delete({ where: { id: lineId } });
         revalidatePath('/sales');
         return { success: true };
     } catch (error) {
-        console.error('Failed to remove line:', error);
-        return { success: false, error: 'Failed to remove line' };
+        await logError('sales.removeSalesLine', error);
+        return { success: false, error: 'Failed to remove sales line. Please try again.' };
     }
 }
 
-export async function getSellableItems() {
+// ─── Status + iCount Sync ─────────────────────────────────────────────────────
+
+const VALID_STATUSES = ['Draft', 'Confirmed', 'Shipped', 'Completed', 'Cancelled'];
+
+export async function updateSalesOrderStatus(id: number, status: string) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // Return mostly Products/Assemblies, but maybe everything is sellable? 
-        // User asked for "pick sales from production", so we highlight those.
-        const items = await prisma.item.findMany({
-            select: {
-                id: true,
-                sku: true,
-                name: true,
-                type: true,
-                currentStock: true,
-                price: true,
-                brand: true,
-                isSerialized: true
-            },
-            orderBy: {
-                name: 'asc'
-            }
+        if (!VALID_STATUSES.includes(status)) {
+            return { success: false, error: 'Invalid status value' };
+        }
+
+        const order = await prisma.salesOrder.update({
+            where: { id },
+            data: { status }
         });
 
-        // Convert Decimals
-        const serialized = items.map(item => ({
-            ...item,
-            currentStock: Number(item.currentStock),
-            price: Number(item.price)
-        }));
+        // Trigger iCount invoice on confirmation
+        if (status === 'Confirmed') {
+            let syncStatus = 'Success';
+            let syncMessage = '';
 
-        return { success: true, data: serialized };
+            try {
+                const result = await createInvoiceInICount(order);
+                syncStatus = result.success ? 'Success' : 'Failed';
+                syncMessage = result.message || (result.success ? `Created iCount ID: ${result.icountId}` : 'Unknown iCount error');
+
+                if (!result.success) {
+                    await logError('sales.iCountSync', new Error(syncMessage));
+                }
+            } catch (syncError) {
+                syncStatus = 'Failed';
+                syncMessage = syncError instanceof Error ? syncError.message : 'iCount sync threw an exception';
+                await logError('sales.iCountSync', syncError);
+            }
+
+            await prisma.iCountSyncLog.create({
+                data: {
+                    entityType: 'Invoice',
+                    entityId: id,
+                    action: 'Create',
+                    status: syncStatus,
+                    message: syncMessage
+                }
+            });
+
+            if (syncStatus === 'Failed') {
+                return {
+                    success: true,
+                    data: order,
+                    warning: 'Order confirmed, but iCount sync failed. The error has been logged — check Settings › System Logs.'
+                };
+            }
+        }
+
+        revalidatePath('/sales');
+        return { success: true, data: order };
     } catch (error) {
-        return { success: false, error: 'Failed to fetch items' };
+        await logError('sales.updateSalesOrderStatus', error);
+        return { success: false, error: 'Failed to update sales order status. Please try again.' };
     }
 }
+
+// ─── Delete (hard delete is acceptable for Sales Orders — no soft-delete model) ──
+// NOTE: Items (SKUs) and BOMs use soft delete. SalesOrders use hard delete because
+// they don't have a deletedAt column and are referenced via foreign keys that cascade.
 
 export async function deleteSalesOrder(id: number) {
     try {
         const session = await getSession();
-        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized' };
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
+
+        // Guard: prevent deletion of completed orders
+        const order = await prisma.salesOrder.findUnique({
+            where: { id },
+            select: { status: true }
+        });
+        if (order?.status === 'Completed') {
+            return { success: false, error: 'Completed sales orders cannot be deleted. Archive them instead.' };
+        }
 
         await prisma.salesOrder.delete({ where: { id } });
         revalidatePath('/sales');
         return { success: true };
     } catch (error) {
-        return { success: false, error: 'Failed to delete order' };
+        await logError('sales.deleteSalesOrder', error);
+        return { success: false, error: 'Failed to delete sales order. Please try again.' };
     }
 }
 
 export async function bulkDeleteSalesOrders(ids: number[]) {
     try {
         const session = await getSession();
-        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized' };
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
 
-        await prisma.salesOrder.deleteMany({
-            where: {
-                id: { in: ids }
-            }
+        // Guard: prevent deletion of any completed orders in the selection
+        const completed = await prisma.salesOrder.count({
+            where: { id: { in: ids }, status: 'Completed' }
         });
+        if (completed > 0) {
+            return { success: false, error: `${completed} completed sales order(s) cannot be deleted.` };
+        }
+
+        await prisma.salesOrder.deleteMany({ where: { id: { in: ids } } });
         revalidatePath('/sales');
         return { success: true };
     } catch (error) {
-        return { success: false, error: 'Failed to delete orders' };
+        await logError('sales.bulkDeleteSalesOrders', error);
+        return { success: false, error: 'Failed to delete sales orders. Please try again.' };
     }
 }

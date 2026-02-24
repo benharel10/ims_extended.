@@ -3,6 +3,72 @@
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { logError } from '@/lib/errorLogger';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Filter active (non-soft-deleted) items in all queries */
+const ACTIVE = { deletedAt: null };
+
+/** Validate that SKU is non-empty and reasonable */
+function validateSku(sku: string): string | null {
+    if (!sku || typeof sku !== 'string') return 'SKU is required';
+    const trimmed = sku.trim();
+    if (trimmed.length === 0) return 'SKU cannot be empty';
+    if (trimmed.length > 50) return 'SKU must be 50 characters or fewer';
+    return null;
+}
+
+/**
+ * Circular BOM detection.
+ * Returns true if adding (parentId -> childId) would create a cycle.
+ */
+async function wouldCreateCycle(parentId: number, childId: number): Promise<boolean> {
+    if (parentId === childId) return true;
+
+    // Walk UP from parentId — if childId is ever an ancestor of parentId, we have a cycle
+    const visited = new Set<number>();
+    const queue = [parentId];
+
+    while (queue.length > 0) {
+        const current = queue.pop()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+
+        // Find all BOMs where current is the child (i.e. who does current appear IN?)
+        const parentBoms = await prisma.bOM.findMany({
+            where: { childId: current, deletedAt: null },
+            select: { parentId: true }
+        });
+
+        for (const bom of parentBoms) {
+            if (bom.parentId === childId) return true;  // cycle found
+            queue.push(bom.parentId);
+        }
+    }
+
+    // Also walk DOWN from childId — if parentId is ever a descendant, cycle exists
+    const downQueue = [childId];
+    const downVisited = new Set<number>();
+    while (downQueue.length > 0) {
+        const current = downQueue.pop()!;
+        if (downVisited.has(current)) continue;
+        downVisited.add(current);
+
+        const childBoms = await prisma.bOM.findMany({
+            where: { parentId: current, deletedAt: null },
+            select: { childId: true }
+        });
+        for (const bom of childBoms) {
+            if (bom.childId === parentId) return true;
+            downQueue.push(bom.childId);
+        }
+    }
+
+    return false;
+}
+
+// ─── Read ────────────────────────────────────────────────────────────────────
 
 export async function getItems() {
     try {
@@ -10,17 +76,13 @@ export async function getItems() {
         const isAdmin = session?.user?.role === 'Admin';
 
         const items = await prisma.item.findMany({
+            where: ACTIVE,
             include: {
-                stocks: {
-                    include: {
-                        warehouse: true
-                    }
-                }
+                stocks: { include: { warehouse: true } }
             },
             orderBy: { createdAt: 'desc' }
         });
 
-        // Convert Decimal types to numbers for JSON serialization
         const serializedItems = items.map(item => ({
             ...item,
             minStock: Number(item.minStock),
@@ -34,51 +96,62 @@ export async function getItems() {
         }));
 
         if (!isAdmin) {
-            // Filter confidential data
             return {
                 success: true,
-                data: serializedItems.map(i => ({
-                    ...i,
-                    cost: 0, // Hidden
-                    price: 0, // Hidden (or maybe price is public? User said cost prices. Let's hide cost)
-                    // User said "only 'Admin' can see cost prices". Price might be sales price which is usually public to sales reps.
-                    // But "Warehouse can only see quantities". This implies generic staff shouldn't see money.
-                    // Let's hide both for Warehouse role safety, or just cost.
-                    // Request: "only 'Admin' can see cost prices and 'Warehouse' can only see quantities" -> ambiguous.
-                    // Safest: Hide cost. Hide price if role is strictly Warehouse?
-                    // Let's hide cost for non-Admin.
-                }))
+                data: serializedItems.map(i => ({ ...i, cost: 0 }))
             };
         }
 
         return { success: true, data: serializedItems };
     } catch (error) {
-        console.error('Failed to fetch items:', error);
-        return { success: false, error: 'Failed to fetch items' };
+        await logError('getItems', error);
+        return { success: false, error: 'Failed to fetch inventory. Please try again.' };
     }
 }
 
-export async function createItem(data: { sku: string, name: string, type: string, cost: number, price: number, minStock: number, revision?: string, warehouse?: string, brand?: string, isSerialized?: boolean, description?: string, icountId?: number }) {
+// ─── Create ──────────────────────────────────────────────────────────────────
+
+export async function createItem(data: {
+    sku: string;
+    name: string;
+    type: string;
+    cost: number;
+    price: number;
+    minStock: number;
+    revision?: string;
+    warehouse?: string;
+    brand?: string;
+    isSerialized?: boolean;
+    description?: string;
+    icountId?: number;
+}) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const existing = await prisma.item.findUnique({
-            where: { sku: data.sku }
-        });
+        // ── Server-side validation ──
+        const skuError = validateSku(data.sku);
+        if (skuError) return { success: false, error: skuError };
+        if (!data.name?.trim()) return { success: false, error: 'Item name is required' };
+        if (data.cost < 0) return { success: false, error: 'Cost cannot be negative' };
+        if (data.price < 0) return { success: false, error: 'Price cannot be negative' };
+        if (data.minStock < 0) return { success: false, error: 'Min stock cannot be negative' };
 
+        const sku = data.sku.trim().replace(/[<>]/g, '');
+
+        // Check for existing active OR soft-deleted item with same SKU
+        const existing = await prisma.item.findUnique({ where: { sku } });
         if (existing) {
-            return { success: false, error: 'SKU already exists' };
-        }
-
-        if (data.cost < 0 || data.price < 0 || data.minStock < 0) {
-            return { success: false, error: 'Cost, price, and min stock must be non-negative' };
+            if (existing.deletedAt) {
+                return { success: false, error: `SKU "${sku}" belongs to a deactivated item. Contact an Admin to restore it.` };
+            }
+            return { success: false, error: `SKU "${sku}" already exists` };
         }
 
         const item = await prisma.item.create({
             data: {
-                sku: data.sku,
-                name: data.name,
+                sku,
+                name: data.name.trim(),
                 type: data.type,
                 cost: data.cost,
                 price: data.price,
@@ -89,55 +162,73 @@ export async function createItem(data: { sku: string, name: string, type: string
                 brand: data.brand || '',
                 isSerialized: data.isSerialized || false,
                 description: data.description || '',
-                icountId: data.icountId || null
+                icountId: data.icountId || null,
+                version: 0,
             }
         });
 
-        // Audit Log (Optional)
-        // await prisma.systemLog.create({
-        //     data: {
-        //         userId: session.user.id,
-        //         action: 'Create Item',
-        //         entity: 'Item',
-        //         entityId: item.id,
-        //         details: `Created item ${item.sku} - ${item.name}`
-        //     }
-        // });
-
         revalidatePath('/inventory');
-        return { success: true, data: item };
+        return { success: true, data: { ...item, cost: Number(item.cost), price: Number(item.price) } };
     } catch (error) {
-        console.error('Failed to create item:', error);
-        return { success: false, error: 'Failed to create item' };
+        await logError('createItem', error);
+        return { success: false, error: 'Failed to create item. Please try again.' };
     }
 }
 
-export async function updateItem(id: number, data: { sku: string, name: string, type: string, cost: number, price: number, minStock: number, revision?: string, warehouse?: string, brand?: string, isSerialized?: boolean, description?: string, icountId?: number }) {
+// ─── Update ──────────────────────────────────────────────────────────────────
+
+export async function updateItem(id: number, data: {
+    sku: string;
+    name: string;
+    type: string;
+    cost: number;
+    price: number;
+    minStock: number;
+    revision?: string;
+    warehouse?: string;
+    brand?: string;
+    isSerialized?: boolean;
+    description?: string;
+    icountId?: number;
+    version?: number; // Optimistic concurrency token
+}) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        if (data.cost < 0 || data.price < 0 || data.minStock < 0) {
-            return { success: false, error: 'Cost, price, and min stock must be non-negative' };
-        }
+        // ── Server-side validation ──
+        const skuError = validateSku(data.sku);
+        if (skuError) return { success: false, error: skuError };
+        if (!data.name?.trim()) return { success: false, error: 'Item name is required' };
+        if (data.cost < 0) return { success: false, error: 'Cost cannot be negative' };
+        if (data.price < 0) return { success: false, error: 'Price cannot be negative' };
+        if (data.minStock < 0) return { success: false, error: 'Min stock cannot be negative' };
 
-        // Check if SKU exists strictly for OTHER items (not this one)
+        const sku = data.sku.trim().replace(/[<>]/g, '');
+
+        // Check for SKU conflict with another item
         const existing = await prisma.item.findFirst({
-            where: {
-                sku: data.sku,
-                id: { not: id }
-            }
+            where: { sku, id: { not: id }, deletedAt: null }
         });
+        if (existing) return { success: false, error: `SKU "${sku}" is already used by another item` };
 
-        if (existing) {
-            return { success: false, error: 'SKU already exists on another item' };
+        // ── Optimistic Concurrency Check ──
+        if (data.version !== undefined) {
+            const current = await prisma.item.findUnique({ where: { id }, select: { version: true } });
+            if (!current) return { success: false, error: 'Item not found' };
+            if (current.version !== data.version) {
+                return {
+                    success: false,
+                    error: 'This item was modified by another user. Please refresh the page and try again.'
+                };
+            }
         }
 
         const item = await prisma.item.update({
             where: { id },
             data: {
-                sku: data.sku,
-                name: data.name,
+                sku,
+                name: data.name.trim(),
                 type: data.type,
                 cost: data.cost,
                 price: data.price,
@@ -147,98 +238,55 @@ export async function updateItem(id: number, data: { sku: string, name: string, 
                 brand: data.brand,
                 isSerialized: data.isSerialized,
                 description: data.description,
-                icountId: data.icountId
+                icountId: data.icountId,
+                version: { increment: 1 }, // Bump version on every write
             }
         });
 
         revalidatePath('/inventory');
         return { success: true, data: item };
     } catch (error) {
-        console.error('Failed to update item:', error);
-        return { success: false, error: 'Failed to update item' };
+        await logError('updateItem', error);
+        return { success: false, error: 'Failed to update item. Please try again.' };
     }
 }
+
+// ─── Stock Updates (fully transactional) ─────────────────────────────────────
 
 export async function updateStock(id: number, quantity: number, warehouseId?: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
-
         if (quantity < 0) return { success: false, error: 'Stock quantity cannot be negative' };
 
         await prisma.$transaction(async (tx) => {
-            let oldQty = 0;
             if (warehouseId) {
-                // Get old quantity for logging
-                const oldStock = await tx.itemStock.findUnique({
-                    where: { itemId_warehouseId: { itemId: id, warehouseId } }
-                });
-                oldQty = Number(oldStock?.quantity || 0);
-
-                // 1. Update/Create ItemStock for specific warehouse
                 await tx.itemStock.upsert({
-                    where: {
-                        itemId_warehouseId: {
-                            itemId: id,
-                            warehouseId: warehouseId
-                        }
-                    },
+                    where: { itemId_warehouseId: { itemId: id, warehouseId } },
                     update: { quantity },
-                    create: {
-                        itemId: id,
-                        warehouseId: warehouseId,
-                        quantity
-                    }
+                    create: { itemId: id, warehouseId, quantity }
                 });
 
-                // 2. Recalculate Total Stock
-                const allStocks = await tx.itemStock.findMany({
-                    where: { itemId: id }
-                });
+                const allStocks = await tx.itemStock.findMany({ where: { itemId: id } });
                 const totalStock = allStocks.reduce((sum, s) => sum + Number(s.quantity), 0);
 
-                // 3. Update Item Total
                 await tx.item.update({
                     where: { id },
-                    data: { currentStock: totalStock }
+                    data: { currentStock: totalStock, version: { increment: 1 } }
                 });
-
-                // Audit Log
-                // await tx.systemLog.create({
-                //     data: {
-                //         userId: session.user.id,
-                //         action: 'Update Stock',
-                //         entity: 'Item',
-                //         entityId: id,
-                //         details: `Updated stock (Warehouse ${warehouseId}): ${oldQty} -> ${quantity}`
-                //     }
-                // });
-
             } else {
-                // Legacy/Fallback
-                const item = await tx.item.findUnique({ where: { id } });
                 await tx.item.update({
                     where: { id },
-                    data: { currentStock: quantity }
+                    data: { currentStock: quantity, version: { increment: 1 } }
                 });
-
-                // await tx.systemLog.create({
-                //     data: {
-                //         userId: session.user.id,
-                //         action: 'Update Stock',
-                //         entity: 'Item',
-                //         entityId: id,
-                //         details: `Updated total stock (Legacy): ${item?.currentStock} -> ${quantity}`
-                //     }
-                // });
             }
         });
 
         revalidatePath('/inventory');
         return { success: true };
     } catch (error) {
-        console.error('Failed to update stock:', error);
-        return { success: false, error: 'Failed to update stock' };
+        await logError('updateStock', error);
+        return { success: false, error: 'Failed to update stock. Please try again.' };
     }
 }
 
@@ -246,91 +294,101 @@ export async function updateItemCost(id: number, newCost: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
-
         if (newCost < 0) return { success: false, error: 'Cost cannot be negative' };
 
         const item = await prisma.item.update({
             where: { id },
-            data: { cost: newCost }
+            data: { cost: newCost, version: { increment: 1 } }
         });
         revalidatePath('/inventory');
-        revalidatePath('/production'); // Cost changes affect production BOMs
+        revalidatePath('/production');
         return { success: true, data: item };
     } catch (error) {
-        console.error('Failed to update cost:', error);
-        return { success: false, error: 'Failed to update cost' };
+        await logError('updateItemCost', error);
+        return { success: false, error: 'Failed to update cost. Please try again.' };
     }
 }
+
+// ─── Soft Delete ─────────────────────────────────────────────────────────────
 
 export async function deleteItem(id: number) {
     try {
         const session = await getSession();
-        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized' };
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
 
-        await prisma.item.delete({ where: { id } });
+        // Soft delete: stamp deletedAt rather than removing the row
+        await prisma.$transaction(async (tx) => {
+            const now = new Date();
+            await tx.item.update({
+                where: { id },
+                data: { deletedAt: now, version: { increment: 1 } }
+            });
+            // Also soft-delete all BOM lines that reference this item
+            await tx.bOM.updateMany({
+                where: { OR: [{ parentId: id }, { childId: id }] },
+                data: { deletedAt: now }
+            });
+        });
+
         revalidatePath('/inventory');
+        revalidatePath('/production');
         return { success: true };
     } catch (error) {
-        console.error('Failed to delete item:', error);
-        return { success: false, error: 'Failed to delete item (might be used in BOMs or Sales)' };
+        await logError('deleteItem', error);
+        return { success: false, error: 'Failed to deactivate item. Please try again.' };
     }
 }
 
 export async function bulkDeleteItems(ids: number[]) {
     try {
         const session = await getSession();
-        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized' };
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
 
-        const res = await prisma.item.deleteMany({
-            where: {
-                id: { in: ids }
-            }
+        const now = new Date();
+        await prisma.$transaction(async (tx) => {
+            await tx.item.updateMany({
+                where: { id: { in: ids } },
+                data: { deletedAt: now }
+            });
+            await tx.bOM.updateMany({
+                where: { OR: [{ parentId: { in: ids } }, { childId: { in: ids } }] },
+                data: { deletedAt: now }
+            });
         });
+
         revalidatePath('/inventory');
-        return { success: true, count: res.count };
+        return { success: true, count: ids.length };
     } catch (error) {
-        console.error('Failed to bulk delete items:', error);
-        return { success: false, error: 'Failed to delete some items (they might be in use)' };
+        await logError('bulkDeleteItems', error);
+        return { success: false, error: 'Failed to deactivate items. Please try again.' };
     }
 }
 
-export async function bulkUpdateStock(updates: { itemId: number, quantity: number, warehouseId: number }[]) {
+// ─── Bulk Stock Update ────────────────────────────────────────────────────────
+
+export async function bulkUpdateStock(updates: { itemId: number; quantity: number; warehouseId: number }[]) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // Validate
         for (const u of updates) {
             if (u.quantity < 0) return { success: false, error: `Stock quantity cannot be negative for item ${u.itemId}` };
         }
 
         await prisma.$transaction(async (tx) => {
             for (const update of updates) {
-                // Update warehouse-specific stock
                 await tx.itemStock.upsert({
-                    where: {
-                        itemId_warehouseId: {
-                            itemId: update.itemId,
-                            warehouseId: update.warehouseId
-                        }
-                    },
+                    where: { itemId_warehouseId: { itemId: update.itemId, warehouseId: update.warehouseId } },
                     update: { quantity: update.quantity },
-                    create: {
-                        itemId: update.itemId,
-                        warehouseId: update.warehouseId,
-                        quantity: update.quantity
-                    }
+                    create: { itemId: update.itemId, warehouseId: update.warehouseId, quantity: update.quantity }
                 });
 
-                // Recalculate total stock for this item
-                const allStocks = await tx.itemStock.findMany({
-                    where: { itemId: update.itemId }
-                });
+                const allStocks = await tx.itemStock.findMany({ where: { itemId: update.itemId } });
                 const totalStock = allStocks.reduce((sum, s) => sum + Number(s.quantity), 0);
 
                 await tx.item.update({
                     where: { id: update.itemId },
-                    data: { currentStock: totalStock }
+                    data: { currentStock: totalStock, version: { increment: 1 } }
                 });
             }
         });
@@ -338,10 +396,12 @@ export async function bulkUpdateStock(updates: { itemId: number, quantity: numbe
         revalidatePath('/inventory');
         return { success: true };
     } catch (error) {
-        console.error('Bulk stock update failed:', error);
-        return { success: false, error: 'Failed to update stock' };
+        await logError('bulkUpdateStock', error);
+        return { success: false, error: 'Failed to update stock. Please try again.' };
     }
 }
+
+// ─── Import Items ─────────────────────────────────────────────────────────────
 
 export type ImportItemData = {
     sku: string;
@@ -363,29 +423,35 @@ export async function importItems(itemsData: ImportItemData[]) {
         if (!session?.user?.role) return { success: false, error: 'Unauthorized' };
         if (session.user.role !== 'Admin') return { success: false, error: 'Unauthorized: Admin only' };
 
+        // ── NOTE: Caller (page) is responsible for displaying the snapshot warning ──
+        // The warning is shown before this function is called: "This will overwrite existing
+        // items. Make sure you have a recent Neon DB snapshot before proceeding."
+
         let created = 0;
         let updated = 0;
-        let errors: string[] = [];
+        const errors: string[] = [];
 
-        // Safe string utility
-        const safeStr = (s: any) => s ? String(s).trim().replace(/[<>]/g, '') : '';
+        const safeStr = (s: unknown) => (s ? String(s).trim().replace(/[<>]/g, '') : '');
 
         for (const row of itemsData) {
-            // Server-side validation
-            if (!row.sku || typeof row.sku !== 'string' || row.sku.length > 50) {
-                errors.push(`Skipped row: Invalid or missing SKU`);
+            // ── Strict server-side validation ──
+            if (!row.sku || typeof row.sku !== 'string' || row.sku.trim().length === 0) {
+                errors.push(`Skipped row: SKU is empty or invalid`);
                 continue;
             }
-            if (!row.name || typeof row.name !== 'string' || row.name.length > 100) {
-                errors.push(`Skipped row: Invalid or missing Name`);
+            if (row.sku.trim().length > 50) {
+                errors.push(`Skipped row: SKU "${row.sku}" exceeds 50 characters`);
                 continue;
             }
-            if (row.type && !['Raw', 'Assembly', 'Product', 'Raw Material'].includes(row.type) && !row.type.toLowerCase().match(/raw|assembly|product/)) {
-                // Allow fuzzy match but warn? Or strictly reject?
-                // Let's be strict for security but practical for users
+            if (!row.name || typeof row.name !== 'string' || row.name.trim().length === 0) {
+                errors.push(`Skipped row SKU "${row.sku}": name is required`);
+                continue;
             }
+            if ((row.cost ?? 0) < 0) { errors.push(`Skipped SKU "${row.sku}": cost cannot be negative`); continue; }
+            if ((row.price ?? 0) < 0) { errors.push(`Skipped SKU "${row.sku}": price cannot be negative`); continue; }
+            if ((row.minStock ?? 0) < 0) { errors.push(`Skipped SKU "${row.sku}": minStock cannot be negative`); continue; }
+            if ((row.currentStock ?? 0) < 0) { errors.push(`Skipped SKU "${row.sku}": currentStock cannot be negative`); continue; }
 
-            // Sanitize inputs
             row.sku = safeStr(row.sku);
             row.name = safeStr(row.name);
             row.description = safeStr(row.description);
@@ -393,31 +459,34 @@ export async function importItems(itemsData: ImportItemData[]) {
             row.warehouse = safeStr(row.warehouse);
             row.brand = safeStr(row.brand);
 
+            // Normalize type
+            let type = row.type || 'Raw';
+            if (type.toLowerCase().includes('raw')) type = 'Raw';
+            else if (type.toLowerCase().includes('assembly')) type = 'Assembly';
+            else if (type.toLowerCase().includes('product')) type = 'Product';
+            else type = 'Raw';
+
             try {
                 const existing = await prisma.item.findUnique({ where: { sku: row.sku } });
 
-                // Map 'Raw Material' to 'Raw', 'Assembly' to 'Assembly', 'Product' to 'Product'
-                let type = row.type || 'Raw';
-                if (type.toLowerCase().includes('raw')) type = 'Raw';
-                else if (type.toLowerCase().includes('assembly')) type = 'Assembly';
-                else if (type.toLowerCase().includes('product')) type = 'Product';
-
                 let item;
                 if (existing) {
+                    // Update whether active or soft-deleted (restore if needed)
                     item = await prisma.item.update({
                         where: { id: existing.id },
                         data: {
                             name: row.name,
-                            type: type,
-                            cost: row.cost ?? existing.cost,
-                            price: row.price ?? existing.price,
-                            minStock: row.minStock ?? existing.minStock,
-                            currentStock: row.currentStock ?? existing.currentStock,
-                            description: row.description ?? existing.description,
-                            revision: row.revision ?? existing.revision,
-                            warehouse: row.warehouse ?? existing.warehouse,
-                            brand: row.brand ?? existing.brand,
-                            icountId: existing.icountId // Preservation
+                            type,
+                            cost: row.cost ?? Number(existing.cost),
+                            price: row.price ?? Number(existing.price),
+                            minStock: row.minStock ?? Number(existing.minStock),
+                            currentStock: row.currentStock ?? Number(existing.currentStock),
+                            description: row.description || existing.description,
+                            revision: row.revision || existing.revision,
+                            warehouse: row.warehouse || existing.warehouse,
+                            brand: row.brand || existing.brand,
+                            deletedAt: null, // Restore if previously deleted
+                            version: { increment: 1 },
                         }
                     });
                     updated++;
@@ -426,55 +495,41 @@ export async function importItems(itemsData: ImportItemData[]) {
                         data: {
                             sku: row.sku,
                             name: row.name,
-                            type: type,
+                            type,
                             cost: row.cost ?? 0,
                             price: row.price ?? 0,
                             minStock: row.minStock ?? 0,
-                            description: row.description,
                             currentStock: row.currentStock ?? 0,
+                            description: row.description,
                             revision: row.revision || '',
                             warehouse: row.warehouse || '',
-                            brand: row.brand || ''
+                            brand: row.brand || '',
+                            version: 0,
                         }
                     });
                     created++;
                 }
 
-                // Link to Warehouse if exists (case-insensitive match)
-                if (row.warehouse && row.warehouse.trim()) {
-                    const warehouseName = row.warehouse.trim();
-
-                    // Find warehouse by case-insensitive name match
+                // Link to Warehouse if specified and stock > 0
+                if (row.warehouse?.trim()) {
                     const allWarehouses = await prisma.warehouse.findMany();
-                    const warehouse = allWarehouses.find(w =>
-                        w.name.toLowerCase() === warehouseName.toLowerCase()
+                    const warehouse = allWarehouses.find(
+                        w => w.name.toLowerCase() === row.warehouse!.toLowerCase()
                     );
-
                     if (warehouse && (row.currentStock ?? 0) > 0) {
-                        // Create or update stock link to warehouse
                         await prisma.itemStock.upsert({
-                            where: {
-                                itemId_warehouseId: {
-                                    itemId: item.id,
-                                    warehouseId: warehouse.id
-                                }
-                            },
-                            update: {
-                                quantity: row.currentStock ?? item.currentStock
-                            },
-                            create: {
-                                itemId: item.id,
-                                warehouseId: warehouse.id,
-                                quantity: row.currentStock ?? item.currentStock
-                            }
+                            where: { itemId_warehouseId: { itemId: item.id, warehouseId: warehouse.id } },
+                            update: { quantity: row.currentStock ?? Number(item.currentStock) },
+                            create: { itemId: item.id, warehouseId: warehouse.id, quantity: row.currentStock ?? Number(item.currentStock) }
                         });
                     } else if (!warehouse) {
-                        // Warehouse not found - log warning but continue
-                        errors.push(`Warning: Warehouse "${warehouseName}" not found for SKU ${row.sku}. Stock stored as legacy field only.`);
+                        errors.push(`Warning: Warehouse "${row.warehouse}" not found for SKU ${row.sku}. Stock stored as legacy field only.`);
                     }
                 }
-            } catch (e: any) {
-                errors.push(`Error processing SKU ${row.sku}: ${e.message}`);
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                errors.push(`Error processing SKU "${row.sku}": ${msg}`);
+                await logError('importItems.row', e);
             }
         }
 
@@ -485,54 +540,59 @@ export async function importItems(itemsData: ImportItemData[]) {
             errors: errors.length > 0 ? errors : undefined
         };
     } catch (error) {
-        console.error('Failed to import items:', error);
-        return { success: false, error: 'Failed to import items process' };
+        await logError('importItems', error);
+        return { success: false, error: 'Failed to run import. Please try again.' };
     }
 }
 
-export async function importBOM(bomData: { parentSku: string, childSku: string, quantity: number }[]) {
+// ─── BOM Import ───────────────────────────────────────────────────────────────
+
+export async function importBOM(bomData: { parentSku: string; childSku: string; quantity: number }[]) {
     try {
         const session = await getSession();
         if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized: Admin only' };
 
         let successCount = 0;
-        let errors: string[] = [];
+        const errors: string[] = [];
 
         for (const row of bomData) {
-            const parent = await prisma.item.findUnique({ where: { sku: row.parentSku } });
-            const child = await prisma.item.findUnique({ where: { sku: row.childSku } });
-
-            if (!parent) {
-                errors.push(`Parent SKU not found: ${row.parentSku}`);
-                continue;
-            }
-            if (!child) {
-                errors.push(`Child SKU not found: ${row.childSku}`);
+            if ((row.quantity ?? 0) <= 0) {
+                errors.push(`Skipped BOM row ${row.parentSku} -> ${row.childSku}: quantity must be positive`);
                 continue;
             }
 
-            const existing = await prisma.bOM.findFirst({
-                where: {
-                    parentId: parent.id,
-                    childId: child.id
+            const parent = await prisma.item.findFirst({ where: { sku: row.parentSku, deletedAt: null } });
+            const child = await prisma.item.findFirst({ where: { sku: row.childSku, deletedAt: null } });
+
+            if (!parent) { errors.push(`Parent SKU not found: ${row.parentSku}`); continue; }
+            if (!child) { errors.push(`Child SKU not found: ${row.childSku}`); continue; }
+
+            // ── Circular BOM check ──
+            if (await wouldCreateCycle(parent.id, child.id)) {
+                errors.push(`Skipped: Adding ${row.childSku} to ${row.parentSku} would create a circular BOM reference`);
+                continue;
+            }
+
+            try {
+                const existing = await prisma.bOM.findFirst({
+                    where: { parentId: parent.id, childId: child.id }
+                });
+
+                if (existing) {
+                    await prisma.bOM.update({
+                        where: { id: existing.id },
+                        data: { quantity: row.quantity, deletedAt: null }
+                    });
+                } else {
+                    await prisma.bOM.create({
+                        data: { parentId: parent.id, childId: child.id, quantity: row.quantity }
+                    });
                 }
-            });
-
-            if (existing) {
-                await prisma.bOM.update({
-                    where: { id: existing.id },
-                    data: { quantity: row.quantity }
-                });
-            } else {
-                await prisma.bOM.create({
-                    data: {
-                        parentId: parent.id,
-                        childId: child.id,
-                        quantity: row.quantity
-                    }
-                });
+                successCount++;
+            } catch (e) {
+                errors.push(`Error on BOM row ${row.parentSku} -> ${row.childSku}`);
+                await logError('importBOM.row', e);
             }
-            successCount++;
         }
 
         revalidatePath('/inventory');
@@ -541,106 +601,125 @@ export async function importBOM(bomData: { parentSku: string, childSku: string, 
             message: `Imported ${successCount} BOM lines.`,
             errors: errors.length > 0 ? errors : undefined
         };
-
     } catch (error) {
-        console.error('Failed to import BOM:', error);
-        return { success: false, error: 'Failed to import BOM process' };
+        await logError('importBOM', error);
+        return { success: false, error: 'Failed to import BOM. Please try again.' };
     }
 }
 
-export async function createAssemblyFromItems(productData: { sku: string, name: string }, componentSkus: string[]) {
+// ─── Assembly from Items ──────────────────────────────────────────────────────
+
+export async function createAssemblyFromItems(
+    productData: { sku: string; name: string },
+    componentSkus: string[]
+) {
     try {
         const session = await getSession();
         if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized: Admin only' };
 
-        // 1. Create or Find the Parent Product
-        let parent = await prisma.item.findUnique({ where: { sku: productData.sku } });
+        const skuError = validateSku(productData.sku);
+        if (skuError) return { success: false, error: skuError };
+        if (!productData.name?.trim()) return { success: false, error: 'Product name is required' };
+
+        let parent = await prisma.item.findFirst({
+            where: { sku: productData.sku.trim(), deletedAt: null }
+        });
 
         if (!parent) {
             parent = await prisma.item.create({
                 data: {
-                    sku: productData.sku,
-                    name: productData.name,
+                    sku: productData.sku.trim(),
+                    name: productData.name.trim(),
                     type: 'Product',
                     cost: 0,
                     price: 0,
                     minStock: 0,
-                    currentStock: 0
+                    currentStock: 0,
+                    version: 0,
                 }
             });
         }
 
         let addedCount = 0;
-        let errors: string[] = [];
+        const errors: string[] = [];
 
-        // 2. Add Components to BOM
         for (const childSku of componentSkus) {
-            const child = await prisma.item.findUnique({ where: { sku: childSku } });
-            if (!child) {
-                errors.push(`Component SKU not found: ${childSku}`);
+            const child = await prisma.item.findFirst({ where: { sku: childSku, deletedAt: null } });
+            if (!child) { errors.push(`Component SKU not found: ${childSku}`); continue; }
+            if (child.id === parent.id) continue;
+
+            if (await wouldCreateCycle(parent.id, child.id)) {
+                errors.push(`Skipped ${childSku}: would create a circular BOM reference`);
                 continue;
             }
-
-            // prevent self-reference
-            if (child.id === parent.id) continue;
 
             const existingBom = await prisma.bOM.findFirst({
                 where: { parentId: parent.id, childId: child.id }
             });
-
             if (!existingBom) {
                 await prisma.bOM.create({
-                    data: {
-                        parentId: parent.id,
-                        childId: child.id,
-                        quantity: 1 // Default to 1
-                    }
+                    data: { parentId: parent.id, childId: child.id, quantity: 1 }
                 });
                 addedCount++;
             }
         }
 
         revalidatePath('/inventory');
-        return { success: true, message: `Created Product ${parent.sku} with ${addedCount} components.`, errors: errors.length > 0 ? errors : undefined };
-
-    } catch (error: any) {
-        console.error('Failed to create assembly:', error);
-        return { success: false, error: error.message || 'Failed to create assembly' };
+        return {
+            success: true,
+            message: `Created Product ${parent.sku} with ${addedCount} components.`,
+            errors: errors.length > 0 ? errors : undefined
+        };
+    } catch (error: unknown) {
+        await logError('createAssemblyFromItems', error);
+        const msg = error instanceof Error ? error.message : 'Failed to create assembly';
+        return { success: false, error: msg };
     }
 }
 
-export async function createSaleFromInventory(data: { sku: string, customer: string, price: number, quantity: number }) {
+// ─── Quick Sale from Inventory ────────────────────────────────────────────────
+
+export async function createSaleFromInventory(data: {
+    sku: string;
+    customer: string;
+    price: number;
+    quantity: number;
+}) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
         if (data.quantity <= 0) return { success: false, error: 'Quantity must be positive' };
         if (data.price < 0) return { success: false, error: 'Price cannot be negative' };
-
-        const item = await prisma.item.findUnique({ where: { sku: data.sku } });
-        if (!item) return { success: false, error: 'Item not found' };
+        if (!data.customer?.trim()) return { success: false, error: 'Customer name is required' };
 
         const soNumber = `SO-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
 
-        const order = await prisma.salesOrder.create({
-            data: {
-                soNumber,
-                customer: data.customer,
-                status: 'Draft',
-                lines: {
-                    create: {
-                        itemId: item.id,
-                        quantity: data.quantity,
-                        unitPrice: data.price
+        const order = await prisma.$transaction(async (tx) => {
+            const item = await tx.item.findFirst({ where: { sku: data.sku, deletedAt: null } });
+            if (!item) throw new Error('Item not found');
+
+            return tx.salesOrder.create({
+                data: {
+                    soNumber,
+                    customer: data.customer.trim(),
+                    status: 'Draft',
+                    lines: {
+                        create: {
+                            itemId: item.id,
+                            quantity: data.quantity,
+                            unitPrice: data.price
+                        }
                     }
                 }
-            }
+            });
         });
 
         revalidatePath('/sales');
         return { success: true, message: `Created Sales Order ${soNumber}`, orderId: order.id };
-    } catch (error: any) {
-        console.error('Failed to create sale:', error);
-        return { success: false, error: error.message || 'Failed to create sale' };
+    } catch (error: unknown) {
+        await logError('createSaleFromInventory', error);
+        const msg = error instanceof Error ? error.message : 'Failed to create sale';
+        return { success: false, error: msg };
     }
 }

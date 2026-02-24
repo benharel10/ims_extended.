@@ -3,227 +3,262 @@
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { logError } from '@/lib/errorLogger';
 
-// 1. Fetch items that can be parents (Assemblies or Products)
+/** Filter active (non-soft-deleted) rows */
+const ACTIVE_BOM = { deletedAt: null };
+
+// ─── Assembly Parents & Components ───────────────────────────────────────────
+
 export async function getAssemblyParents() {
-    const session = await getSession();
-    if (!session?.user) return { success: false, error: 'Unauthorized' };
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const items = await prisma.item.findMany({
-            where: {
-                type: { in: ['Assembly', 'Product'] }
-            },
+            where: { type: { in: ['Assembly', 'Product'] }, deletedAt: null },
             orderBy: { name: 'asc' },
-            select: {
-                id: true,
-                name: true,
-                sku: true,
-                currentStock: true,
-                isSerialized: true,
-                cost: true,
-                price: true
-            }
+            select: { id: true, name: true, sku: true, currentStock: true, isSerialized: true, cost: true, price: true }
         });
 
-        // Convert Decimals to numbers
-        const serialized = items.map(item => ({
-            ...item,
-            currentStock: Number(item.currentStock),
-            cost: Number(item.cost),
-            price: Number(item.price)
-        }));
-
-        return { success: true, data: serialized };
+        return {
+            success: true,
+            data: items.map(item => ({
+                ...item,
+                currentStock: Number(item.currentStock),
+                cost: Number(item.cost),
+                price: Number(item.price)
+            }))
+        };
     } catch (error) {
-        return { success: false, error: 'Failed to fetch assembly parents' };
+        await logError('getAssemblyParents', error);
+        return { success: false, error: 'Failed to fetch assembly products. Please try again.' };
     }
 }
 
-// 2. Fetch potential children (Raw Materials or Sub-Assemblies)
 export async function getComponentOptions() {
-    const session = await getSession();
-    if (!session?.user) return { success: false, error: 'Unauthorized' };
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const items = await prisma.item.findMany({
-            // Any item can theoretically be a component, but usually Raw or Assembly
-            // We'll return everything to be safe, or filter if needed?
-            // Let's just return all for flexibility.
+            where: { deletedAt: null },
             orderBy: { name: 'asc' }
         });
         return { success: true, data: items };
     } catch (error) {
-        return { success: false, error: 'Failed to fetch component options' };
+        await logError('getComponentOptions', error);
+        return { success: false, error: 'Failed to fetch components. Please try again.' };
     }
 }
 
-// 3. Get existing BOM for a parent
+// ─── BOM ─────────────────────────────────────────────────────────────────────
+
 export async function getBOM(parentId: number) {
-    const session = await getSession();
-    if (!session?.user) return { success: false, error: 'Unauthorized' };
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const bom = await prisma.bOM.findMany({
-            where: { parentId },
-            include: {
-                child: true // Include child details like name, sku
-            }
+            where: { parentId, ...ACTIVE_BOM },
+            include: { child: true }
         });
+        // Filter out BOM lines whose child item has been soft deleted
+        const activeBom = bom.filter(b => b.child?.deletedAt === null);
         return { success: true, data: bom };
     } catch (error) {
-        return { success: false, error: 'Failed to fetch BOM' };
+        await logError('getBOM', error);
+        return { success: false, error: 'Failed to fetch BOM. Please try again.' };
     }
 }
 
-// 4. Save BOM (Definition) & Update Parent Item Cost/Price
 export async function saveBOM(
     parentId: number,
-    components: { childId: number, quantity: number }[],
-    itemUpdates?: { cost?: number, price?: number }
+    components: { childId: number; quantity: number }[],
+    itemUpdates?: { cost?: number; price?: number }
 ) {
-    const session = await getSession();
-    if (!session?.user) return { success: false, error: 'Unauthorized' };
-
     try {
-        // PRE-PROCESS: Aggregate duplicate components to prevent Unique Constraint violations
-        const condensedComponents = new Map<number, number>();
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        // ── Server-side validation ──
         for (const c of components) {
-            const current = condensedComponents.get(c.childId) || 0;
-            condensedComponents.set(c.childId, current + c.quantity);
+            if (c.quantity <= 0) return { success: false, error: 'All component quantities must be positive' };
+            if (c.childId === parentId) return { success: false, error: 'An item cannot contain itself as a component' };
         }
 
-        const finalComponents = Array.from(condensedComponents.entries()).map(([childId, quantity]) => ({
-            childId,
-            quantity
-        }));
+        // ── Circular BOM check ──
+        for (const c of components) {
+            const hasCycle = await wouldCreateCycle(parentId, c.childId);
+            if (hasCycle) {
+                const child = await prisma.item.findUnique({ where: { id: c.childId }, select: { sku: true } });
+                return {
+                    success: false,
+                    error: `Adding "${child?.sku ?? c.childId}" would create a circular BOM reference (item A cannot contain item B if B already contains A)`
+                };
+            }
+        }
 
-        // Transaction to ensure atomicity
+        // Aggregate duplicate childIds
+        const condensed = new Map<number, number>();
+        for (const c of components) {
+            condensed.set(c.childId, (condensed.get(c.childId) ?? 0) + c.quantity);
+        }
+        const finalComponents = Array.from(condensed.entries()).map(([childId, quantity]) => ({ childId, quantity }));
+
+        // ── Atomic transaction ──
         await prisma.$transaction(async (tx) => {
-            // 1. Update Parent Item Cost/Price if provided
             if (itemUpdates) {
+                if (itemUpdates.cost !== undefined && itemUpdates.cost < 0)
+                    throw new Error('Cost cannot be negative');
+                if (itemUpdates.price !== undefined && itemUpdates.price < 0)
+                    throw new Error('Price cannot be negative');
+
                 await tx.item.update({
                     where: { id: parentId },
-                    data: {
-                        cost: itemUpdates.cost,
-                        price: itemUpdates.price
-                    }
+                    data: { cost: itemUpdates.cost, price: itemUpdates.price, version: { increment: 1 } }
                 });
             }
 
-            // 2. Clear existing BOM for this parent
-            await tx.bOM.deleteMany({
-                where: { parentId }
+            // Soft-delete existing BOM lines for this parent
+            await tx.bOM.updateMany({
+                where: { parentId },
+                data: { deletedAt: new Date() }
             });
 
-            // 3. Create new BOM lines
+            // Create new BOM lines
             if (finalComponents.length > 0) {
-                await tx.bOM.createMany({
-                    data: finalComponents.map(c => ({
-                        parentId,
-                        childId: c.childId,
-                        quantity: c.quantity
-                    }))
-                });
+                // Upsert strategy: restore if exists (handles soft-deleted lines)
+                for (const c of finalComponents) {
+                    const existing = await tx.bOM.findFirst({
+                        where: { parentId, childId: c.childId }
+                    });
+                    if (existing) {
+                        await tx.bOM.update({
+                            where: { id: existing.id },
+                            data: { quantity: c.quantity, deletedAt: null }
+                        });
+                    } else {
+                        await tx.bOM.create({
+                            data: { parentId, childId: c.childId, quantity: c.quantity }
+                        });
+                    }
+                }
             }
         });
 
         revalidatePath('/production');
-        revalidatePath('/inventory'); // Inventory items (cost/price) might check
+        revalidatePath('/inventory');
         return { success: true };
-    } catch (error: any) {
-        console.error('Failed to save BOM:', error);
-        return { success: false, error: error.message || 'Failed to save assembly structure' };
+    } catch (error: unknown) {
+        await logError('saveBOM', error);
+        const msg = error instanceof Error ? error.message : 'Failed to save assembly structure';
+        return { success: false, error: msg };
     }
 }
 
-// 5. Run Production (Execute Assembly)
-export async function runProduction(parentId: number, quantity: number, serialNumbers: string[] = []) {
-    const session = await getSession();
-    if (!session?.user) return { success: false, error: 'Unauthorized' };
+// ─── Circular BOM detection ──────────────────────────────────────────────────
 
-    console.log(`[runProduction] Received request: Item=${parentId}, Qty=${quantity} (Type: ${typeof quantity})`);
+async function wouldCreateCycle(parentId: number, childId: number): Promise<boolean> {
+    if (parentId === childId) return true;
 
-    if (quantity <= 0) {
-        console.error(`[runProduction] Invalid quantity: ${quantity}`);
-        return { success: false, error: 'Quantity must be positive' };
+    // Walk DOWN from childId — if parentId is ever reachable, it's a cycle
+    const visited = new Set<number>();
+    const queue = [childId];
+
+    while (queue.length > 0) {
+        const current = queue.pop()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+
+        const children = await prisma.bOM.findMany({
+            where: { parentId: current, deletedAt: null },
+            select: { childId: true }
+        });
+        for (const bom of children) {
+            if (bom.childId === parentId) return true;
+            queue.push(bom.childId);
+        }
     }
+    return false;
+}
 
+// ─── Run Production ──────────────────────────────────────────────────────────
+
+export async function runProduction(parentId: number, quantity: number, serialNumbers: string[] = []) {
     try {
-        await prisma.$transaction(async (tx) => {
-            // 1. Get BOM to know components
-            const bom = await tx.bOM.findMany({
-                where: { parentId }
-            });
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
 
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            return { success: false, error: 'Quantity must be a positive number' };
+        }
+
+        await prisma.$transaction(async (tx) => {
+            // 1. Load and validate BOM (only active lines)
+            const bom = await tx.bOM.findMany({
+                where: { parentId, deletedAt: null }
+            });
             if (bom.length === 0) {
-                throw new Error('No assembly definition (BOM) found for this item.');
+                throw new Error('No assembly definition (BOM) found for this product. Define the BOM first.');
             }
 
-            // 2. Check and Deduct Stock for Components
-            console.log(`[runProduction] Processing ${bom.length} BOM lines for qty=${quantity}`);
+            // 2. Pre-flight stock check for ALL components before deducting anything
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
-                console.log(`[runProduction] Component ${line.childId}: BOM qty=${line.quantity}, Required=${requiredQty}`);
-
                 const childItem = await tx.item.findUnique({
                     where: { id: line.childId },
-                    include: { stocks: true } // Include warehouse stocks
+                    include: { stocks: true }
                 });
-
-                if (!childItem) throw new Error(`Component item ID ${line.childId} not found`);
-
-                console.log(`[runProduction] Component ${childItem.sku}: Total stock=${childItem.currentStock}`);
-
-                // Check total availability first
-                if (Number(childItem.currentStock) < requiredQty) {
-                    throw new Error(`Insufficient stock for component ${childItem.sku}. Required: ${requiredQty}, Available: ${childItem.currentStock}`);
+                if (!childItem || childItem.deletedAt) {
+                    throw new Error(`Component (ID: ${line.childId}) no longer exists`);
                 }
+                if (Number(childItem.currentStock) < requiredQty) {
+                    throw new Error(
+                        `Insufficient stock for "${childItem.sku}". Required: ${requiredQty}, Available: ${childItem.currentStock}`
+                    );
+                }
+            }
 
-                // Deduct from warehouses (ItemStock)
-                let remainingToDeduct = requiredQty;
+            // 3. Deduct stock from components (all checks passed — safe to write)
+            for (const line of bom) {
+                const requiredQty = Number(line.quantity) * quantity;
+                const childItem = await tx.item.findUnique({
+                    where: { id: line.childId },
+                    include: { stocks: true }
+                });
+                if (!childItem) throw new Error(`Component ID ${line.childId} not found`);
 
-                // Prioritize KSW (ID 2) or similar logic if needed, otherwise just take from available
-                // Let's sort to take from largest stock first or specific warehouse? 
-                // For now, simple iteration: take from where available.
+                // Deduct from warehouse stocks
+                let remaining = requiredQty;
                 for (const stock of childItem.stocks) {
-                    if (remainingToDeduct <= 0) break;
-
-                    const stockQty = Number(stock.quantity);
-                    if (stockQty > 0) {
-                        const deduct = Math.min(stockQty, remainingToDeduct);
-
-                        console.log(`[runProduction] Deducting ${deduct} from Warehouse ${stock.warehouseId}`);
-
+                    if (remaining <= 0) break;
+                    const available = Number(stock.quantity);
+                    if (available > 0) {
+                        const deduct = Math.min(available, remaining);
                         await tx.itemStock.update({
                             where: { id: stock.id },
                             data: { quantity: { decrement: deduct } }
                         });
-
-                        remainingToDeduct -= deduct;
+                        remaining -= deduct;
                     }
                 }
-
-                if (remainingToDeduct > 0.0001) { // Floating point tolerance
-                    throw new Error(`Stock inconsistency for ${childItem.sku}. Total says enough, but warehouses don't have it.`);
+                if (remaining > 0.0001) {
+                    throw new Error(`Stock inconsistency for "${childItem.sku}". Please refresh and try again.`);
                 }
 
-                // Deduct from main Item.currentStock
-                console.log(`[runProduction] Decrementing total ${childItem.sku} by ${requiredQty}`);
+                // Deduct from total stock + bump version
                 await tx.item.update({
                     where: { id: line.childId },
-                    data: { currentStock: { decrement: requiredQty } }
+                    data: { currentStock: { decrement: requiredQty }, version: { increment: 1 } }
                 });
-                console.log(`[runProduction] ✓ Deducted ${requiredQty} from ${childItem.sku}`);
             }
 
-            // 3. Add Stock for Parent Item
-            // Decide where to put it. KSW (ID 2) is a good default for production output based on user feedback.
-            // Or use the first existing warehouse stock record.
-            const targetWarehouseId = 2; // Default to KSW
-
-            // Update/Create ItemStock
+            // 4. Add finished goods to KSW warehouse (default production output target)
+            const targetWarehouseId = 2;
             const existingStock = await tx.itemStock.findUnique({
                 where: { itemId_warehouseId: { itemId: parentId, warehouseId: targetWarehouseId } }
             });
-
             if (existingStock) {
                 await tx.itemStock.update({
                     where: { id: existingStock.id },
@@ -231,186 +266,151 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 });
             } else {
                 await tx.itemStock.create({
-                    data: {
-                        itemId: parentId,
-                        warehouseId: targetWarehouseId,
-                        quantity: quantity
-                    }
+                    data: { itemId: parentId, warehouseId: targetWarehouseId, quantity }
                 });
             }
 
-            // Update Parent Total
             const parentItem = await tx.item.update({
                 where: { id: parentId },
-                data: { currentStock: { increment: quantity } }
+                data: { currentStock: { increment: quantity }, version: { increment: 1 } }
             });
 
-            // 3b. Verify Serialization
+            // 5. Serial number validation
             if (parentItem?.isSerialized) {
-                // For fractional quantities, serialization logic is tricky. 
-                // We enforce integer check for serialized items.
                 if (!Number.isInteger(quantity)) {
-                    throw new Error(`Serialized items must be produced in whole numbers.`);
+                    throw new Error('Serialized items must be produced in whole numbers');
                 }
                 if (serialNumbers.length !== quantity) {
-                    throw new Error(`Item is serialized. You must provide ${quantity} serial numbers.`);
+                    throw new Error(`Item is serialized — provide exactly ${quantity} serial number(s)`);
                 }
             }
 
-            // 4. Create Production Record
+            // 6. Create production run record
             const run = await tx.productionRun.create({
-                data: {
-                    itemId: parentId,
-                    quantity: quantity,
-                    status: 'Completed'
-                }
+                data: { itemId: parentId, quantity, status: 'Completed' }
             });
 
+            // 7. Register serial numbers
             if (parentItem?.isSerialized) {
                 for (const sn of serialNumbers) {
-                    // Check if SN exists
-                    const existingSn = await tx.serializedItem.findUnique({ where: { sn } });
-                    if (existingSn) throw new Error(`Serial Number ${sn} already exists.`);
-
+                    const trimmed = sn.trim();
+                    if (!trimmed) throw new Error('Serial numbers cannot be empty strings');
+                    const existing = await tx.serializedItem.findUnique({ where: { sn: trimmed } });
+                    if (existing) throw new Error(`Serial Number "${trimmed}" already exists`);
                     await tx.serializedItem.create({
-                        data: {
-                            sn,
-                            itemId: parentId,
-                            status: 'InStock',
-                            productionRunId: run.id
-                        }
+                        data: { sn: trimmed, itemId: parentId, status: 'InStock', productionRunId: run.id }
                     });
                 }
             }
-
-
-            // 5. Audit Log (Optional - comment out if SystemLog not in use)
-            // await tx.systemLog.create({
-            //     data: {
-            //         userId: session.user.id,
-            //         action: 'Run Production',
-            //         entity: 'ProductionRun',
-            //         entityId: run.id,
-            //         details: `Produced ${quantity} x ${parentItem.sku}`
-            //     }
-            // });
         });
 
-        console.log(`[runProduction] ✅ Production transaction completed successfully!`);
         revalidatePath('/production');
-        revalidatePath('/inventory'); // Inventory also changes
+        revalidatePath('/inventory');
         return { success: true };
-
-    } catch (error: any) {
-        console.error('Production Run Failed:', error);
-        return { success: false, error: error.message || 'Production failed' };
+    } catch (error: unknown) {
+        await logError('runProduction', error);
+        const msg = error instanceof Error ? error.message : 'Production run failed';
+        return { success: false, error: msg };
     }
 }
+
+// ─── Production History ───────────────────────────────────────────────────────
 
 export async function getProductionRuns() {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const runs = await prisma.productionRun.findMany({
             orderBy: { createdAt: 'desc' },
             take: 50,
-            include: {
-                item: true
-            }
+            include: { item: true }
         });
 
-        // Convert Decimals to numbers for JSON serialization
-        const serializedRuns = runs.map(run => ({
-            ...run,
-            quantity: Number(run.quantity),
-            item: run.item ? {
-                ...run.item,
-                minStock: Number(run.item.minStock),
-                currentStock: Number(run.item.currentStock),
-                cost: Number(run.item.cost),
-                price: Number(run.item.price)
-            } : null
-        }));
-
-        return { success: true, data: serializedRuns };
+        return {
+            success: true,
+            data: runs.map(run => ({
+                ...run,
+                quantity: Number(run.quantity),
+                item: run.item ? {
+                    ...run.item,
+                    minStock: Number(run.item.minStock),
+                    currentStock: Number(run.item.currentStock),
+                    cost: Number(run.item.cost),
+                    price: Number(run.item.price)
+                } : null
+            }))
+        };
     } catch (error) {
-        return { success: false, error: 'Failed to fetch production history' };
+        await logError('getProductionRuns', error);
+        return { success: false, error: 'Failed to fetch production history. Please try again.' };
     }
 }
 
+// ─── Update Production Run (re-adjusts stock transactionally) ────────────────
+
 export async function updateProductionRun(runId: number, newQuantity: number) {
-    if (newQuantity <= 0) return { success: false, error: 'Quantity must be positive' };
-
-    const session = await getSession();
-    if (!session?.user) return { success: false, error: 'Unauthorized' };
-
     try {
+        if (!Number.isFinite(newQuantity) || newQuantity <= 0) {
+            return { success: false, error: 'Quantity must be a positive number' };
+        }
+
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         await prisma.$transaction(async (tx) => {
             const run = await tx.productionRun.findUnique({
                 where: { id: runId },
                 include: { item: true }
             });
-
-            if (!run) throw new Error('Production Run not found');
+            if (!run) throw new Error('Production run not found');
 
             const diff = newQuantity - Number(run.quantity);
-            if (diff === 0) return; // No change
+            if (diff === 0) return;
 
-            // Get BOM for the Item (Parent)
-            // Note: We use the CURRENT BOM. If BOM changed since run, this might be inexact, 
-            // but standard for simple systems unless we snapshot BOMs.
             const bom = await tx.bOM.findMany({
-                where: { parentId: run.itemId }
+                where: { parentId: run.itemId, deletedAt: null }
             });
-
-            if (bom.length === 0) throw new Error('BOM missing for this item. Cannot adjust stock.');
+            if (bom.length === 0) throw new Error('BOM missing — cannot adjust stock safely');
 
             if (diff > 0) {
-                // INCREASE PRODUCTION: Need more components
+                // Producing more — pre-flight check first
                 for (const line of bom) {
-                    const paramsNeeded = Number(line.quantity) * diff;
+                    const needed = Number(line.quantity) * diff;
                     const child = await tx.item.findUnique({ where: { id: line.childId } });
-                    if (!child) throw new Error(`Component ${line.childId} missing`);
-
-                    if (Number(child.currentStock) < paramsNeeded) {
-                        throw new Error(`Insufficient stock key component ${child.sku} to increase production by ${diff}. Need ${paramsNeeded}.`);
+                    if (!child) throw new Error(`Component ID ${line.childId} missing`);
+                    if (Number(child.currentStock) < needed) {
+                        throw new Error(`Insufficient stock for "${child.sku}". Need ${needed}, available ${child.currentStock}`);
                     }
-
+                }
+                // Now deduct
+                for (const line of bom) {
+                    const needed = Number(line.quantity) * diff;
                     await tx.item.update({
                         where: { id: line.childId },
-                        data: { currentStock: { decrement: paramsNeeded } }
+                        data: { currentStock: { decrement: needed }, version: { increment: 1 } }
                     });
                 }
-
-                // Add Product
                 await tx.item.update({
                     where: { id: run.itemId },
-                    data: { currentStock: { increment: diff } }
+                    data: { currentStock: { increment: diff }, version: { increment: 1 } }
                 });
-
             } else {
-                // DECREASE PRODUCTION: Return components, remove product
+                // Reducing — return components, remove product stock
                 const removeQty = Math.abs(diff);
-
-                // Remove Product
-                // (Check if we have enough product to remove? Theoretically yes if we just made it, 
-                // but maybe we sold it? Simple system: Assume we can correct the record, potentially causing negative stock if sold.)
                 await tx.item.update({
                     where: { id: run.itemId },
-                    data: { currentStock: { decrement: removeQty } }
+                    data: { currentStock: { decrement: removeQty }, version: { increment: 1 } }
                 });
-
-                // Return Components
                 for (const line of bom) {
-                    const paramsReturning = Number(line.quantity) * removeQty;
+                    const returning = Number(line.quantity) * removeQty;
                     await tx.item.update({
                         where: { id: line.childId },
-                        data: { currentStock: { increment: paramsReturning } }
+                        data: { currentStock: { increment: returning }, version: { increment: 1 } }
                     });
                 }
             }
 
-            // Update Run Record
             await tx.productionRun.update({
                 where: { id: runId },
                 data: { quantity: newQuantity }
@@ -420,36 +420,37 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
         revalidatePath('/production');
         revalidatePath('/inventory');
         return { success: true };
-    } catch (error: any) {
-        console.error('Update Run Failed:', error);
-        return { success: false, error: error.message || 'Failed to update production run' };
+    } catch (error: unknown) {
+        await logError('updateProductionRun', error);
+        const msg = error instanceof Error ? error.message : 'Failed to update production run';
+        return { success: false, error: msg };
     }
 }
+
+// ─── Delete Production Runs ───────────────────────────────────────────────────
 
 export async function deleteProductionRun(runId: number) {
     try {
         const session = await getSession();
-        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized' };
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
         await prisma.productionRun.delete({ where: { id: runId } });
         revalidatePath('/production');
         return { success: true };
     } catch (error) {
-        return { success: false, error: 'Failed to delete run' };
+        await logError('deleteProductionRun', error);
+        return { success: false, error: 'Failed to delete production run. Please try again.' };
     }
 }
 
 export async function bulkDeleteProductionRuns(ids: number[]) {
     try {
         const session = await getSession();
-        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized' };
-        await prisma.productionRun.deleteMany({
-            where: {
-                id: { in: ids }
-            }
-        });
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
+        await prisma.productionRun.deleteMany({ where: { id: { in: ids } } });
         revalidatePath('/production');
         return { success: true };
     } catch (error) {
-        return { success: false, error: 'Failed to delete runs' };
+        await logError('bulkDeleteProductionRuns', error);
+        return { success: false, error: 'Failed to delete production runs. Please try again.' };
     }
 }
