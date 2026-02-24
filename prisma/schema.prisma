@@ -72,6 +72,9 @@ model Item {
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@index([sku])
 }
 
 model BOM {
@@ -86,6 +89,7 @@ model BOM {
   child     Item @relation("Child", fields: [childId], references: [id], onDelete: Cascade)
 
   @@unique([parentId, childId])
+  @@index([deletedAt])
 }
 
 model SerializedItem {
@@ -256,6 +260,8 @@ model User {
   updatedAt  DateTime @updatedAt
   
   systemLogs SystemLog[]
+
+  @@index([email])
 }
 
 model SystemLog {
