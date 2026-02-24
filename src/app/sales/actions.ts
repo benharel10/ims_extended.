@@ -4,8 +4,12 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 
+
 export async function getSalesOrders() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const orders = await prisma.salesOrder.findMany({
             include: {
                 lines: true,
@@ -26,6 +30,9 @@ export async function getSalesOrders() {
 
 export async function createSalesOrder(data: { customer: string, soNumber: string, productionRunId?: number }) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const order = await prisma.salesOrder.create({
             data: {
                 customer: data.customer,
@@ -60,6 +67,9 @@ export async function createSalesOrder(data: { customer: string, soNumber: strin
 
 export async function getRecentProductionRuns() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const runs = await prisma.productionRun.findMany({
             take: 20,
             orderBy: { createdAt: 'desc' },
@@ -75,6 +85,9 @@ import { createInvoiceInICount } from '@/lib/icount';
 
 export async function updateSalesOrderStatus(id: number, status: string) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const order = await prisma.salesOrder.update({
             where: { id },
             data: { status }
@@ -111,6 +124,9 @@ export async function updateSalesOrderStatus(id: number, status: string) {
 
 export async function addSalesLine(soId: number, itemId: number, quantity: number, unitPrice: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         await prisma.salesLine.create({
             data: {
                 soId,
@@ -129,6 +145,9 @@ export async function addSalesLine(soId: number, itemId: number, quantity: numbe
 
 export async function removeSalesLine(lineId: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         await prisma.salesLine.delete({
             where: { id: lineId }
         });
@@ -142,6 +161,9 @@ export async function removeSalesLine(lineId: number) {
 
 export async function getSellableItems() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         // Return mostly Products/Assemblies, but maybe everything is sellable? 
         // User asked for "pick sales from production", so we highlight those.
         const items = await prisma.item.findMany({

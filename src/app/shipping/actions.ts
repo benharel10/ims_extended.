@@ -11,6 +11,9 @@ const db = prisma as any;
 
 export async function getWarehouses() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const warehouses = await db.warehouse.findMany({
             orderBy: { name: 'asc' }
         });
@@ -22,6 +25,9 @@ export async function getWarehouses() {
 
 export async function createWarehouse(data: { name: string, location?: string, type?: string }) {
     try {
+        const session = await getSession();
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized: Admin only' };
+
         const warehouse = await db.warehouse.create({
             data: {
                 name: data.name,
@@ -52,6 +58,9 @@ export async function deleteWarehouse(id: number) {
 
 export async function getAvailableSerialNumbers(itemId: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const serials = await db.serializedItem.findMany({
             where: {
                 itemId,
@@ -69,6 +78,9 @@ export async function getAvailableSerialNumbers(itemId: number) {
 
 export async function getShipments() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const shipments = await db.shipment.findMany({
             include: {
                 salesOrder: true,
@@ -104,6 +116,9 @@ export async function createShipment(data: {
     toWarehouseId?: number
 }) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const shipment = await db.shipment.create({
             data: {
                 shipmentNo: data.shipmentNo,
@@ -126,6 +141,9 @@ export async function createShipment(data: {
 
 export async function updateShipmentStatus(id: number, status: string) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         await db.shipment.update({
             where: { id },
             data: { status }
@@ -139,6 +157,9 @@ export async function updateShipmentStatus(id: number, status: string) {
 
 export async function completeTransfer(shipmentId: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const shipment = await db.shipment.findUnique({
             where: { id: shipmentId },
             include: {
@@ -228,6 +249,9 @@ export async function completeTransfer(shipmentId: number) {
 
 export async function createPackage(shipmentId: number, type: string = 'Box') {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const pkg = await db.package.create({
             data: {
                 shipmentId,
@@ -257,6 +281,9 @@ export async function deletePackage(id: number) {
 
 export async function addItemToPackage(packageId: number, itemId: number, quantity: number, serializedItemId?: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         console.log(`Adding item to package. Pkg: ${packageId}, Item: ${itemId}, Qty: ${quantity}, Serial: ${serializedItemId}`);
         const item = await db.packageItem.create({
             data: {

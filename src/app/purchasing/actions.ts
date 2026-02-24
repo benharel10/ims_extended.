@@ -2,10 +2,14 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { getSession } from '@/lib/auth';
 
 // Reusing warehouse fetching logic
 export async function getItems() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const items = await prisma.item.findMany({ orderBy: { name: 'asc' } });
         return { success: true, data: items };
     } catch (error) {
@@ -15,6 +19,9 @@ export async function getItems() {
 
 export async function getWarehouses() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const warehouses = await prisma.warehouse.findMany({
             orderBy: { name: 'asc' }
         });
@@ -26,6 +33,9 @@ export async function getWarehouses() {
 
 export async function getLowStockItems() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const items = await prisma.item.findMany({
             where: {
                 currentStock: {
@@ -54,6 +64,9 @@ export async function generatePurchaseOrder(
     leadTimeDays?: number
 ) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         if (items.length === 0) return { success: false, error: 'No items selected' };
 
         const poNumber = `PO-${Date.now()}`; // Simple unique ID
@@ -87,6 +100,9 @@ export async function generatePurchaseOrder(
 
 export async function createEmptyPO(supplier: string, leadTimeDays?: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const poNumber = `PO-${Date.now()}`;
         const po = await prisma.purchaseOrder.create({
             data: {
@@ -111,8 +127,12 @@ export async function addPOLine(
     newItemSku?: string
 ) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         // Validation
         if (!itemId && !newItemName) return { success: false, error: 'Item ID or Name required' };
+        if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
 
         // Check if item already exists in PO, if so update qty (Only for existing items)
         let existing = null;
@@ -150,6 +170,9 @@ export async function addPOLine(
 
 export async function removePOLine(lineId: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         await prisma.pOLine.delete({ where: { id: lineId } });
         // revalidatePath determines which page to refresh. Since we don't know the PO ID easily here without an extra query, 
         // we might rely on the client to refresh or revalidate a broader path.
@@ -162,6 +185,9 @@ export async function removePOLine(lineId: number) {
 
 export async function getPurchaseOrder(id: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const po = await prisma.purchaseOrder.findUnique({
             where: { id },
             include: {
@@ -178,6 +204,9 @@ export async function getPurchaseOrder(id: number) {
 
 export async function updatePOStatus(id: number, status: string) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         await prisma.purchaseOrder.update({
             where: { id },
             data: { status }
@@ -192,6 +221,9 @@ export async function updatePOStatus(id: number, status: string) {
 
 export async function getOpenPurchaseOrders() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         const pos = await prisma.purchaseOrder.findMany({
             where: {
                 status: { not: 'Completed' }
@@ -211,6 +243,9 @@ export async function getOpenPurchaseOrders() {
 
 export async function receivePOItems(poId: number, items: { lineId: number, qty: number }[], warehouseId: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
         if (!warehouseId) throw new Error('Warehouse ID is required');
 
         await prisma.$transaction(async (tx) => {

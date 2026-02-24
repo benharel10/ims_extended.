@@ -15,6 +15,11 @@ export default function InventoryPage() {
     const [items, setItems] = useState<any[]>([]);
     const [warehouses, setWarehouses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [expandedRows, setExpandedRows] = useState<number[]>([]);
+
+    const toggleRow = (id: number) => {
+        setExpandedRows(prev => prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]);
+    };
 
     // Stock Details Modal
     const [viewStockItem, setViewStockItem] = useState<any | null>(null);
@@ -456,6 +461,7 @@ export default function InventoryPage() {
     // Selection State
     const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
     const [selectedWarehouse, setSelectedWarehouse] = useState<string>('');
+    const [visibleCount, setVisibleCount] = useState<number>(20);
 
     // Derived State
     const filteredItems = items.filter(item => {
@@ -497,6 +503,12 @@ export default function InventoryPage() {
         if (aVal > bVal) return direction === 'asc' ? 1 : -1;
         return 0;
     });
+
+    const displayedItems = filteredItems.slice(0, visibleCount);
+
+    useEffect(() => {
+        setVisibleCount(20);
+    }, [searchTerm, selectedWarehouse, filterType, filterBrand, filterLowStock, sortConfig]);
 
     async function handleCreateAssembly() {
         if (!assemblyFormData.sku || !assemblyFormData.name) {
@@ -682,10 +694,9 @@ export default function InventoryPage() {
                     </div>
                 </div>
 
-                <div className="card" style={{ marginBottom: '2rem' }}>
+                <div className="card full-width-page" style={{ marginBottom: '2rem', paddingLeft: 0, paddingRight: 0, borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
 
-
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap', padding: '0 1.5rem' }}>
                         <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                             <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                             <input
@@ -832,7 +843,7 @@ export default function InventoryPage() {
                     {loading ? (
                         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading inventory...</div>
                     ) : (
-                        <div className="table-responsive">
+                        <div className="table-responsive mobile-card-view">
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
@@ -869,11 +880,12 @@ export default function InventoryPage() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredItems.map((item, index) => {
+                                        displayedItems.map((item, index) => {
                                             const isNearBottom = filteredItems.length > 3 && index >= filteredItems.length - 2;
+                                            const isExpanded = expandedRows.includes(item.id);
                                             return (
-                                                <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedItemIds.includes(item.id) ? 'rgba(16, 185, 129, 0.05)' : undefined }}>
-                                                    <td style={{ padding: '1rem' }}>
+                                                <tr key={item.id} className={`expandable-row ${isExpanded ? 'expanded' : ''}`} onClick={() => toggleRow(item.id)} style={{ borderBottom: '1px solid var(--border-color)', background: selectedItemIds.includes(item.id) ? 'rgba(16, 185, 129, 0.05)' : undefined, cursor: 'pointer' }}>
+                                                    <td style={{ padding: '1rem' }} data-label="Select" onClick={e => e.stopPropagation()}>
                                                         <input
                                                             type="checkbox"
                                                             checked={selectedItemIds.includes(item.id)}
@@ -887,16 +899,16 @@ export default function InventoryPage() {
                                                             style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                                                         />
                                                     </td>
-                                                    <td style={{ padding: '1rem', fontWeight: 500 }}>{item.sku}</td>
-                                                    <td style={{ padding: '1rem' }}>{item.revision}</td>
-                                                    <td style={{ padding: '1rem' }}>{item.name}</td>
-                                                    <td style={{ padding: '1rem' }}>{item.brand}</td>
-                                                    <td style={{ padding: '1rem' }}>
+                                                    <td style={{ padding: '1rem', fontWeight: 500 }} data-label="SKU">{item.sku}</td>
+                                                    <td style={{ padding: '1rem' }} data-label="Revision">{item.revision}</td>
+                                                    <td style={{ padding: '1rem' }} data-label="Name">{item.name}</td>
+                                                    <td style={{ padding: '1rem' }} data-label="Brand">{item.brand}</td>
+                                                    <td style={{ padding: '1rem' }} data-label="Type">
                                                         <span className={`badge ${item.type === 'Product' ? 'badge-success' : item.type === 'Assembly' ? 'badge-warning' : 'badge-danger'}`} style={{ color: item.type === 'Raw' ? 'var(--text-muted)' : undefined, border: item.type === 'Raw' ? '1px solid var(--border-color)' : undefined, background: item.type === 'Raw' ? 'transparent' : undefined }}>
                                                             {item.type}
                                                         </span>
                                                     </td>
-                                                    <td style={{ padding: '1rem' }}>
+                                                    <td style={{ padding: '1rem' }} data-label="Warehouse">
                                                         <div style={{ fontWeight: 500 }}>{item.warehouse || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Unassigned</span>}</div>
                                                         {item.stocks && item.stocks.length > 0 && (
                                                             <button
@@ -922,7 +934,7 @@ export default function InventoryPage() {
                                                     </td>
 
                                                     {/* Stock Cell with Modal Trigger */}
-                                                    <td style={{ padding: '1rem' }} className="group">
+                                                    <td style={{ padding: '1rem' }} className="group" data-label="Stock">
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                 {selectedWarehouse && !isNaN(parseInt(selectedWarehouse)) ? (
@@ -948,7 +960,7 @@ export default function InventoryPage() {
                                                         </div>
                                                     </td>
 
-                                                    <td style={{ padding: '1rem' }} className="group">
+                                                    <td style={{ padding: '1rem' }} className="group" data-label="Cost">
                                                         {editingCostId === item.id ? (
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                 <span style={{ color: 'var(--text-muted)' }}>$</span>
@@ -979,62 +991,72 @@ export default function InventoryPage() {
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td style={{ padding: '1rem', overflow: 'visible' }}>
+                                                    <td style={{ padding: '1rem', overflow: 'visible' }} data-label="Actions" onClick={e => e.stopPropagation()}>
                                                         <div className="actions-menu-container" style={{ position: 'relative', zIndex: activeActionId === item.id ? 999 : 'auto' }}>
-                                                            <button
-                                                                type="button"
-                                                                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.25rem' }}
-                                                                onClick={() => {
-                                                                    setActiveActionId(activeActionId === item.id ? null : item.id);
-                                                                }}
-                                                            >
-                                                                <MoreHorizontal size={20} style={{ pointerEvents: 'none' }} />
-                                                            </button>
-                                                            {activeActionId === item.id && (
-                                                                <div style={{
-                                                                    position: 'absolute',
-                                                                    right: 0,
-                                                                    top: isNearBottom ? 'auto' : '100%',
-                                                                    bottom: isNearBottom ? '100%' : 'auto',
-                                                                    marginBottom: isNearBottom ? '0.25rem' : 0,
-                                                                    marginTop: isNearBottom ? 0 : '0.25rem',
-                                                                    background: 'var(--bg-card)',
-                                                                    border: '1px solid var(--border-color)',
-                                                                    borderRadius: 'var(--radius-md)',
-                                                                    zIndex: 1000,
-                                                                    minWidth: '160px',
-                                                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3)'
-                                                                }} className="animate-in fade-in zoom-in-95 duration-100">
-                                                                    <button
-                                                                        type="button"
-                                                                        style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            openEditModal(item);
-                                                                            setActiveActionId(null);
-                                                                        }}
-                                                                    >
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                            <Edit2 size={14} /> Edit Item
-                                                                        </div>
-                                                                    </button>
-
-                                                                    {isAdmin && (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <button
+                                                                    className="mobile-expand-btn btn btn-sm btn-outline"
+                                                                    style={{ display: 'none' }}
+                                                                    onClick={(e) => { e.stopPropagation(); toggleRow(item.id); }}
+                                                                >
+                                                                    {isExpanded ? 'Show Less' : 'Show More'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.25rem' }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setActiveActionId(activeActionId === item.id ? null : item.id);
+                                                                    }}
+                                                                >
+                                                                    <MoreHorizontal size={20} style={{ pointerEvents: 'none' }} />
+                                                                </button>
+                                                                {activeActionId === item.id && (
+                                                                    <div style={{
+                                                                        position: 'absolute',
+                                                                        right: 0,
+                                                                        top: isNearBottom ? 'auto' : '100%',
+                                                                        bottom: isNearBottom ? '100%' : 'auto',
+                                                                        marginBottom: isNearBottom ? '0.25rem' : 0,
+                                                                        marginTop: isNearBottom ? 0 : '0.25rem',
+                                                                        background: 'var(--bg-card)',
+                                                                        border: '1px solid var(--border-color)',
+                                                                        borderRadius: 'var(--radius-md)',
+                                                                        zIndex: 1000,
+                                                                        minWidth: '160px',
+                                                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3)'
+                                                                    }} className="animate-in fade-in zoom-in-95 duration-100">
                                                                         <button
-                                                                            style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', borderTop: '1px solid var(--border-color)', color: '#ef4444', cursor: 'pointer', fontSize: '0.875rem' }}
+                                                                            type="button"
+                                                                            style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                handleDeleteItem(item.id, item.sku);
+                                                                                openEditModal(item);
                                                                                 setActiveActionId(null);
                                                                             }}
                                                                         >
                                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                <X size={14} /> Delete
+                                                                                <Edit2 size={14} /> Edit Item
                                                                             </div>
                                                                         </button>
-                                                                    )}
-                                                                </div>
-                                                            )}
+
+                                                                        {isAdmin && (
+                                                                            <button
+                                                                                style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', borderTop: '1px solid var(--border-color)', color: '#ef4444', cursor: 'pointer', fontSize: '0.875rem' }}
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDeleteItem(item.id, item.sku);
+                                                                                    setActiveActionId(null);
+                                                                                }}
+                                                                            >
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                    <X size={14} /> Delete
+                                                                                </div>
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -1043,20 +1065,54 @@ export default function InventoryPage() {
                                     )}
                                 </tbody>
                             </table>
+                            {filteredItems.length > visibleCount && (
+                                <div style={{ textAlign: 'center', marginTop: '1rem', padding: '1rem' }}>
+                                    <button
+                                        onClick={() => setVisibleCount(prev => prev + 20)}
+                                        className="btn btn-outline"
+                                        style={{ width: '100%', maxWidth: '300px' }}
+                                    >
+                                        Load More ({filteredItems.length - visibleCount} remaining)
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
             </div >
 
+            {/* Floating Action Buttons for Mobile */}
+            <div className="fab-container">
+                <button
+                    className="fab-button"
+                    onClick={() => openCreateModal()}
+                    aria-label="Add Item"
+                    title="Add Inventory Item"
+                >
+                    <Plus size={24} />
+                </button>
+                <div style={{ height: '0.5rem' }}></div>
+                {/* Secondary FAB (Small) - Optional logic to expand */}
+                <button
+                    className="fab-button"
+                    style={{ width: '48px', height: '48px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                    onClick={() => setShowAssemblyModal(true)}
+                    aria-label="New Assembly"
+                    title="Create Assembly"
+                >
+                    <Package size={20} />
+                </button>
+            </div>
+
             {/* Create/Edit Item Modal */}
             {
                 showModal && (
                     <div style={{
                         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050
                     }}>
-                        <div className="card" style={{ width: '500px', maxWidth: '90%' }}>
+                        <div className="card" style={{ width: '500px', maxWidth: '90%', maxHeight: '80vh', overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                                 <h3>{isEditing ? 'Edit Item' : 'Create New Item'}</h3>
                                 <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
@@ -1064,17 +1120,31 @@ export default function InventoryPage() {
                                 </button>
                             </div>
                             <form onSubmit={handleSubmitItem}>
-                                <div className="grid-cols-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
+                                <div className="grid-responsive-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>SKU</label>
-                                        <input
-                                            type="text"
-                                            value={formData.sku}
-                                            onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                                            className="input-group"
-                                            style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
-                                            required
-                                        />
+                                        <div className="barcode-input-wrapper">
+                                            <input
+                                                type="text"
+                                                value={formData.sku}
+                                                onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                                                className="input-group"
+                                                style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
+                                                required
+                                            />
+                                            <button
+                                                type="button"
+                                                title="Scan Barcode"
+                                                onClick={() => {
+                                                    const code = prompt("Simulate Scan:");
+                                                    if (code) setFormData(prev => ({ ...prev, sku: code }));
+                                                }}
+                                                className="camera-icon"
+                                                style={{ pointerEvents: 'auto', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem' }}
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
+                                            </button>
+                                        </div>
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Revision</label>
@@ -1100,7 +1170,11 @@ export default function InventoryPage() {
                                             <option value="Product">Final Product</option>
                                         </select>
                                     </div>
-                                    <div style={{ marginTop: '0.5rem' }}>
+
+                                </div>
+
+                                <div className="grid-responsive-2" style={{ gap: '1rem', marginTop: '1rem' }}>
+                                    <div>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Warehouse / Location</label>
                                         <input
                                             type="text"
@@ -1111,23 +1185,21 @@ export default function InventoryPage() {
                                             style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
                                         />
                                     </div>
-
+                                    <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.5rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.isSerialized}
+                                                onChange={e => setFormData({ ...formData, isSerialized: e.target.checked })}
+                                                style={{ width: '16px', height: '16px' }}
+                                            />
+                                            Is Serialized Item?
+                                        </label>
+                                    </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', marginTop: '1.5rem' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500 }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.isSerialized}
-                                            onChange={e => setFormData({ ...formData, isSerialized: e.target.checked })}
-                                            style={{ width: '16px', height: '16px' }}
-                                        />
-                                        Is Serialized Item?
-                                    </label>
-                                </div>
 
 
-
-                                <div style={{ marginBottom: '1rem' }}>
+                                <div style={{ marginBottom: '1rem', marginTop: '1rem' }}>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Name</label>
                                     <input
                                         type="text"
@@ -1149,7 +1221,7 @@ export default function InventoryPage() {
                                     />
                                 </div>
 
-                                <div className="grid-cols-2" style={{ gap: '1rem', marginBottom: '1rem' }}>
+                                <div className="grid-responsive-2" style={{ gap: '1rem', marginBottom: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Brand</label>
                                         <input
@@ -1213,8 +1285,8 @@ export default function InventoryPage() {
                                     <button type="submit" className="btn btn-primary">{isEditing ? 'Save Changes' : 'Create Item'}</button>
                                 </div>
                             </form>
-                        </div>
-                    </div>
+                        </div >
+                    </div >
                 )
             }
 
@@ -1380,10 +1452,10 @@ export default function InventoryPage() {
                 showStockModal && stockModalData.item && (
                     <div style={{
                         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050
                     }}>
-                        <div className="card" style={{ width: '450px', maxWidth: '95%' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                        <div className="card" style={{ width: '500px', maxWidth: '90%', maxHeight: '80vh', overflowY: 'auto' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                                 <div>
                                     <h3 style={{ marginBottom: '0.25rem' }}>Adjust Stock</h3>
                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>

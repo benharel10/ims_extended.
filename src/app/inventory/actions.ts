@@ -71,6 +71,10 @@ export async function createItem(data: { sku: string, name: string, type: string
             return { success: false, error: 'SKU already exists' };
         }
 
+        if (data.cost < 0 || data.price < 0 || data.minStock < 0) {
+            return { success: false, error: 'Cost, price, and min stock must be non-negative' };
+        }
+
         const item = await prisma.item.create({
             data: {
                 sku: data.sku,
@@ -110,6 +114,13 @@ export async function createItem(data: { sku: string, name: string, type: string
 
 export async function updateItem(id: number, data: { sku: string, name: string, type: string, cost: number, price: number, minStock: number, revision?: string, warehouse?: string, brand?: string, isSerialized?: boolean, description?: string, icountId?: number }) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        if (data.cost < 0 || data.price < 0 || data.minStock < 0) {
+            return { success: false, error: 'Cost, price, and min stock must be non-negative' };
+        }
+
         // Check if SKU exists strictly for OTHER items (not this one)
         const existing = await prisma.item.findFirst({
             where: {
@@ -152,6 +163,8 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        if (quantity < 0) return { success: false, error: 'Stock quantity cannot be negative' };
 
         await prisma.$transaction(async (tx) => {
             let oldQty = 0;
@@ -231,6 +244,11 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
 
 export async function updateItemCost(id: number, newCost: number) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        if (newCost < 0) return { success: false, error: 'Cost cannot be negative' };
+
         const item = await prisma.item.update({
             where: { id },
             data: { cost: newCost }
@@ -278,6 +296,14 @@ export async function bulkDeleteItems(ids: number[]) {
 
 export async function bulkUpdateStock(updates: { itemId: number, quantity: number, warehouseId: number }[]) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        // Validate
+        for (const u of updates) {
+            if (u.quantity < 0) return { success: false, error: `Stock quantity cannot be negative for item ${u.itemId}` };
+        }
+
         await prisma.$transaction(async (tx) => {
             for (const update of updates) {
                 // Update warehouse-specific stock
@@ -333,6 +359,10 @@ export type ImportItemData = {
 
 export async function importItems(itemsData: ImportItemData[]) {
     try {
+        const session = await getSession();
+        if (!session?.user?.role) return { success: false, error: 'Unauthorized' };
+        if (session.user.role !== 'Admin') return { success: false, error: 'Unauthorized: Admin only' };
+
         let created = 0;
         let updated = 0;
         let errors: string[] = [];
@@ -462,6 +492,9 @@ export async function importItems(itemsData: ImportItemData[]) {
 
 export async function importBOM(bomData: { parentSku: string, childSku: string, quantity: number }[]) {
     try {
+        const session = await getSession();
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized: Admin only' };
+
         let successCount = 0;
         let errors: string[] = [];
 
@@ -517,6 +550,9 @@ export async function importBOM(bomData: { parentSku: string, childSku: string, 
 
 export async function createAssemblyFromItems(productData: { sku: string, name: string }, componentSkus: string[]) {
     try {
+        const session = await getSession();
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized: Admin only' };
+
         // 1. Create or Find the Parent Product
         let parent = await prisma.item.findUnique({ where: { sku: productData.sku } });
 
@@ -575,6 +611,12 @@ export async function createAssemblyFromItems(productData: { sku: string, name: 
 
 export async function createSaleFromInventory(data: { sku: string, customer: string, price: number, quantity: number }) {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        if (data.quantity <= 0) return { success: false, error: 'Quantity must be positive' };
+        if (data.price < 0) return { success: false, error: 'Price cannot be negative' };
+
         const item = await prisma.item.findUnique({ where: { sku: data.sku } });
         if (!item) return { success: false, error: 'Item not found' };
 

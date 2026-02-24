@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
+import { BottomNav } from "@/components/BottomNav";
+import { AppHeader } from "@/components/AppHeader";
 
 import { SystemProvider } from "@/components/SystemProvider";
+import { getSession } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "KSW Inventory",
   description: "Internal Inventory & Production Management System - KSW",
 };
-
-
-import { getSession } from "@/lib/auth";
 
 export default async function RootLayout({
   children,
@@ -25,10 +24,11 @@ export default async function RootLayout({
       <body>
         <SystemProvider user={user}>
           <div className="layout-container">
-            <Sidebar />
+            <AppHeader />
             <main className="main-content">
               {children}
             </main>
+            <BottomNav />
           </div>
         </SystemProvider>
       </body>

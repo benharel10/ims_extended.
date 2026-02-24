@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache';
 
 // 1. Fetch items that can be parents (Assemblies or Products)
 export async function getAssemblyParents() {
+    const session = await getSession();
+    if (!session?.user) return { success: false, error: 'Unauthorized' };
     try {
         const items = await prisma.item.findMany({
             where: {
@@ -39,6 +41,8 @@ export async function getAssemblyParents() {
 
 // 2. Fetch potential children (Raw Materials or Sub-Assemblies)
 export async function getComponentOptions() {
+    const session = await getSession();
+    if (!session?.user) return { success: false, error: 'Unauthorized' };
     try {
         const items = await prisma.item.findMany({
             // Any item can theoretically be a component, but usually Raw or Assembly
@@ -54,6 +58,8 @@ export async function getComponentOptions() {
 
 // 3. Get existing BOM for a parent
 export async function getBOM(parentId: number) {
+    const session = await getSession();
+    if (!session?.user) return { success: false, error: 'Unauthorized' };
     try {
         const bom = await prisma.bOM.findMany({
             where: { parentId },
@@ -73,6 +79,9 @@ export async function saveBOM(
     components: { childId: number, quantity: number }[],
     itemUpdates?: { cost?: number, price?: number }
 ) {
+    const session = await getSession();
+    if (!session?.user) return { success: false, error: 'Unauthorized' };
+
     try {
         // PRE-PROCESS: Aggregate duplicate components to prevent Unique Constraint violations
         const condensedComponents = new Map<number, number>();
@@ -300,6 +309,8 @@ export async function runProduction(parentId: number, quantity: number, serialNu
 
 export async function getProductionRuns() {
     try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
         const runs = await prisma.productionRun.findMany({
             orderBy: { createdAt: 'desc' },
             take: 50,
@@ -329,6 +340,9 @@ export async function getProductionRuns() {
 
 export async function updateProductionRun(runId: number, newQuantity: number) {
     if (newQuantity <= 0) return { success: false, error: 'Quantity must be positive' };
+
+    const session = await getSession();
+    if (!session?.user) return { success: false, error: 'Unauthorized' };
 
     try {
         await prisma.$transaction(async (tx) => {
