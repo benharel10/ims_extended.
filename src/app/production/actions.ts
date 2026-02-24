@@ -8,6 +8,19 @@ import { logError } from '@/lib/errorLogger';
 /** Filter active (non-soft-deleted) rows */
 const ACTIVE_BOM = { deletedAt: null };
 
+export async function getWarehouses() {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const warehouses = await prisma.warehouse.findMany({ orderBy: { name: 'asc' } });
+        return { success: true, data: warehouses };
+    } catch (error) {
+        await logError('getWarehouses', error);
+        return { success: false, error: 'Failed to fetch warehouses' };
+    }
+}
+
 // ─── Assembly Parents & Components ───────────────────────────────────────────
 
 export async function getAssemblyParents() {
@@ -185,13 +198,16 @@ async function wouldCreateCycle(parentId: number, childId: number): Promise<bool
 
 // ─── Run Production ──────────────────────────────────────────────────────────
 
-export async function runProduction(parentId: number, quantity: number, serialNumbers: string[] = []) {
+export async function runProduction(parentId: number, quantity: number, serialNumbers: string[] = [], fromWarehouseId?: number, toWarehouseId?: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
         if (!Number.isFinite(quantity) || quantity <= 0) {
             return { success: false, error: 'Quantity must be a positive number' };
+        }
+        if (!fromWarehouseId || !toWarehouseId) {
+            return { success: false, error: 'Source and Destination warehouses are required.' };
         }
 
         await prisma.$transaction(async (tx) => {
@@ -207,15 +223,20 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
                 const childItem = await tx.item.findUnique({
-                    where: { id: line.childId },
-                    include: { stocks: true }
+                    where: { id: line.childId }
                 });
                 if (!childItem || childItem.deletedAt) {
                     throw new Error(`Component (ID: ${line.childId}) no longer exists`);
                 }
-                if (Number(childItem.currentStock) < requiredQty) {
+
+                const stock = await tx.itemStock.findUnique({
+                    where: { itemId_warehouseId: { itemId: line.childId, warehouseId: fromWarehouseId } }
+                });
+                const available = Number(stock?.quantity || 0);
+
+                if (available < requiredQty) {
                     throw new Error(
-                        `Insufficient stock for "${childItem.sku}". Required: ${requiredQty}, Available: ${childItem.currentStock}`
+                        `Insufficient stock for "${childItem.sku}" in the selected source warehouse. Required: ${requiredQty}, Available: ${available}`
                     );
                 }
             }
@@ -223,29 +244,12 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             // 3. Deduct stock from components (all checks passed — safe to write)
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
-                const childItem = await tx.item.findUnique({
-                    where: { id: line.childId },
-                    include: { stocks: true }
-                });
-                if (!childItem) throw new Error(`Component ID ${line.childId} not found`);
 
-                // Deduct from warehouse stocks
-                let remaining = requiredQty;
-                for (const stock of childItem.stocks) {
-                    if (remaining <= 0) break;
-                    const available = Number(stock.quantity);
-                    if (available > 0) {
-                        const deduct = Math.min(available, remaining);
-                        await tx.itemStock.update({
-                            where: { id: stock.id },
-                            data: { quantity: { decrement: deduct } }
-                        });
-                        remaining -= deduct;
-                    }
-                }
-                if (remaining > 0.0001) {
-                    throw new Error(`Stock inconsistency for "${childItem.sku}". Please refresh and try again.`);
-                }
+                // Deduct from source warehouse strictly
+                await tx.itemStock.update({
+                    where: { itemId_warehouseId: { itemId: line.childId, warehouseId: fromWarehouseId } },
+                    data: { quantity: { decrement: requiredQty } }
+                });
 
                 // Deduct from total stock + bump version
                 await tx.item.update({
@@ -254,10 +258,9 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 });
             }
 
-            // 4. Add finished goods to KSW warehouse (default production output target)
-            const targetWarehouseId = 2;
+            // 4. Add finished goods to selected destination warehouse
             const existingStock = await tx.itemStock.findUnique({
-                where: { itemId_warehouseId: { itemId: parentId, warehouseId: targetWarehouseId } }
+                where: { itemId_warehouseId: { itemId: parentId, warehouseId: toWarehouseId } }
             });
             if (existingStock) {
                 await tx.itemStock.update({
@@ -266,7 +269,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 });
             } else {
                 await tx.itemStock.create({
-                    data: { itemId: parentId, warehouseId: targetWarehouseId, quantity }
+                    data: { itemId: parentId, warehouseId: toWarehouseId, quantity }
                 });
             }
 
@@ -287,7 +290,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
 
             // 6. Create production run record
             const run = await tx.productionRun.create({
-                data: { itemId: parentId, quantity, status: 'Completed' }
+                data: { itemId: parentId, quantity, status: 'Completed', fromWarehouseId, toWarehouseId }
             });
 
             // 7. Register serial numbers
@@ -324,7 +327,7 @@ export async function getProductionRuns() {
         const runs = await prisma.productionRun.findMany({
             orderBy: { createdAt: 'desc' },
             take: 50,
-            include: { item: true }
+            include: { item: true, fromWarehouse: true, toWarehouse: true }
         });
 
         return {
@@ -368,6 +371,10 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
             const diff = newQuantity - Number(run.quantity);
             if (diff === 0) return;
 
+            if (!run.fromWarehouseId || !run.toWarehouseId) {
+                throw new Error('Legacy production run cannot be altered because source/destination warehouses are missing.');
+            }
+
             const bom = await tx.bOM.findMany({
                 where: { parentId: run.itemId, deletedAt: null }
             });
@@ -379,31 +386,59 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                     const needed = Number(line.quantity) * diff;
                     const child = await tx.item.findUnique({ where: { id: line.childId } });
                     if (!child) throw new Error(`Component ID ${line.childId} missing`);
-                    if (Number(child.currentStock) < needed) {
-                        throw new Error(`Insufficient stock for "${child.sku}". Need ${needed}, available ${child.currentStock}`);
+
+                    const stock = await tx.itemStock.findUnique({
+                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.fromWarehouseId } }
+                    });
+                    const available = Number(stock?.quantity || 0);
+
+                    if (available < needed) {
+                        throw new Error(`Insufficient stock for "${child.sku}". Need ${needed}, available in source ${available}`);
                     }
                 }
-                // Now deduct
+
+                // Now deduct from source
                 for (const line of bom) {
                     const needed = Number(line.quantity) * diff;
+                    await tx.itemStock.update({
+                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.fromWarehouseId } },
+                        data: { quantity: { decrement: needed } }
+                    });
                     await tx.item.update({
                         where: { id: line.childId },
                         data: { currentStock: { decrement: needed }, version: { increment: 1 } }
                     });
                 }
+
+                // Add to destination
+                await tx.itemStock.upsert({
+                    where: { itemId_warehouseId: { itemId: run.itemId, warehouseId: run.toWarehouseId } },
+                    create: { itemId: run.itemId, warehouseId: run.toWarehouseId, quantity: diff },
+                    update: { quantity: { increment: diff } }
+                });
                 await tx.item.update({
                     where: { id: run.itemId },
                     data: { currentStock: { increment: diff }, version: { increment: 1 } }
                 });
             } else {
-                // Reducing — return components, remove product stock
+                // Reducing — return components to source, remove product from destination
                 const removeQty = Math.abs(diff);
+                await tx.itemStock.update({
+                    where: { itemId_warehouseId: { itemId: run.itemId, warehouseId: run.toWarehouseId } },
+                    data: { quantity: { decrement: removeQty } }
+                });
                 await tx.item.update({
                     where: { id: run.itemId },
                     data: { currentStock: { decrement: removeQty }, version: { increment: 1 } }
                 });
+
                 for (const line of bom) {
                     const returning = Number(line.quantity) * removeQty;
+                    await tx.itemStock.upsert({
+                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.fromWarehouseId } },
+                        create: { itemId: line.childId, warehouseId: run.fromWarehouseId, quantity: returning },
+                        update: { quantity: { increment: returning } }
+                    });
                     await tx.item.update({
                         where: { id: line.childId },
                         data: { currentStock: { increment: returning }, version: { increment: 1 } }

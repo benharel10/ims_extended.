@@ -22,6 +22,9 @@ model Warehouse {
   originShipments      Shipment[] @relation("Origin")
   destinationShipments Shipment[] @relation("Destination")
   
+  productionFrom       ProductionRun[] @relation("ProductionFrom")
+  productionTo         ProductionRun[] @relation("ProductionTo")
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -246,6 +249,11 @@ model ProductionRun {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  fromWarehouseId Int?
+  toWarehouseId   Int?
+  fromWarehouse   Warehouse? @relation("ProductionFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse     Warehouse? @relation("ProductionTo", fields: [toWarehouseId], references: [id])
   
   salesOrders SalesOrder[]
 }

@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react';
 import { PackageCheck, ScanLine, History, Settings, Play, Plus, Trash2, Save, Edit2 } from 'lucide-react';
-import { getAssemblyParents, getComponentOptions, getBOM, saveBOM, runProduction, getProductionRuns, updateProductionRun, deleteProductionRun, bulkDeleteProductionRuns } from './actions';
+import { getAssemblyParents, getComponentOptions, getBOM, saveBOM, runProduction, getProductionRuns, updateProductionRun, deleteProductionRun, bulkDeleteProductionRuns, getWarehouses } from './actions';
 import { createItem, deleteItem, updateItemCost } from '../inventory/actions';
 import { useSystem } from '@/components/SystemProvider';
 
@@ -14,6 +14,7 @@ export default function ProductionPage() {
     // Data Lists
     const [parents, setParents] = useState<any[]>([]);
     const [components, setComponents] = useState<any[]>([]);
+    const [warehouses, setWarehouses] = useState<any[]>([]);
     const [expandedRows, setExpandedRows] = useState<number[]>([]);
 
     const toggleRow = (id: number) => setExpandedRows(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
@@ -35,6 +36,9 @@ export default function ProductionPage() {
     const [runStatus, setRunStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [runMessage, setRunMessage] = useState('');
     const [productionRuns, setProductionRuns] = useState<any[]>([]);
+
+    const [runFromWarehouseId, setRunFromWarehouseId] = useState<string>('');
+    const [runToWarehouseId, setRunToWarehouseId] = useState<string>('');
 
     // --- Edit Run State ---
     const [editingRunId, setEditingRunId] = useState<number | null>(null);
@@ -185,14 +189,23 @@ export default function ProductionPage() {
     }, [bomLines, components]);
 
     async function loadData() {
-        const [pRes, cRes, runRes] = await Promise.all([
+        const [pRes, cRes, runRes, whRes] = await Promise.all([
             getAssemblyParents(),
             getComponentOptions(),
-            getProductionRuns()
+            getProductionRuns(),
+            getWarehouses()
         ]);
         if (pRes.success) setParents(pRes.data || []);
         if (cRes.success) setComponents(cRes.data || []);
         if (runRes.success) setProductionRuns(runRes.data || []);
+        if (whRes.success) {
+            setWarehouses(whRes.data || []);
+            if (whRes.data && whRes.data.length > 0) {
+                // Pre-select defaults if we have them
+                setRunFromWarehouseId(String(whRes.data[0].id));
+                setRunToWarehouseId(String(whRes.data[0].id));
+            }
+        }
     }
 
     async function loadParentBOM(id: number) {
@@ -276,10 +289,15 @@ export default function ProductionPage() {
                 return;
             }
 
+            if (!runFromWarehouseId || !runToWarehouseId) {
+                showAlert('Please select both a Source and Destination warehouse.', 'warning');
+                return;
+            }
+
             setRunStatus('idle');
             setRunMessage('');
 
-            const res = await runProduction(parseInt(runParentId), runQuantity, snList);
+            const res = await runProduction(parseInt(runParentId), runQuantity, snList, parseInt(runFromWarehouseId), parseInt(runToWarehouseId));
 
             if (res.success) {
                 setRunStatus('success');
@@ -636,6 +654,37 @@ export default function ProductionPage() {
                                     </div>
                                 </div>
 
+                                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Source Warehouse (Components)</label>
+                                        <select
+                                            className="input-group"
+                                            style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                            value={runFromWarehouseId}
+                                            onChange={(e) => setRunFromWarehouseId(e.target.value)}
+                                        >
+                                            <option value="">-- Select Source --</option>
+                                            {warehouses.map(w => (
+                                                <option key={w.id} value={w.id}>{w.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Destination Warehouse (Finished Product)</label>
+                                        <select
+                                            className="input-group"
+                                            style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                            value={runToWarehouseId}
+                                            onChange={(e) => setRunToWarehouseId(e.target.value)}
+                                        >
+                                            <option value="">-- Select Destination --</option>
+                                            {warehouses.map(w => (
+                                                <option key={w.id} value={w.id}>{w.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ display: 'block', marginBottom: '0.5rem' }}>Quantity to Produce</label>
                                     <input
@@ -771,6 +820,9 @@ export default function ProductionPage() {
                                                                     Deleted Product (Item #{run.itemId})
                                                                 </span>
                                                             )}
+                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                                                {run.fromWarehouse?.name} ➝ {run.toWarehouse?.name}
+                                                            </div>
                                                         </td>
                                                         <td style={{ padding: '0.75rem' }}>
                                                             {editingRunId === run.id ? (
