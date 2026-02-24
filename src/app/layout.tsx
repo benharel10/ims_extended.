@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
 import { AppHeader } from "@/components/AppHeader";
+import { Sidebar } from "@/components/Sidebar";
 
 import { SystemProvider } from "@/components/SystemProvider";
 import { getSession } from "@/lib/auth";
@@ -24,11 +25,18 @@ export default async function RootLayout({
       <body>
         <SystemProvider user={user}>
           <div className="layout-container">
-            <AppHeader />
+            <div className="desktop-only-view">
+              <Sidebar />
+            </div>
+            <div className="mobile-only-view">
+              <AppHeader />
+            </div>
             <main className="main-content">
               {children}
             </main>
-            <BottomNav />
+            <div className="mobile-only-view">
+              <BottomNav />
+            </div>
           </div>
         </SystemProvider>
       </body>
