@@ -231,6 +231,25 @@ export async function removePOLine(lineId: number) {
     }
 }
 
+export async function deletePurchaseOrder(id: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user || session.user.role !== 'Admin') {
+            return { success: false, error: 'Unauthorized: Admin access required to delete POs' };
+        }
+
+        await prisma.purchaseOrder.delete({
+            where: { id }
+        });
+
+        revalidatePath('/purchasing');
+        return { success: true };
+    } catch (error) {
+        await logError('purchasing.deletePurchaseOrder', error);
+        return { success: false, error: 'Failed to delete Purchase Order. It may have associated records.' };
+    }
+}
+
 // ─── Status Update ────────────────────────────────────────────────────────────
 
 export async function updatePOStatus(id: number, status: string) {

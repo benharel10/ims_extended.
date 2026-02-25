@@ -1,16 +1,17 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO } from './actions';
+import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO, deletePurchaseOrder } from './actions';
 
 import { useSystem } from '@/components/SystemProvider';
 import { useRouter } from 'next/navigation';
 
 export default function PurchasingPage() {
     const router = useRouter();
-    const { showAlert, showConfirm } = useSystem();
+    const { showAlert, showConfirm, user } = useSystem();
+    const isAdmin = user?.role === 'Admin';
     const [items, setItems] = useState<any[]>([]);
     const [pos, setPos] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -219,10 +220,33 @@ export default function PurchasingPage() {
                                             })()}
                                         </td>
                                         <td style={{ padding: '1rem' }}>
-                                            <Link href={`/purchasing/${po.id}`} className="btn btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-                                                <ExternalLink size={14} style={{ marginRight: '0.5rem' }} />
-                                                View Details
-                                            </Link>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <Link href={`/purchasing/${po.id}`} className="btn btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                                                    <ExternalLink size={14} style={{ marginRight: '0.5rem' }} />
+                                                    View Details
+                                                </Link>
+                                                {isAdmin && (
+                                                    <button
+                                                        className="btn btn-outline"
+                                                        style={{ padding: '0.5rem', borderColor: '#ef4444', color: '#ef4444' }}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            showConfirm(`Are you sure you want to delete PO ${po.poNumber}? This action cannot be undone.`, async () => {
+                                                                const res = await deletePurchaseOrder(po.id);
+                                                                if (res.success) {
+                                                                    showAlert('Purchase Order deleted successfully', 'success');
+                                                                    loadData();
+                                                                } else {
+                                                                    showAlert(res.error || 'Failed to delete PO', 'error');
+                                                                }
+                                                            });
+                                                        }}
+                                                        title="Delete Purchase Order"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
