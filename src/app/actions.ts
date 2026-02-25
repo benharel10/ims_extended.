@@ -27,6 +27,7 @@ export async function getDashboardStats() {
         //     where: { email }
         // });
         const allItems = await prisma.item.findMany({
+            where: { deletedAt: null },
             select: {
                 cost: true,
                 currentStock: true,
@@ -47,6 +48,7 @@ export async function getDashboardStats() {
         // Count items where currentStock < minStock
         const lowStockCount = await prisma.item.count({
             where: {
+                deletedAt: null,
                 currentStock: {
                     lt: prisma.item.fields.minStock
                 }
@@ -63,7 +65,7 @@ export async function getDashboardStats() {
         });
 
         // 4. Total Items
-        const totalItems = await prisma.item.count();
+        const totalItems = await prisma.item.count({ where: { deletedAt: null } });
 
         // 5. Recent Shipments (last 7 days)
         const sevenDaysAgo = new Date();
@@ -137,6 +139,7 @@ export async function getRecentActivity(): Promise<ActivityItem[]> {
                 orderBy: { updatedAt: 'desc' }
             }),
             prisma.item.findMany({
+                where: { deletedAt: null },
                 take: 5,
                 orderBy: { createdAt: 'desc' }
             })
