@@ -909,7 +909,13 @@ export default function InventoryPage() {
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '1rem' }} data-label="Warehouse">
-                                                        <div style={{ fontWeight: 500 }}>{item.warehouse || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Unassigned</span>}</div>
+                                                        <div style={{ fontWeight: 500 }}>
+                                                            {item.warehouse ||
+                                                                (item.stocks && item.stocks.length > 0 && warehouses.length > 0
+                                                                    ? Array.from(new Set(item.stocks.map((s: any) => warehouses.find((w: any) => w.id === s.warehouseId)?.name).filter(Boolean))).join(', ')
+                                                                    : <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Unassigned</span>
+                                                                )}
+                                                        </div>
                                                         {item.stocks && item.stocks.length > 0 && (
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); setViewStockItem(item); }}
