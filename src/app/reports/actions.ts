@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 export async function getInventoryValuation() {
     try {
         const items = await prisma.item.findMany({
-            where: { currentStock: { gt: 0 } },
+            where: { currentStock: { gt: 0 }, deletedAt: null },
             orderBy: { currentStock: 'desc' } // Or value
         });
 
@@ -139,7 +139,8 @@ export async function getLowStockReport() {
             where: {
                 currentStock: {
                     lt: prisma.item.fields.minStock
-                }
+                },
+                deletedAt: null
             },
             orderBy: { currentStock: 'asc' }
         });
@@ -173,6 +174,7 @@ export async function getWarehouseComparison() {
         const warehouses = await prisma.warehouse.findMany({
             include: {
                 stocks: {
+                    where: { item: { deletedAt: null } },
                     include: { item: true }
                 }
             }
@@ -210,7 +212,7 @@ export async function getWarehouseComparison() {
 export async function getReportSummary() {
     try {
         const [items, pos, sales, production, warehouses] = await Promise.all([
-            prisma.item.findMany({ select: { currentStock: true, cost: true, minStock: true } }),
+            prisma.item.findMany({ where: { deletedAt: null }, select: { currentStock: true, cost: true, minStock: true } }),
             prisma.purchaseOrder.count({ where: { status: { not: 'Completed' } } }),
             prisma.salesOrder.findMany({ include: { lines: true } }),
             prisma.productionRun.findMany({ select: { quantity: true, item: { select: { cost: true } } } }),
