@@ -37,7 +37,6 @@ export default function ProductionPage() {
     const [runMessage, setRunMessage] = useState('');
     const [productionRuns, setProductionRuns] = useState<any[]>([]);
 
-    const [runFromWarehouseId, setRunFromWarehouseId] = useState<string>('');
     const [runToWarehouseId, setRunToWarehouseId] = useState<string>('');
 
     // --- Edit Run State ---
@@ -202,7 +201,6 @@ export default function ProductionPage() {
             setWarehouses(whRes.data || []);
             if (whRes.data && whRes.data.length > 0) {
                 // Pre-select defaults if we have them
-                setRunFromWarehouseId(String(whRes.data[0].id));
                 setRunToWarehouseId(String(whRes.data[0].id));
             }
         }
@@ -289,15 +287,15 @@ export default function ProductionPage() {
                 return;
             }
 
-            if (!runFromWarehouseId || !runToWarehouseId) {
-                showAlert('Please select both a Source and Destination warehouse.', 'warning');
+            if (!runToWarehouseId) {
+                showAlert('Please select a Destination warehouse.', 'warning');
                 return;
             }
 
             setRunStatus('idle');
             setRunMessage('');
 
-            const res = await runProduction(parseInt(runParentId), runQuantity, snList, parseInt(runFromWarehouseId), parseInt(runToWarehouseId));
+            const res = await runProduction(parseInt(runParentId), runQuantity, snList, parseInt(runToWarehouseId));
 
             if (res.success) {
                 setRunStatus('success');
@@ -654,35 +652,19 @@ export default function ProductionPage() {
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Source Warehouse (Components)</label>
-                                        <select
-                                            className="input-group"
-                                            style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
-                                            value={runFromWarehouseId}
-                                            onChange={(e) => setRunFromWarehouseId(e.target.value)}
-                                        >
-                                            <option value="">-- Select Source --</option>
-                                            {warehouses.map(w => (
-                                                <option key={w.id} value={w.id}>{w.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Destination Warehouse (Finished Product)</label>
-                                        <select
-                                            className="input-group"
-                                            style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
-                                            value={runToWarehouseId}
-                                            onChange={(e) => setRunToWarehouseId(e.target.value)}
-                                        >
-                                            <option value="">-- Select Destination --</option>
-                                            {warehouses.map(w => (
-                                                <option key={w.id} value={w.id}>{w.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem' }}>Destination Warehouse (Finished Product)</label>
+                                    <select
+                                        className="input-group"
+                                        style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                        value={runToWarehouseId}
+                                        onChange={(e) => setRunToWarehouseId(e.target.value)}
+                                    >
+                                        <option value="">-- Select Destination --</option>
+                                        {warehouses.map(w => (
+                                            <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <div style={{ marginBottom: '1.5rem' }}>
@@ -821,7 +803,7 @@ export default function ProductionPage() {
                                                                 </span>
                                                             )}
                                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                                                                {run.fromWarehouse?.name} ➝ {run.toWarehouse?.name}
+                                                                Produced to {run.toWarehouse?.name || 'Unassigned'}
                                                             </div>
                                                         </td>
                                                         <td style={{ padding: '0.75rem' }}>

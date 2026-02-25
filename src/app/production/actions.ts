@@ -198,7 +198,7 @@ async function wouldCreateCycle(parentId: number, childId: number): Promise<bool
 
 // ─── Run Production ──────────────────────────────────────────────────────────
 
-export async function runProduction(parentId: number, quantity: number, serialNumbers: string[] = [], fromWarehouseId?: number, toWarehouseId?: number) {
+export async function runProduction(parentId: number, quantity: number, serialNumbers: string[] = [], toWarehouseId?: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
@@ -206,8 +206,8 @@ export async function runProduction(parentId: number, quantity: number, serialNu
         if (!Number.isFinite(quantity) || quantity <= 0) {
             return { success: false, error: 'Quantity must be a positive number' };
         }
-        if (!fromWarehouseId || !toWarehouseId) {
-            return { success: false, error: 'Source and Destination warehouses are required.' };
+        if (!toWarehouseId) {
+            return { success: false, error: 'Destination warehouse is required.' };
         }
 
         await prisma.$transaction(async (tx) => {
@@ -223,20 +223,19 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
                 const childItem = await tx.item.findUnique({
-                    where: { id: line.childId }
+                    where: { id: line.childId },
+                    include: { stocks: true }
                 });
                 if (!childItem || childItem.deletedAt) {
                     throw new Error(`Component (ID: ${line.childId}) no longer exists`);
                 }
 
-                const stock = await tx.itemStock.findUnique({
-                    where: { itemId_warehouseId: { itemId: line.childId, warehouseId: fromWarehouseId } }
-                });
-                const available = Number(stock?.quantity || 0);
+                // Calculate total available across all warehouses
+                const available = childItem.stocks.reduce((acc, s) => acc + Number(s.quantity), 0);
 
                 if (available < requiredQty) {
                     throw new Error(
-                        `Insufficient stock for "${childItem.sku}" in the selected source warehouse. Required: ${requiredQty}, Available: ${available}`
+                        `Insufficient stock for "${childItem.sku}". Required: ${requiredQty}, Available: ${available}`
                     );
                 }
             }
@@ -245,11 +244,30 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
 
-                // Deduct from source warehouse strictly
-                await tx.itemStock.update({
-                    where: { itemId_warehouseId: { itemId: line.childId, warehouseId: fromWarehouseId } },
-                    data: { quantity: { decrement: requiredQty } }
+                const childItem = await tx.item.findUnique({
+                    where: { id: line.childId },
+                    include: { stocks: true }
                 });
+                if (!childItem) throw new Error(`Component ID ${line.childId} not found`);
+
+                // Deduct from warehouse stocks (auto-deduct from wherever available)
+                let remaining = requiredQty;
+                for (const stock of childItem.stocks) {
+                    if (remaining <= 0) break;
+                    const available = Number(stock.quantity);
+                    if (available > 0) {
+                        const deduct = Math.min(available, remaining);
+                        await tx.itemStock.update({
+                            where: { id: stock.id },
+                            data: { quantity: { decrement: deduct } }
+                        });
+                        remaining -= deduct;
+                    }
+                }
+
+                if (remaining > 0.0001) {
+                    throw new Error(`Stock inconsistency for "${childItem.sku}". Please refresh and try again.`);
+                }
 
                 // Deduct from total stock + bump version
                 await tx.item.update({
@@ -288,9 +306,9 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 }
             }
 
-            // 6. Create production run record
+            // 6. Create production run record (legacy fromWarehouseId will be null)
             const run = await tx.productionRun.create({
-                data: { itemId: parentId, quantity, status: 'Completed', fromWarehouseId, toWarehouseId }
+                data: { itemId: parentId, quantity, status: 'Completed', toWarehouseId }
             });
 
             // 7. Register serial numbers
@@ -327,7 +345,7 @@ export async function getProductionRuns() {
         const runs = await prisma.productionRun.findMany({
             orderBy: { createdAt: 'desc' },
             take: 50,
-            include: { item: true, fromWarehouse: true, toWarehouse: true }
+            include: { item: true, toWarehouse: true }
         });
 
         return {
@@ -371,8 +389,8 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
             const diff = newQuantity - Number(run.quantity);
             if (diff === 0) return;
 
-            if (!run.fromWarehouseId || !run.toWarehouseId) {
-                throw new Error('Legacy production run cannot be altered because source/destination warehouses are missing.');
+            if (!run.toWarehouseId) {
+                throw new Error('Legacy production run cannot be altered because destination warehouse is missing.');
             }
 
             const bom = await tx.bOM.findMany({
@@ -384,26 +402,40 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                 // Producing more — pre-flight check first
                 for (const line of bom) {
                     const needed = Number(line.quantity) * diff;
-                    const child = await tx.item.findUnique({ where: { id: line.childId } });
+                    const child = await tx.item.findUnique({
+                        where: { id: line.childId },
+                        include: { stocks: true }
+                    });
                     if (!child) throw new Error(`Component ID ${line.childId} missing`);
 
-                    const stock = await tx.itemStock.findUnique({
-                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.fromWarehouseId } }
-                    });
-                    const available = Number(stock?.quantity || 0);
-
+                    const available = child.stocks.reduce((acc, s) => acc + Number(s.quantity), 0);
                     if (available < needed) {
-                        throw new Error(`Insufficient stock for "${child.sku}". Need ${needed}, available in source ${available}`);
+                        throw new Error(`Insufficient stock for "${child.sku}". Need ${needed}, available in total ${available}`);
                     }
                 }
 
-                // Now deduct from source
+                // Now deduct from stock auto
                 for (const line of bom) {
                     const needed = Number(line.quantity) * diff;
-                    await tx.itemStock.update({
-                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.fromWarehouseId } },
-                        data: { quantity: { decrement: needed } }
+                    const child = await tx.item.findUnique({
+                        where: { id: line.childId },
+                        include: { stocks: true }
                     });
+                    if (child) {
+                        let remaining = needed;
+                        for (const stock of child.stocks) {
+                            if (remaining <= 0) break;
+                            const available = Number(stock.quantity);
+                            if (available > 0) {
+                                const deduct = Math.min(available, remaining);
+                                await tx.itemStock.update({
+                                    where: { id: stock.id },
+                                    data: { quantity: { decrement: deduct } }
+                                });
+                                remaining -= deduct;
+                            }
+                        }
+                    }
                     await tx.item.update({
                         where: { id: line.childId },
                         data: { currentStock: { decrement: needed }, version: { increment: 1 } }
@@ -421,7 +453,8 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                     data: { currentStock: { increment: diff }, version: { increment: 1 } }
                 });
             } else {
-                // Reducing — return components to source, remove product from destination
+                // Reducing — return components to their first available warehouse, or general.
+                // It is hard to know exactly which warehouse to return to. We will put it in the default/first one, or toWarehouse
                 const removeQty = Math.abs(diff);
                 await tx.itemStock.update({
                     where: { itemId_warehouseId: { itemId: run.itemId, warehouseId: run.toWarehouseId } },
@@ -434,11 +467,23 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
 
                 for (const line of bom) {
                     const returning = Number(line.quantity) * removeQty;
-                    await tx.itemStock.upsert({
-                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.fromWarehouseId } },
-                        create: { itemId: line.childId, warehouseId: run.fromWarehouseId, quantity: returning },
-                        update: { quantity: { increment: returning } }
+                    // Try to find ANY existing stock to return to
+                    let stock = await tx.itemStock.findFirst({
+                        where: { itemId: line.childId }
                     });
+
+                    if (stock) {
+                        await tx.itemStock.update({
+                            where: { id: stock.id },
+                            data: { quantity: { increment: returning } }
+                        });
+                    } else {
+                        // Just use the toWarehouseId as fallback if no existing stock locations
+                        await tx.itemStock.create({
+                            data: { itemId: line.childId, warehouseId: run.toWarehouseId, quantity: returning }
+                        });
+                    }
+
                     await tx.item.update({
                         where: { id: line.childId },
                         data: { currentStock: { increment: returning }, version: { increment: 1 } }
