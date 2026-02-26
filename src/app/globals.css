@@ -515,9 +515,16 @@ p {
   .no-print,
   .app-header,
   .bottom-nav,
+  .sidebar,
   header,
   .hide-print {
     display: none !important;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
   }
 
   .layout-container {
