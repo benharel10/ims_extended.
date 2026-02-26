@@ -3,28 +3,38 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
-const SECRET_KEY = process.env.JWT_SECRET || 'fallback-dev-key-do-not-use-in-prod';
-
-if (process.env.NODE_ENV === 'production' && SECRET_KEY === 'fallback-dev-key-do-not-use-in-prod') {
-    throw new Error('JWT_SECRET environment variable is required in production. Using the fallback dev key is insecure.');
+/**
+ * Lazily resolve the JWT signing key.
+ * By doing this inside a function (not at module scope) we avoid crashing
+ * Next.js static page generation during build, while still throwing at
+ * request-time in production if JWT_SECRET is missing.
+ */
+function getKey(): Uint8Array {
+    const secret = process.env.JWT_SECRET || 'fallback-dev-key-do-not-use-in-prod';
+    if (process.env.NODE_ENV === 'production' && secret === 'fallback-dev-key-do-not-use-in-prod') {
+        throw new Error(
+            'JWT_SECRET environment variable is required in production. ' +
+            'Add it to your Vercel project settings under Environment Variables.'
+        );
+    }
+    return new TextEncoder().encode(secret);
 }
-
-const key = new TextEncoder().encode(SECRET_KEY);
 
 export async function encrypt(payload: any) {
     return await new SignJWT(payload)
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime('24h')
-        .sign(key);
+        .sign(getKey());
 }
 
 export async function decrypt(input: string): Promise<any> {
-    const { payload } = await jwtVerify(input, key, {
+    const { payload } = await jwtVerify(input, getKey(), {
         algorithms: ['HS256'],
     });
     return payload;
 }
+
 
 export async function getSession() {
     const cookieStore = await cookies();
