@@ -52,20 +52,23 @@ export default function InventoryPage() {
     const itemInputRef = useRef<HTMLInputElement>(null);
 
     // Item Form State
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<{
+        sku: string; name: string; type: string; cost: number; price: number;
+        minStock: number; revision: string; warehouse: string; brand: string;
+        isSerialized: boolean; description: string; icountId: number | undefined;
+    }>({
         sku: '',
         name: '',
-        type: 'Raw', // Raw, Assembly, Product
+        type: 'Raw',
         cost: 0,
         price: 0,
         minStock: 0,
         revision: '',
         warehouse: '',
-
         brand: '',
         isSerialized: false,
         description: '',
-        icountId: 0
+        icountId: undefined
     });
 
     useEffect(() => {
@@ -177,7 +180,7 @@ export default function InventoryPage() {
     function openCreateModal() {
         setIsEditing(false);
         setEditId(null);
-        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: 0 });
+        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: undefined });
         setShowModal(true);
     }
 
@@ -196,13 +199,13 @@ export default function InventoryPage() {
             brand: item.brand || '',
             isSerialized: item.isSerialized || false,
             description: item.description || '',
-            icountId: item.icountId || 0
+            icountId: item.icountId || undefined
         });
         setShowModal(true);
     }
 
     function resetForm() {
-        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: 0 });
+        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: undefined });
         setIsEditing(false);
         setEditId(null);
     }
@@ -1243,7 +1246,7 @@ export default function InventoryPage() {
                                         <input
                                             type="number"
                                             value={formData.icountId || ''}
-                                            onChange={e => setFormData({ ...formData, icountId: parseInt(e.target.value) || 0 })}
+                                            onChange={e => setFormData({ ...formData, icountId: parseInt(e.target.value) || undefined })}
                                             className="input-group"
                                             placeholder="External ID"
                                             style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
