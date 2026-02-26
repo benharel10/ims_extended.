@@ -22,6 +22,7 @@ export default function ProductionPage() {
     // --- Define Assembly State ---
     const [selectedParentId, setSelectedParentId] = useState<string>('');
     const [bomLines, setBomLines] = useState<{ childId: string, quantity: number }[]>([]);
+    const [bomSearch, setBomSearch] = useState<string[]>([]); // Per-row search filter
     const [isLoadingBOM, setIsLoadingBOM] = useState(false);
 
     // Cost & Price State
@@ -224,6 +225,7 @@ export default function ProductionPage() {
 
     const addBomLine = () => {
         setBomLines([...bomLines, { childId: '', quantity: 1 }]);
+        setBomSearch([...bomSearch, '']);
     };
 
     const updateBomLine = (index: number, field: 'childId' | 'quantity', value: any) => {
@@ -234,6 +236,7 @@ export default function ProductionPage() {
 
     const removeBomLine = (index: number) => {
         setBomLines(bomLines.filter((_, i) => i !== index));
+        setBomSearch(bomSearch.filter((_, i) => i !== index));
     };
 
     async function handleSaveBOM() {
@@ -458,23 +461,38 @@ export default function ProductionPage() {
                                                     {bomLines.map((line, index) => {
                                                         const comp = components.find(c => String(c.id) === line.childId);
                                                         const lineCost = comp ? (comp.cost * line.quantity).toFixed(2) : '0.00';
+                                                        const search = (bomSearch[index] || '').toLowerCase();
+                                                        const filteredComponents = components
+                                                            .filter(c => c.id !== parseInt(selectedParentId))
+                                                            .filter(c => !search || c.sku.toLowerCase().includes(search) || c.name.toLowerCase().includes(search));
 
                                                         return (
                                                             <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) 100px 100px 120px 40px', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                                                <select
-                                                                    style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
-                                                                    value={line.childId}
-                                                                    onChange={(e) => updateBomLine(index, 'childId', e.target.value)}
-                                                                >
-                                                                    <option value="">-- Select --</option>
-                                                                    {components
-                                                                        .filter(c => c.id !== parseInt(selectedParentId)) // Prevent self-reference
-                                                                        .map(c => (
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Search SKU or name..."
+                                                                        value={bomSearch[index] || ''}
+                                                                        onChange={e => {
+                                                                            const next = [...bomSearch];
+                                                                            next[index] = e.target.value;
+                                                                            setBomSearch(next);
+                                                                        }}
+                                                                        style={{ padding: '0.35rem 0.5rem', background: 'var(--bg-card)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', fontSize: '0.8rem' }}
+                                                                    />
+                                                                    <select
+                                                                        style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
+                                                                        value={line.childId}
+                                                                        onChange={(e) => updateBomLine(index, 'childId', e.target.value)}
+                                                                    >
+                                                                        <option value="">-- Select --</option>
+                                                                        {filteredComponents.map(c => (
                                                                             <option key={c.id} value={String(c.id)}>
                                                                                 {c.sku} - {c.name} (Stk: {c.currentStock})
                                                                             </option>
                                                                         ))}
-                                                                </select>
+                                                                    </select>
+                                                                </div>
 
                                                                 <input
                                                                     type="number"
