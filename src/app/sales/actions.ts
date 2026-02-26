@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 import { logError } from '@/lib/errorLogger';
 import { createInvoiceInICount } from '@/lib/icount';
+import { CreateSalesOrderSchema, AddSalesLineSchema, UpdateSalesStatusSchema, parseSchema } from '@/lib/schemas';
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
@@ -89,23 +90,23 @@ export async function createSalesOrder(data: {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        if (!data.customer?.trim()) return { success: false, error: 'Customer name is required' };
-        if (!data.soNumber?.trim()) return { success: false, error: 'SO number is required' };
+        const p = parseSchema(CreateSalesOrderSchema, data);
+        if (!p.success) return { success: false, error: p.error };
 
         // Atomic: create order and auto-line together
         const order = await prisma.$transaction(async (tx) => {
             const created = await tx.salesOrder.create({
                 data: {
-                    customer: data.customer.trim(),
-                    soNumber: data.soNumber.trim(),
+                    customer: p.data.customer,
+                    soNumber: p.data.soNumber,
                     status: 'Draft',
-                    productionRunId: data.productionRunId ?? null
+                    productionRunId: p.data.productionRunId ?? null
                 }
             });
 
-            if (data.productionRunId) {
+            if (p.data.productionRunId) {
                 const run = await tx.productionRun.findUnique({
-                    where: { id: data.productionRunId },
+                    where: { id: p.data.productionRunId },
                     include: { item: true }
                 });
                 if (run) {
@@ -140,8 +141,8 @@ export async function addSalesLine(soId: number, itemId: number, quantity: numbe
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
-        if (unitPrice < 0) return { success: false, error: 'Unit price cannot be negative' };
+        const p = parseSchema(AddSalesLineSchema, { soId, itemId, quantity, unitPrice });
+        if (!p.success) return { success: false, error: p.error };
 
         const so = await prisma.salesOrder.findUnique({ where: { id: soId }, select: { status: true } });
         if (so?.status !== 'Draft') {
@@ -189,9 +190,8 @@ export async function updateSalesOrderStatus(id: number, status: string) {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        if (!VALID_STATUSES.includes(status)) {
-            return { success: false, error: 'Invalid status value' };
-        }
+        const p = parseSchema(UpdateSalesStatusSchema, { id, status });
+        if (!p.success) return { success: false, error: p.error };
 
         const order = await prisma.$transaction(async (tx) => {
             const currentOrder = await tx.salesOrder.findUnique({

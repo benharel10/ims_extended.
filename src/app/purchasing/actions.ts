@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 import { logError } from '@/lib/errorLogger';
+import { CreatePOSchema, AddPOLineSchema, UpdatePOStatusSchema, parseSchema } from '@/lib/schemas';
 
 /** Active (non-soft-deleted) items only */
 const ACTIVE = { deletedAt: null };
@@ -148,15 +149,17 @@ export async function createEmptyPO(supplier: string, leadTimeDays?: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
-        if (!supplier?.trim()) return { success: false, error: 'Supplier name is required' };
+
+        const p = parseSchema(CreatePOSchema, { supplier, leadTimeDays });
+        if (!p.success) return { success: false, error: p.error };
 
         const poNumber = `PO-${Date.now()}`;
         const po = await prisma.purchaseOrder.create({
             data: {
                 poNumber,
-                supplier: supplier.trim(),
+                supplier: p.data.supplier,
                 status: 'Draft',
-                leadTimeDays: leadTimeDays ?? null
+                leadTimeDays: p.data.leadTimeDays ?? null
             }
         });
         revalidatePath('/purchasing');
@@ -181,9 +184,8 @@ export async function addPOLine(
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        if (!itemId && !newItemName) return { success: false, error: 'Item ID or new item name is required' };
-        if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
-        if (cost < 0) return { success: false, error: 'Unit cost cannot be negative' };
+        const p = parseSchema(AddPOLineSchema, { poId, quantity, cost, itemId, newItemName, newItemSku });
+        if (!p.success) return { success: false, error: p.error };
 
         const po = await prisma.purchaseOrder.findUnique({ where: { id: poId }, select: { status: true } });
         if (po?.status !== 'Draft') {
@@ -271,9 +273,9 @@ export async function updatePOStatus(id: number, status: string) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
-        if (!['Draft', 'Sent', 'Partial', 'Completed', 'Cancelled'].includes(status)) {
-            return { success: false, error: 'Invalid status value' };
-        }
+
+        const p = parseSchema(UpdatePOStatusSchema, { id, status });
+        if (!p.success) return { success: false, error: p.error };
 
         await prisma.purchaseOrder.update({ where: { id }, data: { status } });
         revalidatePath(`/purchasing/${id}`);

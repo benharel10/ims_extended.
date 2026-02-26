@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/errorLogger';
+import { RunProductionSchema, SaveBOMSchema, parseSchema } from '@/lib/schemas';
 
 /** Filter active (non-soft-deleted) rows */
 const ACTIVE_BOM = { deletedAt: null };
@@ -94,14 +95,12 @@ export async function saveBOM(
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // ── Server-side validation ──
-        for (const c of components) {
-            if (c.quantity <= 0) return { success: false, error: 'All component quantities must be positive' };
-            if (c.childId === parentId) return { success: false, error: 'An item cannot contain itself as a component' };
-        }
+        // ── Zod validation ──
+        const p = parseSchema(SaveBOMSchema, { parentId, components, itemUpdates });
+        if (!p.success) return { success: false, error: p.error };
 
         // ── Circular BOM check ──
-        for (const c of components) {
+        for (const c of p.data.components) {
             const hasCycle = await wouldCreateCycle(parentId, c.childId);
             if (hasCycle) {
                 const child = await prisma.item.findUnique({ where: { id: c.childId }, select: { sku: true } });
@@ -114,7 +113,7 @@ export async function saveBOM(
 
         // Aggregate duplicate childIds
         const condensed = new Map<number, number>();
-        for (const c of components) {
+        for (const c of p.data.components) {
             condensed.set(c.childId, (condensed.get(c.childId) ?? 0) + c.quantity);
         }
         const finalComponents = Array.from(condensed.entries()).map(([childId, quantity]) => ({ childId, quantity }));
@@ -206,12 +205,8 @@ export async function runProduction(parentId: number, quantity: number, serialNu
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        if (!Number.isFinite(quantity) || quantity <= 0) {
-            return { success: false, error: 'Quantity must be a positive number' };
-        }
-        if (!toWarehouseId) {
-            return { success: false, error: 'Destination warehouse is required.' };
-        }
+        const p = parseSchema(RunProductionSchema, { parentId, quantity, serialNumbers, toWarehouseId });
+        if (!p.success) return { success: false, error: p.error };
 
         await prisma.$transaction(async (tx) => {
             // 1. Load and validate BOM (only active lines)
@@ -284,7 +279,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
 
             // 4. Add finished goods to selected destination warehouse
             const existingStock = await tx.itemStock.findUnique({
-                where: { itemId_warehouseId: { itemId: parentId, warehouseId: toWarehouseId } }
+                where: { itemId_warehouseId: { itemId: parentId, warehouseId: toWarehouseId! } }
             });
             if (existingStock) {
                 await tx.itemStock.update({
@@ -293,7 +288,7 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 });
             } else {
                 await tx.itemStock.create({
-                    data: { itemId: parentId, warehouseId: toWarehouseId, quantity }
+                    data: { itemId: parentId, warehouseId: toWarehouseId!, quantity }
                 });
             }
 

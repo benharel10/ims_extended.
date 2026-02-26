@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/errorLogger';
+import { CreateItemSchema, UpdateItemSchema, UpdateStockSchema, parseSchema } from '@/lib/schemas';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -129,15 +130,11 @@ export async function createItem(data: {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // ── Server-side validation ──
-        const skuError = validateSku(data.sku);
-        if (skuError) return { success: false, error: skuError };
-        if (!data.name?.trim()) return { success: false, error: 'Item name is required' };
-        if (data.cost < 0) return { success: false, error: 'Cost cannot be negative' };
-        if (data.price < 0) return { success: false, error: 'Price cannot be negative' };
-        if (data.minStock < 0) return { success: false, error: 'Min stock cannot be negative' };
+        // ── Server-side validation (via Zod) ──
+        const p = parseSchema(CreateItemSchema, data);
+        if (!p.success) return { success: false, error: p.error };
 
-        const sku = data.sku.trim().replace(/[<>]/g, '');
+        const sku = p.data.sku;
 
         // Check for existing active OR soft-deleted item with same SKU
         const existing = await prisma.item.findUnique({ where: { sku } });
@@ -151,18 +148,18 @@ export async function createItem(data: {
         const item = await prisma.item.create({
             data: {
                 sku,
-                name: data.name.trim(),
-                type: data.type,
-                cost: data.cost,
-                price: data.price,
-                minStock: data.minStock,
+                name: p.data.name,
+                type: p.data.type,
+                cost: p.data.cost,
+                price: p.data.price,
+                minStock: p.data.minStock,
                 currentStock: 0,
-                revision: data.revision || '',
-                warehouse: data.warehouse || '',
-                brand: data.brand || '',
-                isSerialized: data.isSerialized || false,
-                description: data.description || '',
-                icountId: data.icountId || null,
+                revision: p.data.revision || '',
+                warehouse: p.data.warehouse || '',
+                brand: p.data.brand || '',
+                isSerialized: p.data.isSerialized || false,
+                description: p.data.description || '',
+                icountId: p.data.icountId || null,
                 version: 0,
             }
         });
@@ -196,21 +193,17 @@ export async function updateItem(id: number, data: {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // ── Server-side validation ──
-        const skuError = validateSku(data.sku);
-        if (skuError) return { success: false, error: skuError };
-        if (!data.name?.trim()) return { success: false, error: 'Item name is required' };
-        if (data.cost < 0) return { success: false, error: 'Cost cannot be negative' };
-        if (data.price < 0) return { success: false, error: 'Price cannot be negative' };
-        if (data.minStock < 0) return { success: false, error: 'Min stock cannot be negative' };
+        // ── Server-side validation (via Zod) ──
+        const p = parseSchema(UpdateItemSchema, data);
+        if (!p.success) return { success: false, error: p.error };
 
-        const sku = data.sku.trim().replace(/[<>]/g, '');
+        const sku = p.data.sku;
 
         // Check for SKU conflict with another item
-        const existing = await prisma.item.findFirst({
+        const checkExisting = await prisma.item.findFirst({
             where: { sku, id: { not: id }, deletedAt: null }
         });
-        if (existing) return { success: false, error: `SKU "${sku}" is already used by another item` };
+        if (checkExisting) return { success: false, error: `SKU "${sku}" is already used by another item` };
 
         // ── Optimistic Concurrency Check ──
         let targetVersion: number;

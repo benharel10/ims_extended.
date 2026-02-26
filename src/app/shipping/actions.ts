@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/errorLogger';
+import { CreateWarehouseSchema, CreateShipmentSchema, UpdateShipmentStatusSchema, parseSchema } from '@/lib/schemas';
 
 // ─── Warehouses ───────────────────────────────────────────────────────────────
 
@@ -25,17 +26,17 @@ export async function createWarehouse(data: { name: string; location?: string; t
         const session = await getSession();
         if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
 
-        // ── Validation ──
-        if (!data.name?.trim()) return { success: false, error: 'Warehouse name is required' };
-        if (data.name.trim().length > 80) return { success: false, error: 'Warehouse name must be 80 characters or fewer' };
+        // ── Validation (via Zod schema) ──
+        const p = parseSchema(CreateWarehouseSchema, data);
+        if (!p.success) return { success: false, error: p.error };
 
         const validTypes = ['Standard', 'Virtual', 'Retail'];
-        const type = validTypes.includes(data.type ?? '') ? data.type! : 'Standard';
+        const type = validTypes.includes(p.data.type ?? '') ? p.data.type! : 'Standard';
 
         const warehouse = await prisma.warehouse.create({
             data: {
-                name: data.name.trim(),
-                location: data.location?.trim() || null,
+                name: p.data.name,
+                location: p.data.location ?? null,
                 type
             }
         });
@@ -140,30 +141,22 @@ export async function createShipment(data: {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // ── Validation ──
-        if (!data.shipmentNo?.trim()) return { success: false, error: 'Shipment number is required' };
+        // ── Validation (via Zod schema) ──
+        const p = parseSchema(CreateShipmentSchema, data);
+        if (!p.success) return { success: false, error: p.error };
 
-        const validTypes = ['Outbound', 'Inbound', 'Transfer'];
-        const type = validTypes.includes(data.type ?? '') ? data.type! : 'Outbound';
-
-        if (type === 'Transfer') {
-            if (!data.fromWarehouseId) return { success: false, error: 'Transfer requires a source warehouse' };
-            if (!data.toWarehouseId) return { success: false, error: 'Transfer requires a destination warehouse' };
-            if (data.fromWarehouseId === data.toWarehouseId) {
-                return { success: false, error: 'Source and destination warehouses must be different' };
-            }
-        }
+        const type = p.data.type ?? 'Outbound';
 
         const shipment = await prisma.shipment.create({
             data: {
-                shipmentNo: data.shipmentNo.trim(),
-                soId: data.soId ?? null,
-                carrier: data.carrier?.trim() ?? null,
-                trackingNo: data.trackingNo?.trim() ?? null,
+                shipmentNo: p.data.shipmentNo,
+                soId: p.data.soId ?? null,
+                carrier: p.data.carrier ?? null,
+                trackingNo: p.data.trackingNo ?? null,
                 status: 'Draft',
                 type,
-                fromWarehouseId: data.fromWarehouseId ?? null,
-                toWarehouseId: data.toWarehouseId ?? null
+                fromWarehouseId: p.data.fromWarehouseId ?? null,
+                toWarehouseId: p.data.toWarehouseId ?? null
             }
         });
 
@@ -183,8 +176,8 @@ export async function updateShipmentStatus(id: number, status: string) {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const validStatuses = ['Draft', 'Packed', 'Shipped', 'Delivered', 'Completed', 'Cancelled'];
-        if (!validStatuses.includes(status)) return { success: false, error: 'Invalid status value' };
+        const p = parseSchema(UpdateShipmentStatusSchema, { id, status });
+        if (!p.success) return { success: false, error: p.error };
 
         await prisma.$transaction(async (tx) => {
             const shipment = await tx.shipment.findUnique({
