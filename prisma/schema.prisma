@@ -201,6 +201,7 @@ model Shipment {
   
   carrier         String?
   trackingNo      String?
+  destination     String?
   status          String    @default("Draft")
   shipDate        DateTime?
   receiveDate     DateTime?

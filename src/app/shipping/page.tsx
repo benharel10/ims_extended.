@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft } from 'lucide-react';
-import { getShipments, createShipment, createPackage, addItemToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer } from './actions';
+import { getShipments, createShipment, createPackage, addItemToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival } from './actions';
 import { getItems } from '../inventory/actions'; // Reuse getItems
 import { useSystem } from '@/components/SystemProvider';
 
@@ -25,7 +25,7 @@ export default function ShippingPage() {
     const [shipmentType, setShipmentType] = useState<'carrier' | 'local' | 'transfer'>('carrier');
     const [newShipmentData, setNewShipmentData] = useState({
         shipmentNo: '', carrier: '', trackingNo: '', driverName: '', vehiclePlate: '',
-        fromWarehouseId: '', toWarehouseId: ''
+        fromWarehouseId: '', toWarehouseId: '', destination: ''
     });
 
     // Add Item State (Transient)
@@ -142,6 +142,7 @@ export default function ShippingPage() {
             shipmentNo: newShipmentData.shipmentNo,
             carrier: finalCarrier,
             trackingNo: finalTracking,
+            destination: newShipmentData.destination || undefined,
             type: shipmentType === 'transfer' ? 'Transfer' : 'Outbound',
             fromWarehouseId: shipmentType === 'transfer' ? parseInt(newShipmentData.fromWarehouseId) : undefined,
             toWarehouseId: shipmentType === 'transfer' ? parseInt(newShipmentData.toWarehouseId) : undefined
@@ -151,7 +152,7 @@ export default function ShippingPage() {
             setShowNewModal(false);
             setNewShipmentData({
                 shipmentNo: '', carrier: '', trackingNo: '', driverName: '', vehiclePlate: '',
-                fromWarehouseId: '', toWarehouseId: ''
+                fromWarehouseId: '', toWarehouseId: '', destination: ''
             });
             loadData();
             showAlert('Shipment created', 'success');
@@ -394,6 +395,7 @@ export default function ShippingPage() {
                                             <>
                                                 <span>{shipment.carrier?.startsWith('Local:') ? 'Driver' : 'Carrier'}: {shipment.carrier?.replace('Local: ', '') || '-'}</span>
                                                 <span>{shipment.carrier?.startsWith('Local:') ? 'Vehicle' : 'Tracking'}: {shipment.trackingNo || '-'}</span>
+                                                {shipment.destination && <span style={{ color: '#a78bfa' }}>→ {shipment.destination}</span>}
                                             </>
                                         )}
                                         <span>Packages: {shipment.packages.length}</span>
@@ -420,6 +422,20 @@ export default function ShippingPage() {
                                                     <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); handleCompleteTransfer(shipment.id); }} style={{ background: '#10b981', color: 'white', border: 'none' }}>
                                                         <ArrowRightLeft size={14} style={{ marginRight: '0.5rem' }} /> Complete Transfer
                                                     </button>
+                                                )}
+                                                {shipment.type !== 'Transfer' && !['Delivered', 'Completed'].includes(shipment.status) && (
+                                                    <button
+                                                        className="btn btn-sm btn-success"
+                                                        onClick={async (e) => { e.stopPropagation(); const res = await confirmArrival(shipment.id); if (res.success) { loadData(); showAlert('Shipment marked as Delivered', 'success'); } else showAlert(res.error || 'Failed', 'error'); }}
+                                                        style={{ background: '#10b981', color: 'white', border: 'none' }}
+                                                    >
+                                                        ✓ Confirm Arrival
+                                                    </button>
+                                                )}
+                                                {shipment.status === 'Delivered' && (
+                                                    <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
+                                                        ✓ Delivered{shipment.receiveDate ? ` on ${new Date(shipment.receiveDate).toLocaleDateString()}` : ''}
+                                                    </span>
                                                 )}
                                                 <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); handlePrint(shipment); }}>
                                                     <Printer size={14} style={{ marginRight: '0.5rem' }} /> Print Packing List
@@ -645,6 +661,17 @@ export default function ShippingPage() {
                                     className="input-group"
                                     value={newShipmentData.shipmentNo}
                                     onChange={e => setNewShipmentData({ ...newShipmentData, shipmentNo: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Destination (Customer / Address)</label>
+                                <input
+                                    type="text"
+                                    className="input-group"
+                                    value={newShipmentData.destination}
+                                    placeholder="e.g. Acme Corp, Tel Aviv"
+                                    onChange={e => setNewShipmentData({ ...newShipmentData, destination: e.target.value })}
                                 />
                             </div>
 

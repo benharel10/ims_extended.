@@ -133,6 +133,7 @@ export async function createShipment(data: {
     soId?: number;
     carrier?: string;
     trackingNo?: string;
+    destination?: string;
     type?: string;
     fromWarehouseId?: number;
     toWarehouseId?: number;
@@ -153,6 +154,7 @@ export async function createShipment(data: {
                 soId: p.data.soId ?? null,
                 carrier: p.data.carrier ?? null,
                 trackingNo: p.data.trackingNo ?? null,
+                destination: data.destination?.trim() || null,
                 status: 'Draft',
                 type,
                 fromWarehouseId: p.data.fromWarehouseId ?? null,
@@ -168,6 +170,24 @@ export async function createShipment(data: {
             ? `Shipment number "${data.shipmentNo?.trim()}" already exists`
             : 'Failed to create shipment. Please try again.';
         return { success: false, error: msg };
+    }
+}
+
+export async function confirmArrival(id: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        await prisma.shipment.update({
+            where: { id },
+            data: { status: 'Delivered', receiveDate: new Date() }
+        });
+
+        revalidatePath('/shipping');
+        return { success: true };
+    } catch (error) {
+        await logError('shipping.confirmArrival', error);
+        return { success: false, error: 'Failed to confirm arrival. Please try again.' };
     }
 }
 
