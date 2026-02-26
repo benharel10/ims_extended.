@@ -79,7 +79,7 @@ export async function getBOM(parentId: number) {
         });
         // Filter out BOM lines whose child item has been soft deleted
         const activeBom = bom.filter(b => b.child?.deletedAt === null);
-        return { success: true, data: bom };
+        return { success: true, data: activeBom };
     } catch (error) {
         await logError('getBOM', error);
         return { success: false, error: 'Failed to fetch BOM. Please try again.' };
