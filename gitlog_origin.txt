@@ -1,0 +1,59 @@
+﻿commit 6bdb7f27e5b0dae02289ff0b3d5909e5ddd198e9
+Author: benharel10 <benharel0@gmail.com>
+Date:   Tue Feb 24 16:28:53 2026 +0200
+
+    feat: handle production warehouse selection
+
+commit 0ed8212fd633d0a260f3a9f9d3e9284589271c09
+Author: benharel10 <benharel0@gmail.com>
+Date:   Tue Feb 24 16:18:45 2026 +0200
+
+    feat: optimize db indexing and secure session cookies
+
+commit ffc388ce5524eb88a55474b8f2b63723b6237fee
+Author: benharel10 <benharel0@gmail.com>
+Date:   Tue Feb 24 15:29:55 2026 +0200
+
+    chore: add prisma migrate deploy to build script
+
+commit 8044d610996423b9613c039dca1df7672978dd88
+Author: benharel10 <benharel0@gmail.com>
+Date:   Tue Feb 24 14:33:02 2026 +0200
+
+    feat: implement high-reliability & data integrity protocols
+    
+    - Strict SQL transactions: all inventory-altering operations across
+      inventory, production, purchasing, sales and shipping use
+      with pre-flight validation before any writes
+    
+    - Soft deletes: Item (SKU) and BOM rows use deletedAt; all queries
+      filter deletedAt: null; bulk/single deletes stamp the timestamp and
+      cascade to BOM lines atomically
+    
+    - Server-side validation: enum whitelists for status/role/type fields,
+      SKU length + sanitisation, negative quantity/cost/price guards,
+      circular BOM detection (bidirectional walk), email regex, password
+      minimum length, warehouse deletion blocked when holding stock,
+      last-Admin deletion blocked
+    
+    - Error logging: logError() wired into every catch block across all
+      six action files (inventory, production, purchasing, sales, shipping,
+      finance, settings/users); removes all console.error leaks; raw DB
+      error messages never surfaced to the client
+    
+    - Optimistic concurrency: item.version incremented on every stock/cost
+      write in all modules; updateItem enforces version check and returns
+      conflict message if stale
+    
+    - Prisma schema: adds version and deletedAt to Item; deletedAt to BOM;
+      adds SystemError and SystemLog models; migration applied
+    
+    - Misc hardening: removed prisma-as-any hack in shipping; finance
+      actions now auth-guarded; completed shipments/orders blocked from
+      deletion; createUser typed (no more data: any)
+
+commit 669ac70845fa4cb8ec65ba2fc7818ddce37780be
+Author: benharel10 <benharel0@gmail.com>
+Date:   Tue Feb 24 13:48:57 2026 +0200
+
+    fix(UI): Restore standard sidebar/PC layout and hide mobile nav on desktop

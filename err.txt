@@ -1,0 +1,7 @@
+
+Invalid `prisma.user.findUnique()` invocation:
+
+
+Can't reach database server at `ep-jolly-poetry-aipu0ky8.c-4.us-east-1.aws.neon.tech:5432`
+
+Please make sure your database server is running at `ep-jolly-poetry-aipu0ky8.c-4.us-east-1.aws.neon.tech:5432`.
