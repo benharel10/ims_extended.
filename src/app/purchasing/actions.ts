@@ -185,6 +185,11 @@ export async function addPOLine(
         if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
         if (cost < 0) return { success: false, error: 'Unit cost cannot be negative' };
 
+        const po = await prisma.purchaseOrder.findUnique({ where: { id: poId }, select: { status: true } });
+        if (po?.status !== 'Draft') {
+            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft status' };
+        }
+
         let existing = null;
         if (itemId) {
             existing = await prisma.pOLine.findFirst({ where: { poId, itemId } });
@@ -222,6 +227,11 @@ export async function removePOLine(lineId: number) {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
+        const line = await prisma.pOLine.findUnique({ where: { id: lineId }, select: { po: { select: { status: true } } } });
+        if (line?.po?.status !== 'Draft') {
+            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft status' };
+        }
+
         await prisma.pOLine.delete({ where: { id: lineId } });
         revalidatePath('/purchasing/[id]');
         return { success: true };
@@ -236,6 +246,11 @@ export async function deletePurchaseOrder(id: number) {
         const session = await getSession();
         if (!session?.user || session.user.role !== 'Admin') {
             return { success: false, error: 'Unauthorized: Admin access required to delete POs' };
+        }
+
+        const po = await prisma.purchaseOrder.findUnique({ where: { id }, select: { status: true } });
+        if (po?.status !== 'Draft') {
+            return { success: false, error: 'Cannot delete a Purchase Order that is not in Draft status' };
         }
 
         await prisma.purchaseOrder.delete({

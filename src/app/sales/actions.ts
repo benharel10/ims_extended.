@@ -143,6 +143,11 @@ export async function addSalesLine(soId: number, itemId: number, quantity: numbe
         if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
         if (unitPrice < 0) return { success: false, error: 'Unit price cannot be negative' };
 
+        const so = await prisma.salesOrder.findUnique({ where: { id: soId }, select: { status: true } });
+        if (so?.status !== 'Draft') {
+            return { success: false, error: 'Cannot modify a Sales Order that is not in Draft status' };
+        }
+
         // Verify item is active
         const item = await prisma.item.findFirst({ where: { id: itemId, deletedAt: null } });
         if (!item) return { success: false, error: 'Item not found or has been deactivated' };
@@ -160,6 +165,11 @@ export async function removeSalesLine(lineId: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const line = await prisma.salesLine.findUnique({ where: { id: lineId }, select: { so: { select: { status: true } } } });
+        if (line?.so?.status !== 'Draft') {
+            return { success: false, error: 'Cannot modify a Sales Order that is not in Draft status' };
+        }
 
         await prisma.salesLine.delete({ where: { id: lineId } });
         revalidatePath('/sales');
@@ -183,9 +193,56 @@ export async function updateSalesOrderStatus(id: number, status: string) {
             return { success: false, error: 'Invalid status value' };
         }
 
-        const order = await prisma.salesOrder.update({
-            where: { id },
-            data: { status }
+        const order = await prisma.$transaction(async (tx) => {
+            const currentOrder = await tx.salesOrder.findUnique({
+                where: { id },
+                include: { lines: true }
+            });
+
+            if (!currentOrder) throw new Error('Order not found');
+
+            // If the user manually marks the SO as Completed, deduct whatever hasn't been shipped yet
+            if (status === 'Completed' && currentOrder.status !== 'Completed') {
+                for (const line of currentOrder.lines) {
+                    const remainingToDeduct = line.quantity - line.shipped;
+
+                    if (remainingToDeduct > 0) {
+                        // 1. Deduct overall stock
+                        await tx.item.update({
+                            where: { id: line.itemId },
+                            data: { currentStock: { decrement: remainingToDeduct }, version: { increment: 1 } }
+                        });
+
+                        // 2. Deduct from whichever warehouses have it
+                        let remainingWhDeduct = remainingToDeduct;
+                        const stocks = await tx.itemStock.findMany({
+                            where: { itemId: line.itemId, quantity: { gt: 0 } },
+                            orderBy: { quantity: 'desc' },
+                        });
+                        for (const stock of stocks) {
+                            if (remainingWhDeduct <= 0) break;
+                            const qtyInStock = Number(stock.quantity);
+                            const ded = Math.min(qtyInStock, remainingWhDeduct);
+                            await tx.itemStock.update({
+                                where: { id: stock.id },
+                                data: { quantity: { decrement: ded } }
+                            });
+                            remainingWhDeduct -= ded;
+                        }
+
+                        // 3. Update shipped quantity so it's not double-deducted
+                        await tx.salesLine.update({
+                            where: { id: line.id },
+                            data: { shipped: line.quantity }
+                        });
+                    }
+                }
+            }
+
+            return await tx.salesOrder.update({
+                where: { id },
+                data: { status }
+            });
         });
 
         // Trigger iCount invoice on confirmation
@@ -243,13 +300,13 @@ export async function deleteSalesOrder(id: number) {
         const session = await getSession();
         if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
 
-        // Guard: prevent deletion of completed orders
+        // Guard: prevent deletion of non-draft orders
         const order = await prisma.salesOrder.findUnique({
             where: { id },
             select: { status: true }
         });
-        if (order?.status === 'Completed') {
-            return { success: false, error: 'Completed sales orders cannot be deleted. Archive them instead.' };
+        if (order?.status !== 'Draft') {
+            return { success: false, error: 'Only Draft sales orders can be deleted. Archive others instead.' };
         }
 
         await prisma.salesOrder.delete({ where: { id } });
@@ -266,12 +323,12 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
         const session = await getSession();
         if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
 
-        // Guard: prevent deletion of any completed orders in the selection
-        const completed = await prisma.salesOrder.count({
-            where: { id: { in: ids }, status: 'Completed' }
+        // Guard: prevent deletion of any non-draft orders in the selection
+        const nonDraft = await prisma.salesOrder.count({
+            where: { id: { in: ids }, status: { not: 'Draft' } }
         });
-        if (completed > 0) {
-            return { success: false, error: `${completed} completed sales order(s) cannot be deleted.` };
+        if (nonDraft > 0) {
+            return { success: false, error: `${nonDraft} non-draft sales order(s) cannot be deleted.` };
         }
 
         await prisma.salesOrder.deleteMany({ where: { id: { in: ids } } });

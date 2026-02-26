@@ -186,8 +186,75 @@ export async function updateShipmentStatus(id: number, status: string) {
         const validStatuses = ['Draft', 'Packed', 'Shipped', 'Delivered', 'Completed', 'Cancelled'];
         if (!validStatuses.includes(status)) return { success: false, error: 'Invalid status value' };
 
-        await prisma.shipment.update({ where: { id }, data: { status } });
+        await prisma.$transaction(async (tx) => {
+            const shipment = await tx.shipment.findUnique({
+                where: { id },
+                include: {
+                    packages: {
+                        include: { items: { include: { item: true } } }
+                    }
+                }
+            });
+
+            if (!shipment) throw new Error('Shipment not found');
+
+            const isShipping = ['Draft', 'Packed'].includes(shipment.status) && ['Shipped', 'Delivered', 'Completed'].includes(status);
+
+            if (shipment.type === 'Outbound' && isShipping) {
+                // Deduct stock and update serial numbers!
+                for (const pkg of shipment.packages) {
+                    for (const pItem of pkg.items) {
+                        // 1. Deduct from fromWarehouseStock
+                        if (shipment.fromWarehouseId) {
+                            const stock = await tx.itemStock.findUnique({
+                                where: { itemId_warehouseId: { itemId: pItem.itemId, warehouseId: shipment.fromWarehouseId } }
+                            });
+                            const available = Number(stock?.quantity ?? 0);
+                            if (available < pItem.quantity) {
+                                throw new Error(`Insufficient stock for "${pItem.item.sku}" in the selected warehouse.`);
+                            }
+                            await tx.itemStock.update({
+                                where: { itemId_warehouseId: { itemId: pItem.itemId, warehouseId: shipment.fromWarehouseId } },
+                                data: { quantity: { decrement: pItem.quantity } }
+                            });
+                        }
+
+                        // 2. Deduct overall item currentStock
+                        await tx.item.update({
+                            where: { id: pItem.itemId },
+                            data: { currentStock: { decrement: pItem.quantity }, version: { increment: 1 } }
+                        });
+
+                        // 3. Mark Serial Number as 'Sold'
+                        if (pItem.serializedItemId) {
+                            await tx.serializedItem.update({
+                                where: { id: pItem.serializedItemId },
+                                data: { status: 'Sold', soldAt: new Date() }
+                            });
+                        }
+
+                        // 4. Mark SalesLine as Shipped (if applicable)
+                        if (shipment.soId) {
+                            const sLine = await tx.salesLine.findFirst({
+                                where: { soId: shipment.soId, itemId: pItem.itemId }
+                            });
+                            if (sLine) {
+                                await tx.salesLine.update({
+                                    where: { id: sLine.id },
+                                    data: { shipped: { increment: pItem.quantity } }
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            await tx.shipment.update({ where: { id }, data: { status } });
+        });
+
         revalidatePath('/shipping');
+        revalidatePath('/inventory');
+        revalidatePath('/sales');
         return { success: true };
     } catch (error) {
         await logError('shipping.updateShipmentStatus', error);
