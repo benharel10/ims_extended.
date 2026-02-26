@@ -208,10 +208,13 @@ export async function updateSalesOrderStatus(id: number, status: string) {
 
                     if (remainingToDeduct > 0) {
                         // 1. Deduct overall stock
-                        await tx.item.update({
-                            where: { id: line.itemId },
+                        const currentItem = await tx.item.findUnique({ where: { id: line.itemId }, select: { version: true } });
+                        if (!currentItem) throw new Error(`Item not found for concurrency check`);
+                        const occResult = await tx.item.updateMany({
+                            where: { id: line.itemId, version: currentItem.version },
                             data: { currentStock: { decrement: remainingToDeduct }, version: { increment: 1 } }
                         });
+                        if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
 
                         // 2. Deduct from whichever warehouses have it
                         let remainingWhDeduct = remainingToDeduct;

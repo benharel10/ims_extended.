@@ -127,10 +127,13 @@ export async function saveBOM(
                 if (itemUpdates.price !== undefined && itemUpdates.price < 0)
                     throw new Error('Price cannot be negative');
 
-                await tx.item.update({
-                    where: { id: parentId },
+                const currentItem = await tx.item.findUnique({ where: { id: parentId }, select: { version: true } });
+                if (!currentItem) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id: parentId, version: currentItem.version },
                     data: { cost: itemUpdates.cost, price: itemUpdates.price, version: { increment: 1 } }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: item was updated simultaneously. Please try again.');
             }
 
             // Soft-delete existing BOM lines for this parent
@@ -270,10 +273,13 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 }
 
                 // Deduct from total stock + bump version
-                await tx.item.update({
-                    where: { id: line.childId },
+                const currentChild = await tx.item.findUnique({ where: { id: line.childId }, select: { version: true } });
+                if (!currentChild) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id: line.childId, version: currentChild.version },
                     data: { currentStock: { decrement: requiredQty }, version: { increment: 1 } }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
             }
 
             // 4. Add finished goods to selected destination warehouse
@@ -291,10 +297,13 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 });
             }
 
-            const parentItem = await tx.item.update({
-                where: { id: parentId },
+            const parentItem = await tx.item.findUnique({ where: { id: parentId } });
+            if (!parentItem) throw new Error('Parent item not found');
+            const occResult = await tx.item.updateMany({
+                where: { id: parentId, version: parentItem.version },
                 data: { currentStock: { increment: quantity }, version: { increment: 1 } }
             });
+            if (occResult.count === 0) throw new Error('Concurrency conflict: item was updated simultaneously. Please try again.');
 
             // 5. Serial number validation
             if (parentItem?.isSerialized) {
@@ -436,10 +445,13 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                             }
                         }
                     }
-                    await tx.item.update({
-                        where: { id: line.childId },
+                    const currentChild = await tx.item.findUnique({ where: { id: line.childId }, select: { version: true } });
+                    if (!currentChild) throw new Error('Item not found for concurrency check');
+                    const occResult = await tx.item.updateMany({
+                        where: { id: line.childId, version: currentChild.version },
                         data: { currentStock: { decrement: needed }, version: { increment: 1 } }
                     });
+                    if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
                 }
 
                 // Add to destination
@@ -448,10 +460,13 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                     create: { itemId: run.itemId, warehouseId: run.toWarehouseId, quantity: diff },
                     update: { quantity: { increment: diff } }
                 });
-                await tx.item.update({
-                    where: { id: run.itemId },
+                const currentRunItem = await tx.item.findUnique({ where: { id: run.itemId }, select: { version: true } });
+                if (!currentRunItem) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id: run.itemId, version: currentRunItem.version },
                     data: { currentStock: { increment: diff }, version: { increment: 1 } }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
             } else {
                 // Reducing — return components to their first available warehouse, or general.
                 // It is hard to know exactly which warehouse to return to. We will put it in the default/first one, or toWarehouse
@@ -460,10 +475,13 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                     where: { itemId_warehouseId: { itemId: run.itemId, warehouseId: run.toWarehouseId } },
                     data: { quantity: { decrement: removeQty } }
                 });
-                await tx.item.update({
-                    where: { id: run.itemId },
+                const currentRunItem = await tx.item.findUnique({ where: { id: run.itemId }, select: { version: true } });
+                if (!currentRunItem) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id: run.itemId, version: currentRunItem.version },
                     data: { currentStock: { decrement: removeQty }, version: { increment: 1 } }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
 
                 for (const line of bom) {
                     const returning = Number(line.quantity) * removeQty;
@@ -484,10 +502,13 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                         });
                     }
 
-                    await tx.item.update({
-                        where: { id: line.childId },
+                    const currentChild = await tx.item.findUnique({ where: { id: line.childId }, select: { version: true } });
+                    if (!currentChild) throw new Error('Item not found for concurrency check');
+                    const occResult = await tx.item.updateMany({
+                        where: { id: line.childId, version: currentChild.version },
                         data: { currentStock: { increment: returning }, version: { increment: 1 } }
                     });
+                    if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
                 }
             }
 

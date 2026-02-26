@@ -213,19 +213,17 @@ export async function updateItem(id: number, data: {
         if (existing) return { success: false, error: `SKU "${sku}" is already used by another item` };
 
         // ── Optimistic Concurrency Check ──
+        let targetVersion: number;
         if (data.version !== undefined) {
+            targetVersion = data.version;
+        } else {
             const current = await prisma.item.findUnique({ where: { id }, select: { version: true } });
             if (!current) return { success: false, error: 'Item not found' };
-            if (current.version !== data.version) {
-                return {
-                    success: false,
-                    error: 'This item was modified by another user. Please refresh the page and try again.'
-                };
-            }
+            targetVersion = current.version;
         }
 
-        const item = await prisma.item.update({
-            where: { id },
+        const occResult = await prisma.item.updateMany({
+            where: { id, version: targetVersion },
             data: {
                 sku,
                 name: data.name.trim(),
@@ -242,6 +240,15 @@ export async function updateItem(id: number, data: {
                 version: { increment: 1 }, // Bump version on every write
             }
         });
+
+        if (occResult.count === 0) {
+            return {
+                success: false,
+                error: 'This item was modified by another user. Please refresh the page and try again.'
+            };
+        }
+
+        const item = await prisma.item.findUnique({ where: { id } });
 
         revalidatePath('/inventory');
         return { success: true, data: item };
@@ -270,15 +277,21 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
                 const allStocks = await tx.itemStock.findMany({ where: { itemId: id } });
                 const totalStock = allStocks.reduce((sum, s) => sum + Number(s.quantity), 0);
 
-                await tx.item.update({
-                    where: { id },
+                const currentItem = await tx.item.findUnique({ where: { id }, select: { version: true } });
+                if (!currentItem) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id, version: currentItem.version },
                     data: { currentStock: totalStock, version: { increment: 1 } }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
             } else {
-                await tx.item.update({
-                    where: { id },
+                const currentItem = await tx.item.findUnique({ where: { id }, select: { version: true } });
+                if (!currentItem) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id, version: currentItem.version },
                     data: { currentStock: quantity, version: { increment: 1 } }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
             }
         });
 
@@ -296,10 +309,14 @@ export async function updateItemCost(id: number, newCost: number) {
         if (!session?.user) return { success: false, error: 'Unauthorized' };
         if (newCost < 0) return { success: false, error: 'Cost cannot be negative' };
 
-        const item = await prisma.item.update({
-            where: { id },
+        const currentItem = await prisma.item.findUnique({ where: { id }, select: { version: true } });
+        if (!currentItem) return { success: false, error: 'Item not found' };
+        const occResult = await prisma.item.updateMany({
+            where: { id, version: currentItem.version },
             data: { cost: newCost, version: { increment: 1 } }
         });
+        if (occResult.count === 0) return { success: false, error: 'Concurrency conflict: item was updated simultaneously. Please try again.' };
+        const item = await prisma.item.findUnique({ where: { id } });
         revalidatePath('/inventory');
         revalidatePath('/production');
         return { success: true, data: item };
@@ -319,10 +336,13 @@ export async function deleteItem(id: number) {
         // Soft delete: stamp deletedAt rather than removing the row
         await prisma.$transaction(async (tx) => {
             const now = new Date();
-            await tx.item.update({
-                where: { id },
+            const currentItem = await tx.item.findUnique({ where: { id }, select: { version: true } });
+            if (!currentItem) throw new Error('Item not found for concurrency check');
+            const occResult = await tx.item.updateMany({
+                where: { id, version: currentItem.version },
                 data: { deletedAt: now, version: { increment: 1 } }
             });
+            if (occResult.count === 0) throw new Error('Concurrency conflict: item was updated simultaneously. Please try again.');
             // Also soft-delete all BOM lines that reference this item
             await tx.bOM.updateMany({
                 where: { OR: [{ parentId: id }, { childId: id }] },
@@ -386,10 +406,13 @@ export async function bulkUpdateStock(updates: { itemId: number; quantity: numbe
                 const allStocks = await tx.itemStock.findMany({ where: { itemId: update.itemId } });
                 const totalStock = allStocks.reduce((sum, s) => sum + Number(s.quantity), 0);
 
-                await tx.item.update({
-                    where: { id: update.itemId },
+                const currentItem = await tx.item.findUnique({ where: { id: update.itemId }, select: { version: true } });
+                if (!currentItem) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id: update.itemId, version: currentItem.version },
                     data: { currentStock: totalStock, version: { increment: 1 } }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
             }
         });
 
@@ -471,9 +494,8 @@ export async function importItems(itemsData: ImportItemData[]) {
 
                 let item;
                 if (existing) {
-                    // Update whether active or soft-deleted (restore if needed)
-                    item = await prisma.item.update({
-                        where: { id: existing.id },
+                    const occResult = await prisma.item.updateMany({
+                        where: { id: existing.id, version: existing.version },
                         data: {
                             name: row.name,
                             type,
@@ -489,6 +511,9 @@ export async function importItems(itemsData: ImportItemData[]) {
                             version: { increment: 1 },
                         }
                     });
+                    if (occResult.count === 0) throw new Error('Concurrency conflict: item was modified during import.');
+                    item = await prisma.item.findUnique({ where: { id: existing.id } });
+                    if (!item) throw new Error('Item not found after update');
                     updated++;
                 } else {
                     item = await prisma.item.create({

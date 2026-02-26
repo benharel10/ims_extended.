@@ -4,6 +4,11 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 const SECRET_KEY = process.env.JWT_SECRET || 'fallback-dev-key-do-not-use-in-prod';
+
+if (process.env.NODE_ENV === 'production' && SECRET_KEY === 'fallback-dev-key-do-not-use-in-prod') {
+    throw new Error('JWT_SECRET environment variable is required in production. Using the fallback dev key is insecure.');
+}
+
 const key = new TextEncoder().encode(SECRET_KEY);
 
 export async function encrypt(payload: any) {

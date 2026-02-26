@@ -364,13 +364,16 @@ export async function receivePOItems(
                 });
 
                 // Increment global item stock + bump version (concurrency-safe)
-                await tx.item.update({
-                    where: { id: targetItemId },
+                const currentItem = await tx.item.findUnique({ where: { id: targetItemId }, select: { version: true } });
+                if (!currentItem) throw new Error('Item not found for concurrency check');
+                const occResult = await tx.item.updateMany({
+                    where: { id: targetItemId, version: currentItem.version },
                     data: {
                         currentStock: { increment: rec.qty },
                         version: { increment: 1 }
                     }
                 });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: item was updated simultaneously. Please try again.');
 
                 // Upsert warehouse-specific stock record
                 await tx.itemStock.upsert({

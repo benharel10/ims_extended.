@@ -220,10 +220,13 @@ export async function updateShipmentStatus(id: number, status: string) {
                         }
 
                         // 2. Deduct overall item currentStock
-                        await tx.item.update({
-                            where: { id: pItem.itemId },
+                        const currentItem = await tx.item.findUnique({ where: { id: pItem.itemId }, select: { version: true } });
+                        if (!currentItem) throw new Error('Item not found for concurrency check');
+                        const occResult = await tx.item.updateMany({
+                            where: { id: pItem.itemId, version: currentItem.version },
                             data: { currentStock: { decrement: pItem.quantity }, version: { increment: 1 } }
                         });
+                        if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
 
                         // 3. Mark Serial Number as 'Sold'
                         if (pItem.serializedItemId) {
@@ -341,10 +344,13 @@ export async function completeTransfer(shipmentId: number) {
                     });
 
                     // Bump item version so concurrent edits are detected
-                    await tx.item.update({
-                        where: { id: pItem.itemId },
+                    const currentItem = await tx.item.findUnique({ where: { id: pItem.itemId }, select: { version: true } });
+                    if (!currentItem) throw new Error('Item not found for concurrency check');
+                    const occResult = await tx.item.updateMany({
+                        where: { id: pItem.itemId, version: currentItem.version },
                         data: { version: { increment: 1 } }
                     });
+                    if (occResult.count === 0) throw new Error('Concurrency conflict: item was updated simultaneously. Please try again.');
                 }
             }
 
