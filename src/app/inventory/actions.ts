@@ -640,11 +640,13 @@ export async function createAssemblyFromItems(
         if (skuError) return { success: false, error: skuError };
         if (!productData.name?.trim()) return { success: false, error: 'Product name is required' };
 
-        let parent = await prisma.item.findFirst({
-            where: { sku: productData.sku.trim(), deletedAt: null }
+        // Look for any existing item with this SKU (including soft-deleted)
+        let parent = await prisma.item.findUnique({
+            where: { sku: productData.sku.trim() }
         });
 
         if (!parent) {
+            // Genuinely new SKU — create it
             parent = await prisma.item.create({
                 data: {
                     sku: productData.sku.trim(),
@@ -655,6 +657,17 @@ export async function createAssemblyFromItems(
                     minStock: 0,
                     currentStock: 0,
                     version: 0,
+                }
+            });
+        } else {
+            // SKU exists (active or soft-deleted) — update and restore it
+            parent = await prisma.item.update({
+                where: { id: parent.id },
+                data: {
+                    name: productData.name.trim(),
+                    type: 'Product',
+                    deletedAt: null, // Restore if soft-deleted
+                    version: { increment: 1 },
                 }
             });
         }
