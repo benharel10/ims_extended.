@@ -528,17 +528,18 @@ export async function importItems(itemsData: ImportItemData[]) {
                     created++;
                 }
 
-                // Link to Warehouse if specified and stock > 0
+                // Link to Warehouse if specified — clear any stale entries first so we don't end up with duplicate locations
                 if (row.warehouse?.trim()) {
                     const allWarehouses = await prisma.warehouse.findMany();
                     const warehouse = allWarehouses.find(
                         w => w.name.toLowerCase() === row.warehouse!.toLowerCase()
                     );
                     if (warehouse && (row.currentStock ?? 0) > 0) {
-                        await prisma.itemStock.upsert({
-                            where: { itemId_warehouseId: { itemId: item.id, warehouseId: warehouse.id } },
-                            update: { quantity: row.currentStock ?? Number(item.currentStock) },
-                            create: { itemId: item.id, warehouseId: warehouse.id, quantity: row.currentStock ?? Number(item.currentStock) }
+                        // Remove old ItemStock records for this item so we start clean
+                        await prisma.itemStock.deleteMany({ where: { itemId: item.id } });
+                        // Insert the single authoritative warehouse entry from the spreadsheet
+                        await prisma.itemStock.create({
+                            data: { itemId: item.id, warehouseId: warehouse.id, quantity: row.currentStock ?? Number(item.currentStock) }
                         });
                     } else if (!warehouse) {
                         errors.push(`Warning: Warehouse "${row.warehouse}" not found for SKU ${row.sku}. Stock stored as legacy field only.`);
