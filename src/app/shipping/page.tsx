@@ -31,6 +31,7 @@ export default function ShippingPage() {
     // Add Item State (Transient)
     const [addingItemToPkg, setAddingItemToPkg] = useState<number | null>(null); // Package ID
     const [selectedItemToAdd, setSelectedItemToAdd] = useState('');
+    const [itemSearch, setItemSearch] = useState(''); // Search filter for item dropdown
     const [qtyToAdd, setQtyToAdd] = useState(1);
     const [availableSerials, setAvailableSerials] = useState<any[]>([]);
     const [selectedSerialId, setSelectedSerialId] = useState('');
@@ -86,6 +87,7 @@ export default function ShippingPage() {
     function openAddItem(pkgId: number) {
         setAddingItemToPkg(pkgId);
         setSelectedItemToAdd('');
+        setItemSearch('');
         setQtyToAdd(1);
         setAvailableSerials([]);
         setSelectedSerialId('');
@@ -472,33 +474,41 @@ export default function ShippingPage() {
                                                                         <tr>
                                                                             <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
                                                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                                    <select
-                                                                                        value={selectedItemToAdd}
-                                                                                        onChange={e => setSelectedItemToAdd(e.target.value)}
-                                                                                        className="input-group"
-                                                                                        style={{ flex: 1, padding: '0.25rem' }}
-                                                                                    >
-                                                                                        <option value="">Select Item...</option>
-                                                                                        {items.map(i => {
-                                                                                            let stockLabel = `Total: ${i.currentStock}`;
-                                                                                            let available = i.currentStock;
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            placeholder="Search SKU or name..."
+                                                                                            value={itemSearch}
+                                                                                            onChange={e => setItemSearch(e.target.value)}
+                                                                                            className="input-group"
+                                                                                            style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
+                                                                                            autoFocus
+                                                                                        />
+                                                                                        <select
+                                                                                            value={selectedItemToAdd}
+                                                                                            onChange={e => setSelectedItemToAdd(e.target.value)}
+                                                                                            className="input-group"
+                                                                                            style={{ padding: '0.25rem' }}
+                                                                                        >
+                                                                                            <option value="">Select Item...</option>
+                                                                                            {items
+                                                                                                .filter(i => !itemSearch || i.sku.toLowerCase().includes(itemSearch.toLowerCase()) || i.name.toLowerCase().includes(itemSearch.toLowerCase()))
+                                                                                                .map(i => {
+                                                                                                    let stockLabel = `Total: ${i.currentStock}`;
 
-                                                                                            if (sourceWarehouseId && i.stocks) {
-                                                                                                const whStock = i.stocks.find((s: any) => s.warehouseId === sourceWarehouseId)?.quantity || 0;
-                                                                                                stockLabel = `WH Stock: ${whStock} (Total: ${i.currentStock})`;
-                                                                                                available = whStock;
-                                                                                            }
+                                                                                                    if (sourceWarehouseId && i.stocks) {
+                                                                                                        const whStock = i.stocks.find((s: any) => s.warehouseId === sourceWarehouseId)?.quantity || 0;
+                                                                                                        stockLabel = `WH Stock: ${whStock} (Total: ${i.currentStock})`;
+                                                                                                    }
 
-                                                                                            // Optional: Disable if 0 stock in source warehouse for transfers?
-                                                                                            // const disabled = sourceWarehouseId && available <= 0;
-
-                                                                                            return (
-                                                                                                <option key={i.id} value={i.id}>
-                                                                                                    {i.sku} - {i.name} ({stockLabel})
-                                                                                                </option>
-                                                                                            );
-                                                                                        })}
-                                                                                    </select>
+                                                                                                    return (
+                                                                                                        <option key={i.id} value={i.id}>
+                                                                                                            {i.sku} - {i.name} ({stockLabel})
+                                                                                                        </option>
+                                                                                                    );
+                                                                                                })}
+                                                                                        </select>
+                                                                                    </div>
 
                                                                                     {isSerializedSelection ? (
                                                                                         <select
