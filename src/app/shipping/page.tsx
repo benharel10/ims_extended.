@@ -442,7 +442,7 @@ export default function ShippingPage() {
                                                                 <span className="text-muted" style={{ fontSize: '0.8rem' }}>({pkg.type})</span>
                                                             </div>
                                                             {isAdmin && (
-                                                                <button onClick={() => deletePackage(pkg.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                                                <button onClick={async () => { const res = await deletePackage(pkg.id); if (res.success) loadData(); else showAlert('Failed to delete box', 'error'); }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
                                                                     <Trash2 size={14} />
                                                                 </button>
                                                             )}
@@ -463,7 +463,7 @@ export default function ShippingPage() {
                                                                             <td style={{ color: 'var(--text-main)' }}>{pItem.quantity}</td>
                                                                             <td>
                                                                                 {isAdmin && (
-                                                                                    <button onClick={() => removeItemFromPackage(pItem.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+                                                                                    <button onClick={async () => { const res = await removeItemFromPackage(pItem.id); if (res.success) loadData(); else showAlert('Failed to remove item', 'error'); }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
                                                                                 )}
                                                                             </td>
                                                                         </tr>
