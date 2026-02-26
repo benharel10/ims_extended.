@@ -178,16 +178,93 @@ export async function confirmArrival(id: number) {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        await prisma.shipment.update({
-            where: { id },
-            data: { status: 'Delivered', receiveDate: new Date() }
+        await prisma.$transaction(async (tx) => {
+            const shipment = await tx.shipment.findUnique({
+                where: { id },
+                include: {
+                    packages: {
+                        include: { items: { include: { item: true } } }
+                    }
+                }
+            });
+
+            if (!shipment) throw new Error('Shipment not found');
+            if (['Delivered', 'Completed'].includes(shipment.status)) {
+                throw new Error('Shipment already marked as delivered.');
+            }
+
+            // Only deduct stock for Outbound shipments
+            if (shipment.type === 'Outbound') {
+                for (const pkg of shipment.packages) {
+                    for (const pItem of pkg.items) {
+                        let remaining = pItem.quantity;
+
+                        if (shipment.fromWarehouseId) {
+                            // Deduct from specific source warehouse
+                            const stock = await tx.itemStock.findUnique({
+                                where: { itemId_warehouseId: { itemId: pItem.itemId, warehouseId: shipment.fromWarehouseId } }
+                            });
+                            const available = Number(stock?.quantity ?? 0);
+                            if (available < pItem.quantity) {
+                                throw new Error(`Insufficient stock for "${pItem.item.sku}" in the selected warehouse.`);
+                            }
+                            await tx.itemStock.update({
+                                where: { itemId_warehouseId: { itemId: pItem.itemId, warehouseId: shipment.fromWarehouseId } },
+                                data: { quantity: { decrement: pItem.quantity } }
+                            });
+                            remaining = 0;
+                        } else {
+                            // No source warehouse — deduct greedily from any warehouse holding stock
+                            const stocks = await tx.itemStock.findMany({
+                                where: { itemId: pItem.itemId, quantity: { gt: 0 } },
+                                orderBy: { quantity: 'desc' }
+                            });
+                            for (const whStock of stocks) {
+                                if (remaining <= 0) break;
+                                const deduct = Math.min(remaining, Number(whStock.quantity));
+                                await tx.itemStock.update({
+                                    where: { itemId_warehouseId: { itemId: pItem.itemId, warehouseId: whStock.warehouseId } },
+                                    data: { quantity: { decrement: deduct } }
+                                });
+                                remaining -= deduct;
+                            }
+                            // remaining > 0 means not enough stock across all warehouses — still proceed, currentStock handles it
+                        }
+
+                        // Deduct overall item currentStock (OCC)
+                        const currentItem = await tx.item.findUnique({ where: { id: pItem.itemId }, select: { version: true } });
+                        if (!currentItem) throw new Error('Item not found');
+                        const occResult = await tx.item.updateMany({
+                            where: { id: pItem.itemId, version: currentItem.version },
+                            data: { currentStock: { decrement: pItem.quantity }, version: { increment: 1 } }
+                        });
+                        if (occResult.count === 0) throw new Error('Concurrency conflict — please try again.');
+
+                        // Mark serial as Sold
+                        if (pItem.serializedItemId) {
+                            await tx.serializedItem.update({
+                                where: { id: pItem.serializedItemId },
+                                data: { status: 'Sold', soldAt: new Date() }
+                            });
+                        }
+                    }
+                }
+            }
+
+            await tx.shipment.update({
+                where: { id },
+                data: { status: 'Delivered', receiveDate: new Date() }
+            });
         });
 
         revalidatePath('/shipping');
+        revalidatePath('/inventory');
+        revalidatePath('/sales');
         return { success: true };
     } catch (error) {
         await logError('shipping.confirmArrival', error);
-        return { success: false, error: 'Failed to confirm arrival. Please try again.' };
+        const msg = error instanceof Error ? error.message : 'Failed to confirm arrival. Please try again.';
+        return { success: false, error: msg };
     }
 }
 
