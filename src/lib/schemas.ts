@@ -47,6 +47,15 @@ export const CreateSalesOrderSchema = z.object({
     customer: z.string().trim().min(1, 'Customer name is required').max(200),
     soNumber: z.string().trim().min(1, 'SO number is required').max(100),
     productionRunId: z.number().int().positive().optional(),
+    itemId: z.number().int().positive().optional(),
+    quantity: z.number().int().positive().optional(),
+});
+
+export const LinkSalesOrderSchema = z.object({
+    id: z.number().int().positive(),
+    itemId: z.number().int().positive().nullable().optional(),
+    quantity: z.number().int().positive().nullable().optional(),
+    productionRunId: z.number().int().positive().nullable().optional(),
 });
 
 export const AddSalesLineSchema = z.object({

@@ -1,8 +1,9 @@
 'use client'
 import React, { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
-import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns } from './actions';
+import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails } from './actions';
 import { runProduction } from '../production/actions';
 
 // Simple Types for the UI
@@ -13,6 +14,11 @@ type SalesOrder = {
     status: string;
     createdAt: Date;
     lines: any[];
+    item?: any | null;
+    quantity?: number | null;
+    productionRuns?: any[];
+    shipments?: any[];
+    purchaseOrders?: any[];
     productionRun?: {
         id: number;
         createdAt: Date;
@@ -45,8 +51,6 @@ export default function SalesPage() {
     // New Order Form State
     const [newCustomer, setNewCustomer] = useState('');
     const [newSoNumber, setNewSoNumber] = useState('');
-    const [recentRuns, setRecentRuns] = useState<any[]>([]);
-    const [selectedRunId, setSelectedRunId] = useState<string>('');
 
     // Selection State
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -138,13 +142,7 @@ export default function SalesPage() {
     async function openNewOrderModal() {
         setNewCustomer('');
         setNewSoNumber('');
-        setSelectedRunId('');
         setShowModal(true);
-        // Load recent production runs
-        const res = await getRecentProductionRuns();
-        if (res.success) {
-            setRecentRuns(res.data || []);
-        }
     }
 
     async function handlecreateOrder(e: React.FormEvent) {
@@ -153,8 +151,7 @@ export default function SalesPage() {
 
         const res = await createSalesOrder({
             customer: newCustomer,
-            soNumber: newSoNumber,
-            productionRunId: selectedRunId ? parseInt(selectedRunId) : undefined
+            soNumber: newSoNumber
         });
         if (res.success) {
             setShowModal(false);
@@ -380,26 +377,6 @@ export default function SalesPage() {
                                     />
                                 </div>
 
-                                <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--primary)' }}>Link Production Run (Optional)</label>
-                                    <select
-                                        className="input-group"
-                                        style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-card)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
-                                        value={selectedRunId}
-                                        onChange={e => setSelectedRunId(e.target.value)}
-                                    >
-                                        <option value="">-- None --</option>
-                                        {recentRuns.map(run => (
-                                            <option key={run.id} value={run.id}>
-                                                #{run.id} - {run.item?.name} ({run.quantity} units) - {new Date(run.createdAt).toLocaleDateString()}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                                        Selecting a run will automatically add the produced items to this order.
-                                    </p>
-                                </div>
-
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                     <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
                                     <button type="submit" className="btn btn-primary">Create Order</button>
@@ -497,20 +474,166 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
         });
     }
 
+    const [exploding, setExploding] = useState(false);
+
+    // Link State
+    const [editLink, setEditLink] = useState(false);
+    const [linkItemId, setLinkItemId] = useState(order.item?.id ? String(order.item.id) : '');
+    const [linkQty, setLinkQty] = useState<number | ''>(order.quantity || '');
+    const [linkRunId, setLinkRunId] = useState(order.productionRunId ? String(order.productionRunId) : '');
+    const [recentRuns, setRecentRuns] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (editLink && recentRuns.length === 0) {
+            getRecentProductionRuns().then(res => {
+                if (res.success) setRecentRuns(res.data || []);
+            });
+        }
+    }, [editLink]);
+
+    async function handleSaveLink() {
+        const res = await linkSalesOrderDetails({
+            id: order.id,
+            itemId: linkItemId ? parseInt(linkItemId) : null,
+            quantity: linkQty ? Number(linkQty) : null,
+            productionRunId: linkRunId ? parseInt(linkRunId) : null
+        });
+        if (res.success) {
+            setEditLink(false);
+            onUpdate();
+        } else {
+            showAlert('Failed to apply links', 'error');
+        }
+    }
+
+    async function handleExportBOM() {
+        if (!order.item || !order.quantity) {
+            showAlert('Order must be linked to a product and quantity for BOM explosion.', 'warning');
+            return;
+        }
+        setExploding(true);
+        const res = await explodeOrderBOM(order.item.id, order.quantity);
+        setExploding(false);
+        if (!res.success || !res.data) {
+            showAlert(res.error || 'Failed to explode BOM', 'error');
+            return;
+        }
+        const data = res.data.map((row: any) => ({
+            SKU: row.item.sku,
+            Name: row.item.name,
+            'Base Qty': row.baseQuantity,
+            'Required Qty (+10%)': row.requiredQuantity,
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'BOM Requirements');
+        XLSX.writeFile(wb, `SO_${order.soNumber}_BOM.xlsx`);
+    }
+
     return (
         <div style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60
         }}>
-            <div className="card" style={{ width: '900px', maxWidth: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+            <div className="card" style={{ width: '1000px', maxWidth: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-dark)' }}>
                     <div>
                         <h2 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Order {order.soNumber}</h2>
                         <div style={{ color: 'var(--text-muted)' }}>Customer: {order.customer}</div>
                     </div>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                        <X size={24} />
-                    </button>
+                    {editLink ? (
+                        <div style={{ background: 'var(--bg-card)', padding: '0.5rem 1rem', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Target Product</label>
+                                <select value={linkItemId} onChange={e => setLinkItemId(e.target.value)} style={{ padding: '0.25rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px', display: 'block' }}>
+                                    <option value="">-- None --</option>
+                                    {items.filter((i: Item) => i.type === 'Product' || i.type === 'Assembly').map((item: Item) => (
+                                        <option key={item.id} value={item.id}>{item.sku}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Qty</label>
+                                <input type="number" min="1" value={linkQty} onChange={e => setLinkQty(parseInt(e.target.value) || '')} style={{ width: '60px', padding: '0.25rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px', display: 'block' }} />
+                            </div>
+                            <div style={{ marginLeft: '0.5rem' }}>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Production Run</label>
+                                <select value={linkRunId} onChange={e => setLinkRunId(e.target.value)} style={{ padding: '0.25rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px', display: 'block' }}>
+                                    <option value="">-- None --</option>
+                                    {recentRuns.map(run => <option key={run.id} value={run.id}>#{run.id} - {run.item?.name}</option>)}
+                                </select>
+                            </div>
+                            <button className="btn btn-primary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '100%' }} onClick={handleSaveLink}>Save</button>
+                            <button className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', height: '100%' }} onClick={() => setEditLink(false)}>Cancel</button>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            {order.item ? (
+                                <div style={{ background: 'var(--bg-card)', padding: '0.5rem 1rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Target Product</div>
+                                    <div style={{ fontWeight: 600 }}>{order.quantity}x {order.item.sku}</div>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No Target Product</div>
+                            )}
+                            <button className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={() => { setLinkItemId(order.item?.id ? String(order.item.id) : ''); setLinkQty(order.quantity || ''); setLinkRunId(order.productionRunId ? String(order.productionRunId) : ''); setEditLink(true); }}>
+                                {order.item || order.productionRunId ? 'Edit Links' : 'Add Link'}
+                            </button>
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        {order.item && order.quantity && (
+                            <button className="btn btn-outline" style={{ color: '#10b981', borderColor: '#10b981' }} onClick={handleExportBOM} disabled={exploding}>
+                                {exploding ? 'Exporting...' : 'Export BOM'}
+                            </button>
+                        )}
+                        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                            <X size={24} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Dashboard Section */}
+                <div style={{ padding: '1rem 1.5rem', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                    <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Production Status</div>
+                        {order.productionRuns && order.productionRuns.length > 0 ? (
+                            order.productionRuns.map((pr: any) => (
+                                <div key={pr.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span>Run #{pr.id}</span>
+                                    <span style={{ color: pr.status === 'Completed' ? '#10b981' : '#f59e0b' }}>{pr.status}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>No production runs linked.</div>
+                        )}
+                    </div>
+                    <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Procurement Status</div>
+                        {order.purchaseOrders && order.purchaseOrders.length > 0 ? (
+                            order.purchaseOrders.map((po: any) => (
+                                <div key={po.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span>{po.poNumber}</span>
+                                    <span>{po.status}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>No POs linked.</div>
+                        )}
+                    </div>
+                    <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Shipping Status</div>
+                        {order.shipments && order.shipments.length > 0 ? (
+                            order.shipments.map((sh: any) => (
+                                <div key={sh.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                    <span>{sh.shipmentNo}</span>
+                                    <span>{sh.status}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>No shipments linked.</div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="responsive-grid-sidebar">

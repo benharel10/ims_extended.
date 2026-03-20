@@ -72,6 +72,7 @@ model Item {
   packageItems PackageItem[]
   productionRuns ProductionRun[]
   stocks       ItemStock[]
+  salesOrders  SalesOrder[]
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -128,6 +129,9 @@ model PurchaseOrder {
 
   lines        POLine[]
   
+  salesOrderId Int?
+  salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -155,7 +159,13 @@ model SalesOrder {
   
   lines     SalesLine[]
   shipments Shipment[]
+  purchaseOrders PurchaseOrder[]
+  productionRuns ProductionRun[] @relation("SalesOrderProduction")
   
+  itemId    Int?
+  item      Item?      @relation(fields: [itemId], references: [id])
+  quantity  Int?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -256,6 +266,9 @@ model ProductionRun {
   fromWarehouse   Warehouse? @relation("ProductionFrom", fields: [fromWarehouseId], references: [id])
   toWarehouse     Warehouse? @relation("ProductionTo", fields: [toWarehouseId], references: [id])
   
+  salesOrderId    Int?
+  salesOrder      SalesOrder? @relation("SalesOrderProduction", fields: [salesOrderId], references: [id])
+
   salesOrders SalesOrder[]
 }
 

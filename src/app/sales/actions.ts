@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 import { logError } from '@/lib/errorLogger';
 import { createInvoiceInICount } from '@/lib/icount';
-import { CreateSalesOrderSchema, AddSalesLineSchema, UpdateSalesStatusSchema, parseSchema } from '@/lib/schemas';
+import { CreateSalesOrderSchema, AddSalesLineSchema, UpdateSalesStatusSchema, LinkSalesOrderSchema, parseSchema } from '@/lib/schemas';
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
@@ -17,7 +17,11 @@ export async function getSalesOrders() {
         const orders = await prisma.salesOrder.findMany({
             include: {
                 lines: true,
-                productionRun: { include: { item: true } }
+                productionRun: { include: { item: true } },
+                item: true,
+                shipments: true,
+                purchaseOrders: true,
+                productionRuns: true
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -85,6 +89,8 @@ export async function createSalesOrder(data: {
     customer: string;
     soNumber: string;
     productionRunId?: number;
+    itemId?: number;
+    quantity?: number;
 }) {
     try {
         const session = await getSession();
@@ -100,7 +106,9 @@ export async function createSalesOrder(data: {
                     customer: p.data.customer,
                     soNumber: p.data.soNumber,
                     status: 'Draft',
-                    productionRunId: p.data.productionRunId ?? null
+                    productionRunId: p.data.productionRunId ?? null,
+                    itemId: p.data.itemId ?? null,
+                    quantity: p.data.quantity ?? null
                 }
             });
 
@@ -131,6 +139,38 @@ export async function createSalesOrder(data: {
             ? `SO number "${data.soNumber?.trim()}" already exists`
             : 'Failed to create sales order. Please try again.';
         return { success: false, error: msg };
+    }
+}
+
+export async function linkSalesOrderDetails(data: { id: number, itemId?: number | null, quantity?: number | null, productionRunId?: number | null }) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const p = parseSchema(LinkSalesOrderSchema, data);
+        if (!p.success) return { success: false, error: p.error };
+
+        const so = await prisma.salesOrder.findUnique({ where: { id: p.data.id } });
+        if (!so) return { success: false, error: 'Sales order not found' };
+
+        if (so.status !== 'Draft') {
+            return { success: false, error: 'Cannot link items to a Sales Order that is not in Draft status' };
+        }
+
+        await prisma.salesOrder.update({
+            where: { id: p.data.id },
+            data: {
+                itemId: p.data.itemId,
+                quantity: p.data.quantity,
+                productionRunId: p.data.productionRunId
+            }
+        });
+
+        revalidatePath('/sales');
+        return { success: true };
+    } catch (error) {
+        await logError('sales.linkSalesOrderDetails', error);
+        return { success: false, error: 'Failed to update order links. Please try again.' };
     }
 }
 
@@ -340,5 +380,62 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
     } catch (error) {
         await logError('sales.bulkDeleteSalesOrders', error);
         return { success: false, error: 'Failed to delete sales orders. Please try again.' };
+    }
+}
+
+// ─── Procurement & BOM ────────────────────────────────────────────────────────
+
+export async function explodeOrderBOM(itemId: number, orderQty: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const item = await prisma.item.findUnique({ where: { id: itemId } });
+        if (!item) return { success: false, error: 'Item not found' };
+
+        // Requirements map: key -> { item, baseQuantity }
+        const requirements = new Map<number, { item: any; baseQuantity: number }>();
+
+        async function traverse(currentId: number, multiplier: number) {
+            const boms = await prisma.bOM.findMany({
+                where: { parentId: currentId, deletedAt: null },
+                include: { child: true }
+            });
+
+            if (boms.length === 0) {
+                // It's a leaf node -> raw material / base component
+                const existing = requirements.get(currentId);
+                if (existing) {
+                    existing.baseQuantity += multiplier;
+                } else {
+                    const currentItem = await prisma.item.findUnique({ where: { id: currentId } });
+                    if (currentItem) {
+                        requirements.set(currentId, { item: currentItem, baseQuantity: multiplier });
+                    }
+                }
+                return;
+            }
+
+            // It has children, traverse them
+            for (const bom of boms) {
+                await traverse(bom.childId, multiplier * Number(bom.quantity));
+            }
+        }
+
+        // We only explode if it's NOT a raw item initially, but let the traverse handle it.
+        // If the item itself has no BOM, it just becomes the sole requirement.
+        await traverse(itemId, orderQty);
+
+        // Calculate buffered quantity (10% extra)
+        const exploded = Array.from(requirements.values()).map(req => ({
+            item: req.item,
+            baseQuantity: req.baseQuantity,
+            requiredQuantity: Math.ceil(req.baseQuantity * 1.10)
+        }));
+
+        return { success: true, data: exploded };
+    } catch (error) {
+        await logError('sales.explodeOrderBOM', error);
+        return { success: false, error: 'Failed to calculate BOM explosion' };
     }
 }
