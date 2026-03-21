@@ -242,6 +242,32 @@ export async function updateSalesOrderStatus(id: number, status: string) {
 
             if (!currentOrder) throw new Error('Order not found');
 
+            // ALLOCATION LOGIC:
+            if (status === 'Confirmed' && !currentOrder.isAllocated) {
+                // If moving into Confirmed state, allocate the stock.
+                for (const line of currentOrder.lines) {
+                    await tx.item.update({
+                        where: { id: line.itemId },
+                        data: { allocatedStock: { increment: line.quantity } }
+                    });
+                }
+                await tx.salesOrder.update({ where: { id }, data: { isAllocated: true } });
+            }
+
+            if (status === 'Cancelled' && currentOrder.isAllocated) {
+                // If moving to Cancelled, drop the reservations.
+                for (const line of currentOrder.lines) {
+                    const remainingAllocated = line.quantity - line.shipped;
+                    if (remainingAllocated > 0) {
+                        await tx.item.update({
+                            where: { id: line.itemId },
+                            data: { allocatedStock: { decrement: remainingAllocated } }
+                        });
+                    }
+                }
+                await tx.salesOrder.update({ where: { id }, data: { isAllocated: false } });
+            }
+
             // If the user manually marks the SO as Completed, deduct whatever hasn't been shipped yet
             if (status === 'Completed' && currentOrder.status !== 'Completed') {
                 for (const line of currentOrder.lines) {
@@ -253,7 +279,11 @@ export async function updateSalesOrderStatus(id: number, status: string) {
                         if (!currentItem) throw new Error(`Item not found for concurrency check`);
                         const occResult = await tx.item.updateMany({
                             where: { id: line.itemId, version: currentItem.version },
-                            data: { currentStock: { decrement: remainingToDeduct }, version: { increment: 1 } }
+                            data: { 
+                                currentStock: { decrement: remainingToDeduct }, 
+                                ...(currentOrder.isAllocated && { allocatedStock: { decrement: remainingToDeduct } }),
+                                version: { increment: 1 } 
+                            }
                         });
                         if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
 
@@ -445,5 +475,102 @@ export async function explodeOrderBOM(orderId: number) {
     } catch (error) {
         await logError('sales.explodeOrderBOM', error);
         return { success: false, error: 'Failed to calculate BOM explosion' };
+    }
+}
+
+// ─── Procurement Wizard ───────────────────────────────────────────────────────
+
+export async function previewMissingRequirements(orderId: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const explodeRes = await explodeOrderBOM(orderId);
+        if (!explodeRes.success || !explodeRes.data) {
+            return { success: false, error: 'Failed to calculate BOM requirements' };
+        }
+
+        const shortages = explodeRes.data
+            .map((req) => {
+                const current = Number(req.item.currentStock || 0);
+                const allocated = Number(req.item.allocatedStock || 0);
+                const available = Math.max(0, current - allocated);
+                const shortfall = req.requiredQuantity - available;
+                return {
+                    item: req.item,
+                    requiredQty: req.requiredQuantity,
+                    available,
+                    shortfall
+                };
+            })
+            .filter((r) => r.shortfall > 0);
+
+        return { success: true, data: shortages };
+    } catch (error) {
+        await logError('sales.previewMissingRequirements', error);
+        return { success: false, error: 'Failed to preview requirements.' };
+    }
+}
+
+export async function autoProcureMissingRequirements(orderId: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const order = await prisma.salesOrder.findUnique({ where: { id: orderId } });
+        if (!order) return { success: false, error: 'Order not found' };
+
+        const previewRes = await previewMissingRequirements(orderId);
+        if (!previewRes.success || !previewRes.data) {
+            return { success: false, error: previewRes.error || 'Failed to compute shortages' };
+        }
+
+        const shortages = previewRes.data;
+        if (shortages.length === 0) {
+            return { success: true, message: 'No shortages detected — you have sufficient available stock!' };
+        }
+
+        // Group shortages by supplier (item brand) to create one PO per supplier
+        const supplierGroups = new Map<string, typeof shortages>();
+        for (const s of shortages) {
+            const supplier = s.item.brand?.trim() || 'Unspecified Supplier';
+            if (!supplierGroups.has(supplier)) supplierGroups.set(supplier, []);
+            supplierGroups.get(supplier)!.push(s);
+        }
+
+        let createdCount = 0;
+        await prisma.$transaction(async (tx) => {
+            for (const [supplier, items] of Array.from(supplierGroups.entries())) {
+                const timestamp = Date.now();
+                const rand = Math.floor(Math.random() * 9000) + 1000;
+                const poNumber = `PO-AUTO-${timestamp}-${rand}`;
+                await tx.purchaseOrder.create({
+                    data: {
+                        poNumber,
+                        supplier,
+                        status: 'Draft',
+                        salesOrderId: orderId,
+                        lines: {
+                            create: items.map((s) => ({
+                                itemId: s.item.id,
+                                quantity: s.shortfall,
+                                unitCost: s.item.cost || 0
+                            }))
+                        }
+                    }
+                });
+                createdCount++;
+            }
+        });
+
+        revalidatePath('/purchasing');
+        revalidatePath('/sales');
+        return {
+            success: true,
+            message: `Created ${createdCount} Purchase Order draft(s) covering ${shortages.length} missing component(s). Review them in Purchasing.`
+        };
+    } catch (error) {
+        await logError('sales.autoProcureMissingRequirements', error);
+        return { success: false, error: 'Failed to auto-procure. Please try again.' };
     }
 }

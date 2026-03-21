@@ -1,9 +1,9 @@
-'use client'
+﻿'use client'
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
-import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails } from './actions';
+import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements } from './actions';
 import { createEmptyPO, getBrands } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
@@ -20,6 +20,8 @@ type SalesOrder = {
     productionRuns?: any[];
     shipments?: any[];
     purchaseOrders?: any[];
+    productionRunId?: number | null;
+    isAllocated?: boolean;
     productionRun?: {
         id: number;
         createdAt: Date;
@@ -34,6 +36,7 @@ type Item = {
     name: string;
     type: string;
     currentStock: number;
+    allocatedStock?: number;
     price: number;
     brand?: string | null;
     isSerialized?: boolean;
@@ -491,6 +494,39 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
 
     const [exploding, setExploding] = useState(false);
 
+    // Procurement Wizard state
+    const [showWizard, setShowWizard] = useState(false);
+    const [wizardLoading, setWizardLoading] = useState(false);
+    const [wizardShortages, setWizardShortages] = useState<any[] | null>(null);
+    const [wizardProcuring, setWizardProcuring] = useState(false);
+
+    async function handleOpenWizard() {
+        setShowWizard(true);
+        setWizardShortages(null);
+        setWizardLoading(true);
+        const res = await previewMissingRequirements(order.id);
+        setWizardLoading(false);
+        if (!res.success) {
+            showAlert(res.error || 'Failed to analyse requirements', 'error');
+            setShowWizard(false);
+        } else {
+            setWizardShortages(res.data || []);
+        }
+    }
+
+    async function handleAutoProcure() {
+        setWizardProcuring(true);
+        const res = await autoProcureMissingRequirements(order.id);
+        setWizardProcuring(false);
+        if (res.success) {
+            showAlert(res.message || 'POs created!', 'success');
+            setShowWizard(false);
+            onUpdate();
+        } else {
+            showAlert(res.error || 'Failed to create POs', 'error');
+        }
+    }
+
     // Link State
     const [editLink, setEditLink] = useState(false);
     const [linkItemId, setLinkItemId] = useState(order.item?.id ? String(order.item.id) : '');
@@ -621,9 +657,14 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                     )}
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         {order.lines && order.lines.length > 0 && (
-                            <button className="btn btn-outline" style={{ color: '#10b981', borderColor: '#10b981' }} onClick={handleExportBOM} disabled={exploding}>
-                                {exploding ? 'Exporting...' : 'Export BOM'}
-                            </button>
+                            <>
+                                <button className="btn btn-outline" style={{ color: '#10b981', borderColor: '#10b981' }} onClick={handleExportBOM} disabled={exploding}>
+                                    {exploding ? 'Exporting...' : 'Export BOM'}
+                                </button>
+                                <button className="btn btn-outline" style={{ color: '#f59e0b', borderColor: '#f59e0b' }} onClick={handleOpenWizard}>
+                                    🔮 Procurement Wizard
+                                </button>
+                            </>
                         )}
                         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                             <X size={24} />
@@ -798,7 +839,7 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                             <div style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>{item.name}</div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', opacity: 0.7 }}>
                                                 <span>{item.type}</span>
-                                                <span>Stock: {item.currentStock}</span>
+                                                <span>Avail: {Math.max(0, (item.currentStock ?? 0) - (item.allocatedStock ?? 0))}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -882,6 +923,151 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                     </div>
                 </div>
             )}
-        </div>
-    );
-}
+
+            {/* Procurement Wizard Modal */}
+            {showWizard && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                    <div className="card" style={{ width: '700px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+                        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h3 style={{ marginBottom: '0.25rem' }}>🔮 Procurement Wizard</h3>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>BOM requirements vs. available stock for {order.soNumber}</div>
+                            </div>
+                            <button onClick={() => setShowWizard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={22} /></button>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+                            {wizardLoading ? (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Analysing BOM requirements...</div>
+                            ) : (wizardShortages ?? []).length === 0 && !wizardLoading ? (
+                                <div style={{ textAlign: 'center', padding: '3rem' }}>
+                                    <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✅</div>
+                                    <div style={{ fontWeight: 600, fontSize: '1.1rem', color: '#10b981' }}>All components are in stock!</div>
+                                    <div style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Available stock covers all BOM requirements (incl. 10% buffer).</div>
+                                </div>
+                            ) : (wizardShortages ?? []).length > 0 ? (
+                                <>
+                                    <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem' }}>
+                                        ⚠️ <strong>{(wizardShortages ?? []).length} component(s)</strong> are short. Auto-generate Purchase Order drafts below.
+                                    </div>
+                                    <div className="table-responsive">
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                                    <th style={{ padding: '0.75rem' }}>Component</th>
+                                                    <th style={{ padding: '0.75rem' }}>Supplier</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Required</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Available</th>
+                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Shortfall</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(wizardShortages ?? []).map((s: any) => (
+                                                    <tr key={s.item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                        <td style={{ padding: '0.75rem' }}>
+                                                            <div style={{ fontWeight: 500 }}>{s.item.name}</div>
+                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.item.sku}</div>
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{s.item.brand || '—'}</td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{s.requiredQty}</td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{s.available}</td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>{s.shortfall}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            ) : null}
+                        </div>
+
+                        {(wizardShortages ?? []).length > 0 && (
+                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem', background: 'var(--bg-dark)' }}>
+                                <button className="btn btn-outline" onClick={() => setShowWizard(false)}>Cancel</button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleAutoProcure}
+                                    disabled={wizardProcuring}
+                                    style={{ background: '#f59e0b', borderColor: '#f59e0b' }}
+                                >
+                                    {wizardProcuring ? 'Generating POs...' : `⚡ Auto-Generate ${(wizardShortages ?? []).length} PO Line(s)`}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+             {/* Procurement Wizard Modal */}
+             {showWizard && (
+                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                     <div className="card" style={{ width: '700px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+                         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div>
+                                 <h3 style={{ marginBottom: '0.25rem' }}>🔮 Procurement Wizard</h3>
+                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>BOM requirements vs. available stock for {order.soNumber}</div>
+                             </div>
+                             <button onClick={() => setShowWizard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={22} /></button>
+                         </div>
+                         <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+                             {wizardLoading ? (
+                                 <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Analysing BOM requirements...</div>
+                             ) : (wizardShortages ?? []).length === 0 && !wizardLoading ? (
+                                 <div style={{ textAlign: 'center', padding: '3rem' }}>
+                                     <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✅</div>
+                                     <div style={{ fontWeight: 600, fontSize: '1.1rem', color: '#10b981' }}>All components are in stock!</div>
+                                     <div style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Available stock covers all BOM requirements (incl. 10% buffer).</div>
+                                 </div>
+                             ) : (wizardShortages ?? []).length > 0 ? (
+                                 <>
+                                     <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem' }}>
+                                         ⚠️ <strong>{(wizardShortages ?? []).length} component(s)</strong> are short. Auto-generate Purchase Order drafts below.
+                                     </div>
+                                     <div className="table-responsive">
+                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                             <thead>
+                                                 <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                                     <th style={{ padding: '0.75rem' }}>Component</th>
+                                                     <th style={{ padding: '0.75rem' }}>Supplier</th>
+                                                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Required</th>
+                                                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Available</th>
+                                                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Shortfall</th>
+                                                 </tr>
+                                             </thead>
+                                             <tbody>
+                                                 {(wizardShortages ?? []).map((s: any) => (
+                                                     <tr key={s.item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                         <td style={{ padding: '0.75rem' }}>
+                                                             <div style={{ fontWeight: 500 }}>{s.item.name}</div>
+                                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.item.sku}</div>
+                                                         </td>
+                                                         <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{s.item.brand || '—'}</td>
+                                                         <td style={{ padding: '0.75rem', textAlign: 'right' }}>{s.requiredQty}</td>
+                                                         <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{s.available}</td>
+                                                         <td style={{ padding: '0.75rem', textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>{s.shortfall}</td>
+                                                     </tr>
+                                                 ))}
+                                             </tbody>
+                                         </table>
+                                     </div>
+                                 </>
+                             ) : null}
+                         </div>
+                         {(wizardShortages ?? []).length > 0 && (
+                             <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem', background: 'var(--bg-dark)' }}>
+                                 <button className="btn btn-outline" onClick={() => setShowWizard(false)}>Cancel</button>
+                                 <button
+                                     className="btn btn-primary"
+                                     onClick={handleAutoProcure}
+                                     disabled={wizardProcuring}
+                                     style={{ background: '#f59e0b', borderColor: '#f59e0b' }}
+                                 >
+                                     {wizardProcuring ? 'Generating POs...' : `⚡ Auto-Generate ${(wizardShortages ?? []).length} PO Line(s)`}
+                                 </button>
+                             </div>
+                         )}
+                     </div>
+                 </div>
+             )}
+         </div>
+     );
+ }

@@ -607,8 +607,10 @@ export default function InventoryPage() {
                 'Brand': item.brand || '',
                 'Type': item.type,
                 'Warehouse': item.warehouse || '',
-                'Total Stock': item.currentStock || 0,
+                'Total Physical': item.currentStock || 0,
                 'Warehouse Breakdown': warehouseStocks,
+                'Allocated': item.allocatedStock || 0,
+                'Available': Math.max(0, (item.currentStock || 0) - (item.allocatedStock || 0)),
                 'Min Stock': item.minStock || 0,
                 'Cost': item.cost || 0,
                 'Price': item.price || 0,
@@ -870,7 +872,7 @@ export default function InventoryPage() {
                                         <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('brand')}>Brand {sortConfig?.key === 'brand' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                                         <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('type')}>Type {sortConfig?.key === 'type' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                                         <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('warehouse')}>Warehouse {sortConfig?.key === 'warehouse' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('currentStock')}>Stock {sortConfig?.key === 'currentStock' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                                        <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('currentStock')}>Available {sortConfig?.key === 'currentStock' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                                         <th style={{ padding: '1rem', cursor: 'pointer' }} onClick={() => handleSort('cost')}>Cost {sortConfig?.key === 'cost' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                                         <th style={{ padding: '1rem' }}>Actions</th>
                                     </tr>
@@ -952,8 +954,17 @@ export default function InventoryPage() {
                                                                         {item.stocks?.find((s: any) => s.warehouseId === parseInt(selectedWarehouse))?.quantity || 0}
                                                                     </span>
                                                                 ) : (
-                                                                    // Show Total
-                                                                    <span>{item.currentStock ?? 0}</span>
+                                                                    // Show Available & Allocated
+                                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                        <span style={{ fontSize: '1rem', fontWeight: 600 }} title="Available Stock (Total Physical - Allocated)">
+                                                                            {Math.max(0, (item.currentStock ?? 0) - (item.allocatedStock ?? 0))}
+                                                                        </span>
+                                                                        {(item.allocatedStock ?? 0) > 0 && (
+                                                                            <span style={{ fontSize: '0.75rem', color: '#f59e0b' }} title="Allocated to Confirmed Sales Orders">
+                                                                                Alloc: {item.allocatedStock}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 )}
 
                                                                 <button

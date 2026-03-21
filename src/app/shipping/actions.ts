@@ -231,12 +231,16 @@ export async function confirmArrival(id: number) {
                             // remaining > 0 means not enough stock across all warehouses — still proceed, currentStock handles it
                         }
 
-                        // Deduct overall item currentStock (OCC)
+                        // Deduct overall item currentStock (and allocatedStock if linked to SO)
                         const currentItem = await tx.item.findUnique({ where: { id: pItem.itemId }, select: { version: true } });
                         if (!currentItem) throw new Error('Item not found');
                         const occResult = await tx.item.updateMany({
                             where: { id: pItem.itemId, version: currentItem.version },
-                            data: { currentStock: { decrement: pItem.quantity }, version: { increment: 1 } }
+                            data: { 
+                                currentStock: { decrement: pItem.quantity }, 
+                                ...(shipment.soId && { allocatedStock: { decrement: pItem.quantity } }),
+                                version: { increment: 1 } 
+                            }
                         });
                         if (occResult.count === 0) throw new Error('Concurrency conflict — please try again.');
 
@@ -309,12 +313,16 @@ export async function updateShipmentStatus(id: number, status: string) {
                             });
                         }
 
-                        // 2. Deduct overall item currentStock
+                        // 2. Deduct overall item currentStock (and allocatedStock)
                         const currentItem = await tx.item.findUnique({ where: { id: pItem.itemId }, select: { version: true } });
                         if (!currentItem) throw new Error('Item not found for concurrency check');
                         const occResult = await tx.item.updateMany({
                             where: { id: pItem.itemId, version: currentItem.version },
-                            data: { currentStock: { decrement: pItem.quantity }, version: { increment: 1 } }
+                            data: { 
+                                currentStock: { decrement: pItem.quantity }, 
+                                ...(shipment.soId && { allocatedStock: { decrement: pItem.quantity } }),
+                                version: { increment: 1 } 
+                            }
                         });
                         if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
 

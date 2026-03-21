@@ -48,9 +48,10 @@ model Item {
   name         String
   description  String?
   type         String   @default("Raw") // "Raw", "Assembly", "Product", "Raw Material"
-  minStock     Decimal  @default(0) @db.Decimal(10, 3)
-  currentStock Decimal  @default(0) @db.Decimal(10, 3)
-  uom          String   @default("Units")
+  minStock       Decimal  @default(0) @db.Decimal(10, 3)
+  currentStock   Decimal  @default(0) @db.Decimal(10, 3)
+  allocatedStock Decimal  @default(0) @db.Decimal(10, 3)
+  uom            String   @default("Units")
   cost         Float    @default(0.0)
   price        Float    @default(0.0)
   isSerialized Boolean  @default(false)
@@ -156,11 +157,12 @@ model POLine {
 
 model SalesOrder {
   id        Int       @id @default(autoincrement())
-  soNumber  String    @unique
-  customer  String
-  status    String    @default("Draft")
+  soNumber    String    @unique
+  customer    String
+  status      String    @default("Draft")
+  isAllocated Boolean   @default(false)
   
-  lines     SalesLine[]
+  lines       SalesLine[]
   shipments Shipment[]
   purchaseOrders PurchaseOrder[]
   productionRuns ProductionRun[] @relation("SalesOrderProduction")
