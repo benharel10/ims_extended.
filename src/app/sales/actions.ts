@@ -23,7 +23,8 @@ export async function getSalesOrders() {
                 purchaseOrders: true,
                 productionRuns: true
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            take: 500
         });
         return { success: true, data: orders };
     } catch (error) {

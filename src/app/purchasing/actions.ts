@@ -86,7 +86,8 @@ export async function getOpenPurchaseOrders() {
         const pos = await prisma.purchaseOrder.findMany({
             where: { status: { not: 'Completed' } },
             include: { lines: { include: { item: true } } },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            take: 500
         });
         return { success: true, data: pos };
     } catch (error) {

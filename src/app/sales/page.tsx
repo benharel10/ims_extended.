@@ -178,6 +178,15 @@ export default function SalesPage() {
         });
     }
 
+    const [visibleCount, setVisibleCount] = useState(20);
+    const filteredOrders = orders.filter(order =>
+        searchTerm === '' ||
+        order.soNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.status.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    const displayedOrders = filteredOrders.slice(0, visibleCount);
+
     return (
         <>
             <div className="animate-fade-in">
@@ -265,13 +274,7 @@ export default function SalesPage() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        orders
-                                            .filter(order =>
-                                                searchTerm === '' ||
-                                                order.soNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                                order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                                order.status.toLowerCase().includes(searchTerm.toLowerCase())
-                                            )
+                                        displayedOrders
                                             .map(order => (
                                                 <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                                                     <td style={{ padding: '1rem' }}>
@@ -333,6 +336,17 @@ export default function SalesPage() {
                                     )}
                                 </tbody>
                             </table>
+                            {filteredOrders.length > visibleCount && (
+                                <div style={{ textAlign: 'center', marginTop: '1rem', padding: '1rem' }}>
+                                    <button
+                                        onClick={() => setVisibleCount(prev => prev + 20)}
+                                        className="btn btn-outline"
+                                        style={{ width: '100%', maxWidth: '300px' }}
+                                    >
+                                        Load More ({filteredOrders.length - visibleCount} remaining)
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
