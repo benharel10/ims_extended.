@@ -638,7 +638,7 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
 
                 <div className="responsive-grid-sidebar">
                     {/* Left: Order Lines */}
-                    <div style={{ padding: '1.5rem', overflowY: 'auto', borderRight: '1px solid var(--border-color)' }}>
+                    <div style={{ padding: '1.5rem', overflowY: 'auto', borderRight: '1px solid var(--border-color)', minHeight: 0 }}>
                         <h4 style={{ marginBottom: '1rem' }}>Order Items</h4>
                         <div className="table-responsive">
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
@@ -696,7 +696,7 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                     </div>
 
                     {/* Right: Add Item (Product Picker) */}
-                    <div style={{ padding: '1.5rem', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ padding: '1.5rem', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                         <h4 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Plus size={16} /> Add Item
                         </h4>
