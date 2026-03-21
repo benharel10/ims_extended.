@@ -386,13 +386,16 @@ export async function bulkDeleteSalesOrders(ids: number[]) {
 
 // ─── Procurement & BOM ────────────────────────────────────────────────────────
 
-export async function explodeOrderBOM(itemId: number, orderQty: number) {
+export async function explodeOrderBOM(orderId: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const item = await prisma.item.findUnique({ where: { id: itemId } });
-        if (!item) return { success: false, error: 'Item not found' };
+        const order = await prisma.salesOrder.findUnique({
+            where: { id: orderId },
+            include: { lines: true }
+        });
+        if (!order) return { success: false, error: 'Order not found' };
 
         // Requirements map: key -> { item, baseQuantity }
         const requirements = new Map<number, { item: any; baseQuantity: number }>();
@@ -425,7 +428,11 @@ export async function explodeOrderBOM(itemId: number, orderQty: number) {
 
         // We only explode if it's NOT a raw item initially, but let the traverse handle it.
         // If the item itself has no BOM, it just becomes the sole requirement.
-        await traverse(itemId, orderQty);
+        for (const line of order.lines) {
+            if (line.itemId) {
+                await traverse(line.itemId, line.quantity);
+            }
+        }
 
         // Calculate buffered quantity (10% extra)
         const exploded = Array.from(requirements.values()).map(req => ({

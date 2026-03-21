@@ -558,12 +558,12 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
     }
 
     async function handleExportBOM() {
-        if (!order.item || !order.quantity) {
-            showAlert('Order must be linked to a product and quantity for BOM explosion.', 'warning');
+        if (!order.lines || order.lines.length === 0) {
+            showAlert('Order must have items added to export BOM.', 'warning');
             return;
         }
         setExploding(true);
-        const res = await explodeOrderBOM(order.item.id, order.quantity);
+        const res = await explodeOrderBOM(order.id);
         setExploding(false);
         if (!res.success || !res.data) {
             showAlert(res.error || 'Failed to explode BOM', 'error');
@@ -595,20 +595,7 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                     {editLink ? (
                         <div style={{ background: 'var(--bg-card)', padding: '0.5rem 1rem', borderRadius: '4px', border: '1px solid var(--border-color)', display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
                             <div>
-                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Target Product</label>
-                                <select value={linkItemId} onChange={e => setLinkItemId(e.target.value)} style={{ padding: '0.25rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px', display: 'block' }}>
-                                    <option value="">-- None --</option>
-                                    {items.filter((i: Item) => i.type === 'Product' || i.type === 'Assembly').map((item: Item) => (
-                                        <option key={item.id} value={item.id}>{item.sku}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Qty</label>
-                                <input type="number" min="1" value={linkQty} onChange={e => setLinkQty(parseInt(e.target.value) || '')} style={{ width: '60px', padding: '0.25rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px', display: 'block' }} />
-                            </div>
-                            <div style={{ marginLeft: '0.5rem' }}>
-                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Production Run</label>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Linked Production Run</label>
                                 <select value={linkRunId} onChange={e => setLinkRunId(e.target.value)} style={{ padding: '0.25rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px', display: 'block' }}>
                                     <option value="">-- None --</option>
                                     {recentRuns.map(run => <option key={run.id} value={run.id}>#{run.id} - {run.item?.name}</option>)}
@@ -619,21 +606,21 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                         </div>
                     ) : (
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            {order.item ? (
+                            {order.productionRunId ? (
                                 <div style={{ background: 'var(--bg-card)', padding: '0.5rem 1rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Target Product</div>
-                                    <div style={{ fontWeight: 600 }}>{order.quantity}x {order.item.sku}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Linked Production Run</div>
+                                    <div style={{ fontWeight: 600 }}>#{order.productionRunId}</div>
                                 </div>
                             ) : (
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No Target Product</div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No Run Linked</div>
                             )}
-                            <button className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={() => { setLinkItemId(order.item?.id ? String(order.item.id) : ''); setLinkQty(order.quantity || ''); setLinkRunId(order.productionRunId ? String(order.productionRunId) : ''); setEditLink(true); }}>
-                                {order.item || order.productionRunId ? 'Edit Links' : 'Add Link'}
+                            <button className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={() => { setLinkRunId(order.productionRunId ? String(order.productionRunId) : ''); setEditLink(true); }}>
+                                {order.productionRunId ? 'Edit Link' : 'Link Production Run'}
                             </button>
                         </div>
                     )}
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        {order.item && order.quantity && (
+                        {order.lines && order.lines.length > 0 && (
                             <button className="btn btn-outline" style={{ color: '#10b981', borderColor: '#10b981' }} onClick={handleExportBOM} disabled={exploding}>
                                 {exploding ? 'Exporting...' : 'Export BOM'}
                             </button>
