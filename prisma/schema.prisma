@@ -159,6 +159,7 @@ model SalesOrder {
   id        Int       @id @default(autoincrement())
   soNumber    String    @unique
   customer    String
+  customerOrderNumber String?   // Customer's own PO/order reference
   status      String    @default("Draft")
   isAllocated Boolean   @default(false)
   
@@ -310,4 +311,10 @@ model SystemError {
   stack     String?  // Full stack trace for debugging
   userId    Int?     // Which user triggered the failing action (nullable)
   createdAt DateTime @default(now())
+}
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

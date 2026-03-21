@@ -1,9 +1,9 @@
-﻿'use client'
+'use client'
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
-import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements } from './actions';
+import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer } from './actions';
 import { createEmptyPO, getBrands } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
@@ -12,6 +12,7 @@ type SalesOrder = {
     id: number;
     soNumber: string;
     customer: string;
+    customerOrderNumber?: string | null;
     status: string;
     createdAt: Date;
     lines: any[];
@@ -55,6 +56,15 @@ export default function SalesPage() {
     // New Order Form State
     const [newCustomer, setNewCustomer] = useState('');
     const [newSoNumber, setNewSoNumber] = useState('');
+    const [newCustomerOrderNum, setNewCustomerOrderNum] = useState('');
+
+    // Customer list
+    const [customers, setCustomers] = useState<string[]>([]);
+    const [addingCustomer, setAddingCustomer] = useState(false);
+    const [newCustomerInput, setNewCustomerInput] = useState('');
+
+    // Filter
+    const [customerFilter, setCustomerFilter] = useState('');
 
     // Selection State
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -146,6 +156,12 @@ export default function SalesPage() {
     async function openNewOrderModal() {
         setNewCustomer('');
         setNewSoNumber('');
+        setNewCustomerOrderNum('');
+        setAddingCustomer(false);
+        setNewCustomerInput('');
+        // Load customers
+        const res = await getCustomers();
+        if (res.success) setCustomers((res.data || []).map((c: any) => c.name));
         setShowModal(true);
     }
 
@@ -155,16 +171,31 @@ export default function SalesPage() {
 
         const res = await createSalesOrder({
             customer: newCustomer,
-            soNumber: newSoNumber
+            soNumber: newSoNumber,
+            customerOrderNumber: newCustomerOrderNum || undefined
         });
         if (res.success) {
             setShowModal(false);
             setNewCustomer('');
             setNewSoNumber('');
-            loadOrders(); // Reload to see new data
+            setNewCustomerOrderNum('');
+            loadOrders();
             showAlert('Order created', 'success');
         } else {
-            showAlert('Failed to create order', 'error');
+            showAlert(res.error || 'Failed to create order', 'error');
+        }
+    }
+
+    async function handleAddNewCustomer() {
+        if (!newCustomerInput.trim()) return;
+        const res = await addCustomer(newCustomerInput.trim());
+        if (res.success && res.data) {
+            setCustomers(prev => [...prev, res.data!.name].sort());
+            setNewCustomer(res.data.name);
+            setNewCustomerInput('');
+            setAddingCustomer(false);
+        } else {
+            showAlert(res.error || 'Failed to add customer', 'error');
         }
     }
 
@@ -182,12 +213,15 @@ export default function SalesPage() {
     }
 
     const [visibleCount, setVisibleCount] = useState(20);
-    const filteredOrders = orders.filter(order =>
-        searchTerm === '' ||
-        order.soNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.status.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredOrders = orders.filter(order => {
+        const matchSearch = searchTerm === '' ||
+            order.soNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (order.customerOrderNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.status.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchCustomer = customerFilter === '' || order.customer === customerFilter;
+        return matchSearch && matchCustomer;
+    });
     const displayedOrders = filteredOrders.slice(0, visibleCount);
 
     return (
@@ -205,10 +239,12 @@ export default function SalesPage() {
                 </div>
 
                 <div className="card">
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                         <div style={{
                             position: 'relative',
-                            maxWidth: '300px',
+                            flex: '1',
+                            minWidth: '200px',
+                            maxWidth: '320px',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '0.75rem',
@@ -216,25 +252,27 @@ export default function SalesPage() {
                             border: '1px solid var(--border-color)',
                             borderRadius: 'var(--radius-md)',
                             padding: '0.6rem 1rem',
-                            transition: 'all 0.2s ease',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                         }}>
                             <Search size={18} style={{ color: 'var(--text-muted)' }} />
                             <input
                                 type="text"
-                                placeholder="Search orders..."
+                                placeholder="Search SO#, customer order#..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: 'var(--text-main)',
-                                    outline: 'none',
-                                    width: '100%',
-                                    fontSize: '0.95rem'
-                                }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', outline: 'none', width: '100%', fontSize: '0.95rem' }}
                             />
                         </div>
+                        {/* Customer filter dropdown */}
+                        <select
+                            value={customerFilter}
+                            onChange={e => { setCustomerFilter(e.target.value); setVisibleCount(20); }}
+                            style={{ padding: '0.6rem 1rem', background: 'var(--bg-dark)', color: customerFilter ? 'var(--text-main)' : 'var(--text-muted)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', fontSize: '0.9rem', cursor: 'pointer', minWidth: '150px' }}
+                        >
+                            <option value="">All Customers</option>
+                            {Array.from(new Set(orders.map(o => o.customer))).sort().map(c => (
+                                <option key={c} value={c}>{c}</option>
+                            ))}
+                        </select>
                         {selectedIds.size > 0 && isAdmin && (
                             <button
                                 className="btn btn-outline"
@@ -262,6 +300,7 @@ export default function SalesPage() {
                                             />
                                         </th>
                                         <th style={{ padding: '1rem' }}>SO Number</th>
+                                        <th style={{ padding: '1rem' }}>Customer Order #</th>
                                         <th style={{ padding: '1rem' }}>Customer</th>
                                         <th style={{ padding: '1rem' }}>Status</th>
                                         <th style={{ padding: '1rem' }}>Date</th>
@@ -288,7 +327,10 @@ export default function SalesPage() {
                                                             style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                                                         />
                                                     </td>
-                                                    <td style={{ padding: '1rem' }}>{order.soNumber}</td>
+                                                    <td style={{ padding: '1rem', fontWeight: 500 }}>{order.soNumber}</td>
+                                                    <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                                                        {order.customerOrderNumber || <span style={{ opacity: 0.4 }}>—</span>}
+                                                    </td>
                                                     <td style={{ padding: '1rem' }}>{order.customer}</td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <span style={{
@@ -362,36 +404,77 @@ export default function SalesPage() {
                         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50
                     }}>
-                        <div className="card" style={{ width: '400px', maxWidth: '90%' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <div className="card" style={{ width: '460px', maxWidth: '95%' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                                 <h3>New Sales Order</h3>
                                 <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                                     <X size={20} />
                                 </button>
                             </div>
                             <form onSubmit={handlecreateOrder}>
+                                {/* Customer selector */}
                                 <div style={{ marginBottom: '1rem' }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>SO Number</label>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Customer</label>
+                                    {!addingCustomer ? (
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <select
+                                                value={newCustomer}
+                                                onChange={e => setNewCustomer(e.target.value)}
+                                                required
+                                                style={{ flex: 1, padding: '0.55rem 0.75rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: newCustomer ? 'white' : 'var(--text-muted)', fontSize: '0.9rem' }}
+                                            >
+                                                <option value="">Select customer...</option>
+                                                {customers.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAddingCustomer(true)}
+                                                className="btn btn-outline"
+                                                style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                                                title="Add new customer"
+                                            >
+                                                + New
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <input
+                                                type="text"
+                                                autoFocus
+                                                value={newCustomerInput}
+                                                onChange={e => setNewCustomerInput(e.target.value)}
+                                                placeholder="New customer name"
+                                                style={{ flex: 1, padding: '0.55rem 0.75rem', background: 'var(--bg-dark)', border: '1px solid var(--primary)', borderRadius: '0.375rem', color: 'white', fontSize: '0.9rem' }}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddNewCustomer(); } }}
+                                            />
+                                            <button type="button" onClick={handleAddNewCustomer} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}>Add</button>
+                                            <button type="button" onClick={() => { setAddingCustomer(false); setNewCustomerInput(''); }} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}>✕</button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Customer Order Number */}
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Customer Order # <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                                    <input
+                                        type="text"
+                                        value={newCustomerOrderNum}
+                                        onChange={e => setNewCustomerOrderNum(e.target.value)}
+                                        placeholder="Customer's own PO / order number"
+                                        style={{ width: '100%', padding: '0.55rem 0.75rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white', fontSize: '0.9rem' }}
+                                    />
+                                </div>
+
+                                {/* Internal SO Number */}
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Internal SO Number</label>
                                     <input
                                         type="text"
                                         value={newSoNumber}
                                         onChange={e => setNewSoNumber(e.target.value)}
                                         placeholder="e.g. SO-2024-001"
-                                        className="input-group"
-                                        style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
                                         required
-                                    />
-                                </div>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Customer Name</label>
-                                    <input
-                                        type="text"
-                                        value={newCustomer}
-                                        onChange={e => setNewCustomer(e.target.value)}
-                                        placeholder="e.g. Acme Corp"
-                                        className="input-group"
-                                        style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
-                                        required
+                                        style={{ width: '100%', padding: '0.55rem 0.75rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white', fontSize: '0.9rem' }}
                                     />
                                 </div>
 

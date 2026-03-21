@@ -84,11 +84,41 @@ export async function getRecentProductionRuns() {
     }
 }
 
+// ─── Customers ───────────────────────────────────────────────────────────────
+
+export async function getCustomers() {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+        const customers = await prisma.customer.findMany({ orderBy: { name: 'asc' } });
+        return { success: true, data: customers };
+    } catch (error) {
+        await logError('sales.getCustomers', error);
+        return { success: false, error: 'Failed to fetch customers.' };
+    }
+}
+
+export async function addCustomer(name: string) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+        const trimmed = name.trim();
+        if (!trimmed) return { success: false, error: 'Customer name cannot be empty.' };
+        const customer = await prisma.customer.create({ data: { name: trimmed } });
+        return { success: true, data: customer };
+    } catch (error: any) {
+        if (error?.code === 'P2002') return { success: false, error: 'Customer already exists.' };
+        await logError('sales.addCustomer', error);
+        return { success: false, error: 'Failed to add customer.' };
+    }
+}
+
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 export async function createSalesOrder(data: {
     customer: string;
     soNumber: string;
+    customerOrderNumber?: string;
     productionRunId?: number;
     itemId?: number;
     quantity?: number;
@@ -106,6 +136,7 @@ export async function createSalesOrder(data: {
                 data: {
                     customer: p.data.customer,
                     soNumber: p.data.soNumber,
+                    customerOrderNumber: data.customerOrderNumber?.trim() || null,
                     status: 'Draft',
                     productionRunId: p.data.productionRunId ?? null,
                     itemId: p.data.itemId ?? null,
