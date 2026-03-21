@@ -129,8 +129,11 @@ model PurchaseOrder {
 
   lines        POLine[]
   
+
   salesOrderId Int?
   salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
+
+  shippingCost Float?    @default(0.0)
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

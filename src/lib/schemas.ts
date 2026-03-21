@@ -77,6 +77,8 @@ const PO_STATUSES = ['Draft', 'Sent', 'Partial', 'Completed', 'Cancelled'] as co
 export const CreatePOSchema = z.object({
     supplier: z.string().trim().min(1, 'Supplier name is required').max(200),
     leadTimeDays: z.number().int().min(0).optional(),
+    shippingCost: z.number().min(0).optional(),
+    salesOrderId: z.number().int().positive().optional(),
 });
 
 export const AddPOLineSchema = z.object({

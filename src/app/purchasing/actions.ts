@@ -40,6 +40,23 @@ export async function getWarehouses() {
     }
 }
 
+export async function getBrands() {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const brands = await prisma.item.findMany({
+            where: { brand: { not: null }, deletedAt: null },
+            select: { brand: true },
+            distinct: ['brand']
+        });
+        return { success: true, data: brands.map(b => b.brand).filter(Boolean) as string[] };
+    } catch (error) {
+        await logError('purchasing.getBrands', error);
+        return { success: false, error: 'Failed to fetch brands. Please try again.' };
+    }
+}
+
 export async function getLowStockItems() {
     try {
         const session = await getSession();
@@ -145,12 +162,12 @@ export async function generatePurchaseOrder(
     }
 }
 
-export async function createEmptyPO(supplier: string, leadTimeDays?: number) {
+export async function createEmptyPO(supplier: string, leadTimeDays?: number, shippingCost?: number, salesOrderId?: number) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const p = parseSchema(CreatePOSchema, { supplier, leadTimeDays });
+        const p = parseSchema(CreatePOSchema, { supplier, leadTimeDays, shippingCost, salesOrderId });
         if (!p.success) return { success: false, error: p.error };
 
         const poNumber = `PO-${Date.now()}`;
@@ -159,7 +176,9 @@ export async function createEmptyPO(supplier: string, leadTimeDays?: number) {
                 poNumber,
                 supplier: p.data.supplier,
                 status: 'Draft',
-                leadTimeDays: p.data.leadTimeDays ?? null
+                leadTimeDays: p.data.leadTimeDays ?? null,
+                shippingCost: p.data.shippingCost ?? 0.0,
+                salesOrderId: p.data.salesOrderId ?? null
             }
         });
         revalidatePath('/purchasing');

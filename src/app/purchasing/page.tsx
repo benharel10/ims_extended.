@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO, deletePurchaseOrder } from './actions';
+import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO, deletePurchaseOrder, getBrands } from './actions';
+import { getSalesOrders } from '@/app/sales/actions';
 
 import { useSystem } from '@/components/SystemProvider';
 import { useRouter } from 'next/navigation';
@@ -20,6 +21,10 @@ export default function PurchasingPage() {
     const [showCreatePO, setShowCreatePO] = useState(false);
     const [newSupplier, setNewSupplier] = useState('');
     const [leadTime, setLeadTime] = useState('');
+    const [shippingCost, setShippingCost] = useState('');
+    const [salesOrderId, setSalesOrderId] = useState('');
+    const [brands, setBrands] = useState<string[]>([]);
+    const [salesOrders, setSalesOrders] = useState<any[]>([]);
 
     useEffect(() => {
         loadData();
@@ -27,9 +32,11 @@ export default function PurchasingPage() {
 
     async function loadData() {
         setLoading(true);
-        const [itemsRes, posRes] = await Promise.all([
+        const [itemsRes, posRes, brandsRes, soRes] = await Promise.all([
             getLowStockItems(),
-            getOpenPurchaseOrders()
+            getOpenPurchaseOrders(),
+            getBrands(),
+            getSalesOrders()
         ]);
 
         if (itemsRes.success && itemsRes.data) {
@@ -49,6 +56,12 @@ export default function PurchasingPage() {
 
         if (posRes.success && posRes.data) {
             setPos(posRes.data);
+        }
+        if (brandsRes.success && brandsRes.data) {
+            setBrands(brandsRes.data);
+        }
+        if (soRes.success && soRes.data) {
+            setSalesOrders(soRes.data.filter((so: any) => so.status !== 'Completed' && so.status !== 'Cancelled'));
         }
         setLoading(false);
     }
@@ -93,12 +106,17 @@ export default function PurchasingPage() {
         }
 
         const days = leadTime ? parseInt(leadTime) : undefined;
-        const res = await createEmptyPO(newSupplier, days);
+        const shipping = shippingCost ? parseFloat(shippingCost) : undefined;
+        const soId = salesOrderId ? parseInt(salesOrderId) : undefined;
+
+        const res = await createEmptyPO(newSupplier, days, shipping, soId);
         if (res.success && res.data) {
             showAlert('PO created', 'success');
             setShowCreatePO(false);
             setNewSupplier('');
             setLeadTime('');
+            setShippingCost('');
+            setSalesOrderId('');
             router.push(`/purchasing/${res.data.id}`);
         } else {
             showAlert(res.error || 'Failed to create PO', 'error');
@@ -133,25 +151,55 @@ export default function PurchasingPage() {
                     <div className="modal-content" onClick={e => e.stopPropagation()}>
                         <h2 style={{ marginBottom: '1.5rem' }}>Create New Purchase Order</h2>
                         <div className="form-group">
-                            <label>Supplier Name</label>
-                            <input
-                                type="text"
+                            <label>Supplier Name (From Brands)</label>
+                            <select
                                 className="input-group"
-                                placeholder="Enter supplier name"
                                 value={newSupplier}
                                 onChange={e => setNewSupplier(e.target.value)}
-                                autoFocus
-                            />
+                                style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                            >
+                                <option value="">Select a brand/supplier</option>
+                                {brands.map((b, i) => (
+                                    <option key={i} value={b}>{b}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="form-group">
-                            <label>Expected Lead Time (Days)</label>
-                            <input
-                                type="number"
+                            <label>Link to Sales Order (Optional)</label>
+                            <select
                                 className="input-group"
-                                placeholder="e.g. 14"
-                                value={leadTime}
-                                onChange={e => setLeadTime(e.target.value)}
-                            />
+                                value={salesOrderId}
+                                onChange={e => setSalesOrderId(e.target.value)}
+                                style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                            >
+                                <option value="">None</option>
+                                {salesOrders.map(so => (
+                                    <option key={so.id} value={so.id}>{so.soNumber} - {so.customer}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="form-group">
+                                <label>Expected Lead Time (Days)</label>
+                                <input
+                                    type="number"
+                                    className="input-group"
+                                    placeholder="e.g. 14"
+                                    value={leadTime}
+                                    onChange={e => setLeadTime(e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Shipping Cost</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="input-group"
+                                    placeholder="e.g. 50.00"
+                                    value={shippingCost}
+                                    onChange={e => setShippingCost(e.target.value)}
+                                />
+                            </div>
                         </div>
                         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                             <button className="btn btn-outline" onClick={() => setShowCreatePO(false)}>
