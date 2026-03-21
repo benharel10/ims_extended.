@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
 import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails } from './actions';
+import { createEmptyPO, getBrands } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
 // Simple Types for the UI
@@ -483,6 +484,42 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
     const [linkRunId, setLinkRunId] = useState(order.productionRunId ? String(order.productionRunId) : '');
     const [recentRuns, setRecentRuns] = useState<any[]>([]);
 
+    const [showCreatePO, setShowCreatePO] = useState(false);
+    const [brands, setBrands] = useState<string[]>([]);
+    const [newSupplier, setNewSupplier] = useState('');
+    const [leadTime, setLeadTime] = useState('');
+    const [shippingCost, setShippingCost] = useState('');
+
+    useEffect(() => {
+        if (showCreatePO && brands.length === 0) {
+            getBrands().then(res => {
+                if (res.success) setBrands(res.data || []);
+            });
+        }
+    }, [showCreatePO]);
+
+    async function handleCreateEmptyPO() {
+        if (!newSupplier) {
+            showAlert('Select a supplier first', 'warning');
+            return;
+        }
+
+        const days = leadTime ? parseInt(leadTime) : undefined;
+        const shipping = shippingCost ? parseFloat(shippingCost) : undefined;
+
+        const res = await createEmptyPO(newSupplier, days, shipping, order.id);
+        if (res.success && res.data) {
+            showAlert('PO created and linked to this order', 'success');
+            setShowCreatePO(false);
+            setNewSupplier('');
+            setLeadTime('');
+            setShippingCost('');
+            onUpdate();
+        } else {
+            showAlert(res.error || 'Failed to create PO', 'error');
+        }
+    }
+
     useEffect(() => {
         if (editLink && recentRuns.length === 0) {
             getRecentProductionRuns().then(res => {
@@ -609,7 +646,10 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                         )}
                     </div>
                     <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Procurement Status</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Procurement Status</span>
+                            <button className="btn btn-outline" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', height: 'auto' }} onClick={() => setShowCreatePO(true)}>+ New PO</button>
+                        </div>
                         {order.purchaseOrders && order.purchaseOrders.length > 0 ? (
                             order.purchaseOrders.map((po: any) => (
                                 <div key={po.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
@@ -791,6 +831,56 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                     </div>
                 </div>
             </div>
+
+            {/* Create PO Modal (Overlay inside OrderDetails view) */}
+            {showCreatePO && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
+                    <div className="card" style={{ width: '400px', maxWidth: '90%' }}>
+                        <h3 style={{ marginBottom: '1.5rem' }}>Create PO for Order {order.soNumber}</h3>
+                        <div className="form-group">
+                            <label>Supplier Name (From Brands)</label>
+                            <select
+                                className="input-group"
+                                value={newSupplier}
+                                onChange={e => setNewSupplier(e.target.value)}
+                                style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                            >
+                                <option value="">Select a brand/supplier</option>
+                                {brands.map((b, i) => (
+                                    <option key={i} value={b}>{b}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="form-group">
+                                <label>Lead Time (Days)</label>
+                                <input
+                                    type="number"
+                                    className="input-group"
+                                    placeholder="e.g. 14"
+                                    value={leadTime}
+                                    onChange={e => setLeadTime(e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Shipping Cost</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="input-group"
+                                    placeholder="0.00"
+                                    value={shippingCost}
+                                    onChange={e => setShippingCost(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
+                            <button className="btn btn-outline" onClick={() => setShowCreatePO(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleCreateEmptyPO}>Create PO</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
