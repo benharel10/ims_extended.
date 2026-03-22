@@ -3,11 +3,64 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2, Link2 } from 'lucide-react';
 import Link from 'next/link';
-import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO, deletePurchaseOrder, getBrands } from './actions';
+import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO, deletePurchaseOrder, deleteMultiplePOs, updatePODueDate, getBrands } from './actions';
 import { getSalesOrders } from '@/app/sales/actions';
 
 import { useSystem } from '@/components/SystemProvider';
 import { useRouter } from 'next/navigation';
+
+function EditableDueCell({ po, onUpdate }: any) {
+    let initialDate = '';
+    if (po.leadTimeDays) {
+        const d = new Date(po.createdAt);
+        d.setDate(d.getDate() + po.leadTimeDays);
+        initialDate = d.toISOString().split('T')[0];
+    }
+    const [dateVal, setDateVal] = useState(initialDate);
+
+    useEffect(() => {
+        if (po.leadTimeDays) {
+            const d = new Date(po.createdAt);
+            d.setDate(d.getDate() + po.leadTimeDays);
+            setDateVal(d.toISOString().split('T')[0]);
+        } else {
+            setDateVal('');
+        }
+    }, [po.leadTimeDays, po.createdAt]);
+
+    if (po.status !== 'Draft') {
+        if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
+        const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
+        const isOverdue = new Date() > due && po.status !== 'Completed';
+        return (
+            <span style={{
+                color: isOverdue ? 'var(--error)' : 'inherit',
+                fontWeight: isOverdue ? 600 : 400,
+                display: 'flex', alignItems: 'center', gap: '0.5rem'
+            }}>
+                {due.toLocaleDateString()}
+                {isOverdue && <AlertTriangle size={14} />}
+            </span>
+        );
+    }
+
+    return (
+        <input 
+            type="date" 
+            className="input-group" 
+            style={{ padding: '0.25rem 0.5rem', width: '130px', margin: 0, fontSize: '0.875rem' }} 
+            value={dateVal} 
+            onChange={e => {
+                setDateVal(e.target.value);
+            }}
+            onBlur={() => {
+                if (dateVal !== initialDate && dateVal !== '') {
+                    onUpdate(po.id, dateVal);
+                }
+            }}
+        />
+    );
+}
 
 export default function PurchasingPage() {
     const router = useRouter();
@@ -17,6 +70,7 @@ export default function PurchasingPage() {
     const [pos, setPos] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [selectedPoIds, setSelectedPoIds] = useState<Set<number>>(new Set());
     const [quantities, setQuantities] = useState<{ [id: number]: number }>({});
     const [showCreatePO, setShowCreatePO] = useState(false);
     const [newSupplier, setNewSupplier] = useState('');
@@ -71,6 +125,35 @@ export default function PurchasingPage() {
         if (newSet.has(id)) newSet.delete(id);
         else newSet.add(id);
         setSelectedIds(newSet);
+    }
+
+    function toggleSelectPo(id: number) {
+        const newSet = new Set(selectedPoIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedPoIds(newSet);
+    }
+
+    async function handleUpdateDueDate(id: number, dateStr: string) {
+        const res = await updatePODueDate(id, dateStr);
+        if (res.success) {
+            loadData();
+        } else {
+            showAlert(res.error || 'Failed to update due date', 'error');
+        }
+    }
+
+    async function handleDeleteSelectedPOs() {
+        showConfirm(`Are you sure you want to delete ${selectedPoIds.size} purchase order(s)?`, async () => {
+            const res = await deleteMultiplePOs(Array.from(selectedPoIds));
+            if (res.success) {
+                showAlert('Purchase Orders deleted', 'success');
+                setSelectedPoIds(new Set());
+                loadData();
+            } else {
+                showAlert(res.error || 'Failed to delete POs', 'error');
+            }
+        });
     }
 
     function updateQuantity(id: number, qty: number) {
@@ -218,7 +301,14 @@ export default function PurchasingPage() {
 
             {/* Active Purchase Orders */}
             <div className="card" style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem' }}>Active Purchase Orders</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>Active Purchase Orders</h3>
+                    {selectedPoIds.size > 0 && isAdmin && (
+                        <button className="btn btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }} onClick={handleDeleteSelectedPOs}>
+                            <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete Selected ({selectedPoIds.size})
+                        </button>
+                    )}
+                </div>
                 {loading ? (
                     <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
                 ) : pos.length === 0 ? (
@@ -230,6 +320,21 @@ export default function PurchasingPage() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                    <th style={{ padding: '1rem', width: '40px' }}>
+                                        {isAdmin && (
+                                            <div
+                                                className="checkbox"
+                                                onClick={() => {
+                                                    const validPos = pos.filter(p => p.status === 'Draft'); // Only Draft POs can be deleted
+                                                    if (selectedPoIds.size === validPos.length && validPos.length > 0) setSelectedPoIds(new Set());
+                                                    else setSelectedPoIds(new Set(validPos.map(p => p.id)));
+                                                }}
+                                                style={{ cursor: 'pointer' }}
+                                            >
+                                                {(selectedPoIds.size === pos.filter(p => p.status === 'Draft').length && pos.filter(p => p.status === 'Draft').length > 0) ? <CheckSquare size={18} /> : <Square size={18} />}
+                                            </div>
+                                        )}
+                                    </th>
                                     <th style={{ padding: '1rem' }}>PO Number</th>
                                     <th style={{ padding: '1rem' }}>Supplier</th>
                                     <th style={{ padding: '1rem' }}>Status</th>
@@ -241,7 +346,20 @@ export default function PurchasingPage() {
                             </thead>
                             <tbody>
                                 {pos.map(po => (
-                                    <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                    <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedPoIds.has(po.id) ? 'rgba(7, 89, 133, 0.1)' : 'transparent' }}>
+                                        <td style={{ padding: '1rem' }}>
+                                            {(po.status === 'Draft' && isAdmin) ? (
+                                                <div
+                                                    className="checkbox"
+                                                    onClick={() => toggleSelectPo(po.id)}
+                                                    style={{ cursor: 'pointer', color: selectedPoIds.has(po.id) ? 'var(--primary)' : 'var(--text-muted)' }}
+                                                >
+                                                    {selectedPoIds.has(po.id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                                                </div>
+                                            ) : (
+                                                <span style={{ display: 'inline-block', width: '18px' }} />
+                                            )}
+                                        </td>
                                         <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
                                         <td style={{ padding: '1rem' }}>{po.supplier}</td>
                                         <td style={{ padding: '1rem' }}>
@@ -261,21 +379,7 @@ export default function PurchasingPage() {
                                             {new Date(po.createdAt).toLocaleDateString()}
                                         </td>
                                         <td style={{ padding: '1rem' }}>
-                                            {(() => {
-                                                if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
-                                                const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
-                                                const isOverdue = new Date() > due && po.status !== 'Completed';
-                                                return (
-                                                    <span style={{
-                                                        color: isOverdue ? 'var(--error)' : 'inherit',
-                                                        fontWeight: isOverdue ? 600 : 400,
-                                                        display: 'flex', alignItems: 'center', gap: '0.5rem'
-                                                    }}>
-                                                        {due.toLocaleDateString()}
-                                                        {isOverdue && <AlertTriangle size={14} />}
-                                                    </span>
-                                                );
-                                            })()}
+                                            <EditableDueCell po={po} onUpdate={handleUpdateDueDate} />
                                         </td>
                                         <td style={{ padding: '1rem' }}>
                                             <div style={{ display: 'flex', gap: '0.5rem' }}>

@@ -2,10 +2,126 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems } from '../actions';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate } from '../actions';
 import { Plus, Trash2, Save, ArrowLeft, Package, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
+
+function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine }: any) {
+    const isDraft = po.status === 'Draft';
+    const pending = line.quantity - line.received;
+    const isComplete = pending <= 0;
+    
+    const [quantity, setQuantity] = useState(line.quantity);
+    const [unitCost, setUnitCost] = useState(line.unitCost);
+
+    useEffect(() => {
+        setQuantity(line.quantity);
+        setUnitCost(line.unitCost);
+    }, [line.quantity, line.unitCost]);
+
+    const handleBlur = () => {
+        const q = isNaN(quantity) || quantity <= 0 ? 1 : quantity;
+        const c = isNaN(unitCost) || unitCost < 0 ? 0 : unitCost;
+        if (q !== line.quantity || c !== line.unitCost) {
+            handleUpdateLine(line.id, q, c);
+        } else {
+            setQuantity(line.quantity);
+            setUnitCost(line.unitCost);
+        }
+    };
+
+    return (
+        <tr style={{ borderBottom: '1px solid var(--border-color)', opacity: isComplete ? 0.6 : 1 }}>
+            <td style={{ padding: '1rem', fontWeight: 500 }}>
+                {line.item?.sku || line.newItemSku || <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>New Item</span>}
+            </td>
+            <td style={{ padding: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {line.item?.name || line.newItemName || 'Unknown Item'}
+                    {line.isAutoMapped && (
+                        <span
+                            title="Automatically mapped from iCount via ExternalMapping"
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.2rem',
+                                background: 'rgba(99,102,241,0.15)',
+                                color: '#818cf8',
+                                borderRadius: '4px',
+                                padding: '0.1rem 0.4rem',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                cursor: 'help'
+                            }}
+                        >
+                            <Zap size={10} /> Auto-Mapped
+                        </span>
+                    )}
+                    {!line.item && !line.isAutoMapped && (
+                        <span className="badge badge-secondary" style={{ marginLeft: '0.5rem', fontSize: '0.7em' }}>Pending Creation</span>
+                    )}
+                </div>
+            </td>
+            <td style={{ padding: '1rem' }}>
+                {isDraft ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        $ <input 
+                            type="number" 
+                            value={unitCost} 
+                            onChange={e => setUnitCost(e.target.value === '' ? 0 : parseFloat(e.target.value))} 
+                            onBlur={handleBlur}
+                            className="input-group"
+                            style={{ width: '80px', margin: 0, padding: '0.25rem 0.5rem' }}
+                            step="0.01"
+                            min="0"
+                        />
+                    </div>
+                ) : (
+                    `$${line.unitCost.toFixed(2)}`
+                )}
+            </td>
+            <td style={{ padding: '1rem' }}>
+                {isDraft ? (
+                    <input 
+                        type="number" 
+                        value={quantity} 
+                        onChange={e => setQuantity(e.target.value === '' ? 1 : parseInt(e.target.value))} 
+                        onBlur={handleBlur}
+                        className="input-group"
+                        style={{ width: '80px', margin: 0, padding: '0.25rem 0.5rem' }}
+                        min="1"
+                    />
+                ) : (
+                    line.quantity
+                )}
+            </td>
+            <td style={{ padding: '1rem', color: 'var(--success)' }}>{line.received}</td>
+            <td style={{ padding: '1rem', color: pending > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                {pending > 0 ? pending : '✓'}
+            </td>
+            <td style={{ padding: '1rem', fontWeight: 600 }}>${(line.quantity * line.unitCost).toFixed(2)}</td>
+            <td style={{ padding: '1rem' }}>
+                {po.status !== 'Completed' && line.received === 0 && (
+                    <button
+                        onClick={() => handleRemoveLine(line.id, line.item?.name || line.newItemName || 'Item')}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            padding: '0.25rem',
+                            display: 'flex',
+                            alignItems: 'center'
+                        }}
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                )}
+            </td>
+        </tr>
+    );
+}
 
 export default function PODetailPage() {
     const params = useParams();
@@ -118,6 +234,16 @@ export default function PODetailPage() {
         });
     }
 
+    async function handleUpdateLine(lineId: number, newQty: number, newCost: number) {
+        const res = await updatePOLine(lineId, newQty, newCost);
+        if (res.success) {
+            loadData();
+        } else {
+            showAlert(res.error || 'Failed to update line', 'error');
+            loadData();
+        }
+    }
+
     async function handleStatusChange(newStatus: string) {
         showConfirm(`Change PO status to ${newStatus}?`, async () => {
             const res = await updatePOStatus(poId, newStatus);
@@ -128,6 +254,16 @@ export default function PODetailPage() {
                 showAlert(res.error || 'Failed to update', 'error');
             }
         });
+    }
+
+    async function handleUpdateDueDate(dateStr: string) {
+        const res = await updatePODueDate(poId, dateStr);
+        if (res.success) {
+            showAlert('Due date updated', 'success');
+            loadData();
+        } else {
+            showAlert(res.error || 'Failed to update due date', 'error');
+        }
     }
 
     if (loading) {
@@ -164,6 +300,13 @@ export default function PODetailPage() {
         );
     }
 
+    let initialDate = '';
+    if (po.leadTimeDays) {
+        const d = new Date(po.createdAt);
+        d.setDate(d.getDate() + po.leadTimeDays);
+        initialDate = d.toISOString().split('T')[0];
+    }
+
     return (
         <div className="animate-fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -177,11 +320,28 @@ export default function PODetailPage() {
                             {po.status}
                         </span>
                     </div>
-                    <p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         Supplier: <strong>{po.supplier}</strong> •
                         Created: <span>{poDate.toISOString().split('T')[0]}</span>
-                        {dueElement}
-                    </p>
+                        {po.status === 'Draft' ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.5rem' }}>
+                                • Due: 
+                                <input 
+                                    type="date"
+                                    className="input-group"
+                                    style={{ padding: '0.25rem 0.5rem', margin: 0, width: '130px', fontSize: '0.875rem' }}
+                                    defaultValue={initialDate}
+                                    onBlur={(e) => {
+                                        if (e.target.value !== initialDate && e.target.value !== '') {
+                                            handleUpdateDueDate(e.target.value);
+                                        }
+                                    }}
+                                />
+                            </span>
+                        ) : (
+                            dueElement
+                        )}
+                    </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     {po.status === 'Draft' && (
@@ -333,69 +493,15 @@ export default function PODetailPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {po.lines.map((line: any) => {
-                                        const pending = line.quantity - line.received;
-                                        const isComplete = pending <= 0;
-                                        return (
-                                            <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: isComplete ? 0.6 : 1 }}>
-                                                <td style={{ padding: '1rem', fontWeight: 500 }}>
-                                                    {line.item?.sku || line.newItemSku || <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>New Item</span>}
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        {line.item?.name || line.newItemName || 'Unknown Item'}
-                                                        {line.isAutoMapped && (
-                                                            <span
-                                                                title="Automatically mapped from iCount via ExternalMapping"
-                                                                style={{
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '0.2rem',
-                                                                    background: 'rgba(99,102,241,0.15)',
-                                                                    color: '#818cf8',
-                                                                    borderRadius: '4px',
-                                                                    padding: '0.1rem 0.4rem',
-                                                                    fontSize: '0.7rem',
-                                                                    fontWeight: 600,
-                                                                    cursor: 'help'
-                                                                }}
-                                                            >
-                                                                <Zap size={10} /> Auto-Mapped
-                                                            </span>
-                                                        )}
-                                                        {!line.item && !line.isAutoMapped && (
-                                                            <span className="badge badge-secondary" style={{ marginLeft: '0.5rem', fontSize: '0.7em' }}>Pending Creation</span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>${line.unitCost.toFixed(2)}</td>
-                                                <td style={{ padding: '1rem' }}>{line.quantity}</td>
-                                                <td style={{ padding: '1rem', color: 'var(--success)' }}>{line.received}</td>
-                                                <td style={{ padding: '1rem', color: pending > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
-                                                    {pending > 0 ? pending : '✓'}
-                                                </td>
-                                                <td style={{ padding: '1rem', fontWeight: 600 }}>${(line.quantity * line.unitCost).toFixed(2)}</td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    {po.status !== 'Completed' && line.received === 0 && (
-                                                        <button
-                                                            onClick={() => handleRemoveLine(line.id, line.item?.name || line.newItemName || 'Item')}
-                                                            style={{
-                                                                background: 'transparent',
-                                                                border: 'none',
-                                                                color: '#ef4444',
-                                                                cursor: 'pointer',
-                                                                padding: '0.25rem',
-                                                                display: 'flex',
-                                                                alignItems: 'center'
-                                                            }}
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
+                                    {po.lines.map((line: any) => (
+                                        <EditablePOLine 
+                                            key={line.id} 
+                                            line={line} 
+                                            po={po} 
+                                            handleRemoveLine={handleRemoveLine} 
+                                            handleUpdateLine={handleUpdateLine} 
+                                        />
+                                    ))}
                                 </tbody>
                             </table>
                         </div>

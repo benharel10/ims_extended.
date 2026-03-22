@@ -263,6 +263,32 @@ export async function removePOLine(lineId: number) {
     }
 }
 
+export async function updatePOLine(lineId: number, quantity: number, unitCost: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        if (quantity <= 0) return { success: false, error: 'Quantity must be positive' };
+        if (unitCost < 0) return { success: false, error: 'Cost cannot be negative' };
+
+        const line = await prisma.pOLine.findUnique({ where: { id: lineId }, select: { po: { select: { status: true, id: true } } } });
+        if (line?.po?.status !== 'Draft') {
+            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft status' };
+        }
+
+        await prisma.pOLine.update({
+            where: { id: lineId },
+            data: { quantity, unitCost }
+        });
+
+        revalidatePath(`/purchasing/${line.po.id}`);
+        return { success: true };
+    } catch (error) {
+        await logError('purchasing.updatePOLine', error);
+        return { success: false, error: 'Failed to update line. Please try again.' };
+    }
+}
+
 export async function deletePurchaseOrder(id: number) {
     try {
         const session = await getSession();
@@ -284,6 +310,66 @@ export async function deletePurchaseOrder(id: number) {
     } catch (error) {
         await logError('purchasing.deletePurchaseOrder', error);
         return { success: false, error: 'Failed to delete Purchase Order. It may have associated records.' };
+    }
+}
+
+export async function deleteMultiplePOs(ids: number[]) {
+    try {
+        const session = await getSession();
+        if (!session?.user || session.user.role !== 'Admin') {
+            return { success: false, error: 'Unauthorized: Admin access required to delete POs' };
+        }
+
+        const pos = await prisma.purchaseOrder.findMany({ where: { id: { in: ids } } });
+        const invalidPOs = pos.filter(po => po.status !== 'Draft');
+        if (invalidPOs.length > 0) {
+            return { success: false, error: 'Can only delete Draft Purchase Orders' };
+        }
+
+        await prisma.purchaseOrder.deleteMany({
+            where: { id: { in: ids } }
+        });
+
+        revalidatePath('/purchasing');
+        return { success: true };
+    } catch (error) {
+        await logError('purchasing.deleteMultiplePOs', error);
+        return { success: false, error: 'Failed to delete Purchase Orders.' };
+    }
+}
+
+export async function updatePODueDate(id: number, dueDateStr: string) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const po = await prisma.purchaseOrder.findUnique({ where: { id } });
+        if (!po) return { success: false, error: 'PO not found' };
+
+        if (po.status !== 'Draft') {
+            return { success: false, error: 'Can only update due date for Draft POs' };
+        }
+
+        const createdAt = new Date(po.createdAt);
+        const dueDate = new Date(dueDateStr);
+        // Reset times for accurate day diff
+        createdAt.setHours(0,0,0,0);
+        dueDate.setHours(0,0,0,0);
+        
+        const diffTime = dueDate.getTime() - createdAt.getTime();
+        let leadTimeDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (leadTimeDays < 0) leadTimeDays = 0;
+
+        await prisma.purchaseOrder.update({
+            where: { id },
+            data: { leadTimeDays }
+        });
+
+        revalidatePath('/purchasing');
+        return { success: true };
+    } catch (error) {
+        await logError('purchasing.updatePODueDate', error);
+        return { success: false, error: 'Failed to update due date' };
     }
 }
 
