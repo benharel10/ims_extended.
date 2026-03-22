@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
@@ -610,6 +610,54 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
         }
     }
 
+    // Procurement Wizard helpers — grouped by supplier
+    const wizardGrouped = new Map<string, any[]>();
+    for (const s of (wizardShortages ?? [])) {
+        const supplier = (s.item.brand?.trim()) || 'Unspecified Supplier';
+        if (!wizardGrouped.has(supplier)) wizardGrouped.set(supplier, []);
+        wizardGrouped.get(supplier)!.push(s);
+    }
+    const wizardSupplierList = Array.from(wizardGrouped.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+    function handleWizardPrint() {
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) return;
+        const rows = wizardSupplierList.map(([supplier, sitems]) => `
+            <tr style="background:#1e293b;"><td colspan="4" style="padding:0.6rem 1rem;font-weight:700;font-size:1.05rem;border-top:2px solid #334155;color:#e2e8f0">${supplier}</td></tr>
+            ${sitems.map((s: any) => `<tr>
+                <td style="padding:0.5rem 1rem;border-bottom:1px solid #334155">
+                    <div style="font-weight:600;color:#e2e8f0">${s.item.name}</div>
+                    <div style="font-size:0.8rem;color:#64748b">${s.item.sku}</div>
+                </td>
+                <td style="padding:0.5rem 1rem;text-align:right;border-bottom:1px solid #334155;color:#e2e8f0">${s.requiredQty}</td>
+                <td style="padding:0.5rem 1rem;text-align:right;color:#10b981;border-bottom:1px solid #334155">${s.available}</td>
+                <td style="padding:0.5rem 1rem;text-align:right;color:#ef4444;font-weight:700;border-bottom:1px solid #334155">${s.shortfall}</td>
+            </tr>`).join('')}
+            <tr style="background:#0f172a">
+                <td style="padding:0.5rem 1rem;font-weight:600;color:#94a3b8;font-size:0.85rem">Subtotal — ${sitems.length} item(s)</td>
+                <td colspan="2"></td>
+                <td style="padding:0.5rem 1rem;text-align:right;font-weight:700;color:#f59e0b">${sitems.reduce((sum: number, s: any) => sum + s.shortfall, 0)}</td>
+            </tr>
+        `).join('');
+        win.document.write(`<!DOCTYPE html><html><head><title>Procurement List — ${order.soNumber}</title>
+        <style>body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:2rem}
+        h1{font-size:1.25rem;margin-bottom:0.25rem}p{color:#94a3b8;margin-bottom:1.5rem;font-size:0.9rem}
+        table{width:100%;border-collapse:collapse}th{padding:0.6rem 1rem;text-align:left;color:#94a3b8;border-bottom:2px solid #334155;font-size:0.85rem}
+        th:not(:first-child){text-align:right}
+        @media print{body{background:#fff;color:#000}th{color:#555!important}td{color:#000!important}}</style>
+        </head><body>
+        <h1>📋 Procurement Requirement List</h1>
+        <p>Sales Order: <strong>${order.soNumber}</strong> &nbsp;|&nbsp; Customer: <strong>${order.customer}</strong> &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</p>
+        <table><thead><tr>
+            <th>Component / SKU</th>
+            <th style="text-align:right">Required</th>
+            <th style="text-align:right">Available</th>
+            <th style="text-align:right">Shortfall</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+        <script>window.onload=()=>window.print();<\/script></body></html>`);
+        win.document.close();
+    }
+
     // Link State
     const [editLink, setEditLink] = useState(false);
     const [linkItemId, setLinkItemId] = useState(order.item?.id ? String(order.item.id) : '');
@@ -1010,147 +1058,114 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
             {/* Procurement Wizard Modal */}
             {showWizard && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                    <div className="card" style={{ width: '700px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+                    <div className="card" style={{ width: '760px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+
+                        {/* Header */}
                         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <h3 style={{ marginBottom: '0.25rem' }}>🔮 Procurement Wizard</h3>
                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>BOM requirements vs. available stock for {order.soNumber}</div>
                             </div>
-                            <button onClick={() => setShowWizard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={22} /></button>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                {(wizardShortages ?? []).length > 0 && (
+                                    <button
+                                        onClick={handleWizardPrint}
+                                        className="btn btn-outline"
+                                        style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                        title="Print procurement list"
+                                    >
+                                        🖨️ Print
+                                    </button>
+                                )}
+                                <button onClick={() => setShowWizard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={22} /></button>
+                            </div>
                         </div>
 
+                        {/* Body */}
                         <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
                             {wizardLoading ? (
                                 <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Analysing BOM requirements...</div>
-                            ) : (wizardShortages ?? []).length === 0 && !wizardLoading ? (
+                            ) : (wizardShortages ?? []).length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '3rem' }}>
                                     <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✅</div>
                                     <div style={{ fontWeight: 600, fontSize: '1.1rem', color: '#10b981' }}>All components are in stock!</div>
                                     <div style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Available stock covers all BOM requirements (incl. 10% buffer).</div>
                                 </div>
-                            ) : (wizardShortages ?? []).length > 0 ? (
+                            ) : (
                                 <>
-                                    <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem' }}>
-                                        ⚠️ <strong>{(wizardShortages ?? []).length} component(s)</strong> are short. Auto-generate Purchase Order drafts below.
+                                    {/* Summary banner */}
+                                    <div style={{ marginBottom: '1.25rem', padding: '0.75rem 1rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span>⚠️ <strong>{(wizardShortages ?? []).length} component(s)</strong> short across <strong>{wizardSupplierList.length} supplier(s)</strong></span>
+                                        <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Grouped by supplier</span>
                                     </div>
-                                    <div className="table-responsive">
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                            <thead>
-                                                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                                                    <th style={{ padding: '0.75rem' }}>Component</th>
-                                                    <th style={{ padding: '0.75rem' }}>Supplier</th>
-                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Required</th>
-                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Available</th>
-                                                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Shortfall</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {(wizardShortages ?? []).map((s: any) => (
-                                                    <tr key={s.item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                        <td style={{ padding: '0.75rem' }}>
-                                                            <div style={{ fontWeight: 500 }}>{s.item.name}</div>
-                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.item.sku}</div>
-                                                        </td>
-                                                        <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{s.item.brand || '—'}</td>
-                                                        <td style={{ padding: '0.75rem', textAlign: 'right' }}>{s.requiredQty}</td>
-                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{s.available}</td>
-                                                        <td style={{ padding: '0.75rem', textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>{s.shortfall}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+
+                                    {/* Column headers */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px', padding: '0 0.875rem 0.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem' }}>
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Component</div>
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Required</div>
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Avail</div>
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Shortfall</div>
                                     </div>
+
+                                    {/* Supplier groups */}
+                                    {wizardSupplierList.map(([supplier, sitems]) => (
+                                        <div key={supplier} style={{ marginBottom: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                                            {/* Supplier header row */}
+                                            <div style={{ padding: '0.55rem 0.875rem', background: 'rgba(99,102,241,0.12)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#818cf8' }}>🏭 {supplier}</span>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                    {sitems.length} item(s) &nbsp;·&nbsp;
+                                                    <span style={{ color: '#f87171', fontWeight: 600 }}>
+                                                        {sitems.reduce((sum: number, s: any) => sum + s.shortfall, 0)} shortfall
+                                                    </span>
+                                                </span>
+                                            </div>
+                                            {/* Items */}
+                                            {sitems.map((s: any, idx: number) => (
+                                                <div key={s.item.id} style={{
+                                                    display: 'grid', gridTemplateColumns: '1fr 90px 90px 90px',
+                                                    padding: '0.55rem 0.875rem',
+                                                    borderBottom: idx < sitems.length - 1 ? '1px solid var(--border-color)' : 'none',
+                                                    background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
+                                                    alignItems: 'center'
+                                                }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{s.item.name}</div>
+                                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{s.item.sku}</div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right', fontWeight: 500, fontSize: '0.875rem' }}>{s.requiredQty}</div>
+                                                    <div style={{ textAlign: 'right', color: '#10b981', fontWeight: 500, fontSize: '0.875rem' }}>{s.available}</div>
+                                                    <div style={{ textAlign: 'right', color: '#ef4444', fontWeight: 700 }}>{s.shortfall}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
                                 </>
-                            ) : null}
+                            )}
                         </div>
 
+                        {/* Footer */}
                         {(wizardShortages ?? []).length > 0 && (
-                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem', background: 'var(--bg-dark)' }}>
-                                <button className="btn btn-outline" onClick={() => setShowWizard(false)}>Cancel</button>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={handleAutoProcure}
-                                    disabled={wizardProcuring}
-                                    style={{ background: '#f59e0b', borderColor: '#f59e0b' }}
-                                >
-                                    {wizardProcuring ? 'Generating POs...' : `⚡ Auto-Generate ${(wizardShortages ?? []).length} PO Line(s)`}
-                                </button>
+                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-dark)' }}>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                    Creates <strong style={{ color: 'var(--text-main)' }}>{wizardSupplierList.length} PO(s)</strong> — one per supplier
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                    <button className="btn btn-outline" onClick={() => setShowWizard(false)}>Cancel</button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={handleAutoProcure}
+                                        disabled={wizardProcuring}
+                                        style={{ background: '#f59e0b', borderColor: '#f59e0b' }}
+                                    >
+                                        {wizardProcuring ? 'Generating POs...' : `⚡ Auto-Generate ${wizardSupplierList.length} PO(s)`}
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
                 </div>
             )}
-             {/* Procurement Wizard Modal */}
-             {showWizard && (
-                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                     <div className="card" style={{ width: '700px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
-                         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                             <div>
-                                 <h3 style={{ marginBottom: '0.25rem' }}>🔮 Procurement Wizard</h3>
-                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>BOM requirements vs. available stock for {order.soNumber}</div>
-                             </div>
-                             <button onClick={() => setShowWizard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={22} /></button>
-                         </div>
-                         <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-                             {wizardLoading ? (
-                                 <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>Analysing BOM requirements...</div>
-                             ) : (wizardShortages ?? []).length === 0 && !wizardLoading ? (
-                                 <div style={{ textAlign: 'center', padding: '3rem' }}>
-                                     <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✅</div>
-                                     <div style={{ fontWeight: 600, fontSize: '1.1rem', color: '#10b981' }}>All components are in stock!</div>
-                                     <div style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Available stock covers all BOM requirements (incl. 10% buffer).</div>
-                                 </div>
-                             ) : (wizardShortages ?? []).length > 0 ? (
-                                 <>
-                                     <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem' }}>
-                                         ⚠️ <strong>{(wizardShortages ?? []).length} component(s)</strong> are short. Auto-generate Purchase Order drafts below.
-                                     </div>
-                                     <div className="table-responsive">
-                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                             <thead>
-                                                 <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                                                     <th style={{ padding: '0.75rem' }}>Component</th>
-                                                     <th style={{ padding: '0.75rem' }}>Supplier</th>
-                                                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Required</th>
-                                                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Available</th>
-                                                     <th style={{ padding: '0.75rem', textAlign: 'right' }}>Shortfall</th>
-                                                 </tr>
-                                             </thead>
-                                             <tbody>
-                                                 {(wizardShortages ?? []).map((s: any) => (
-                                                     <tr key={s.item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                         <td style={{ padding: '0.75rem' }}>
-                                                             <div style={{ fontWeight: 500 }}>{s.item.name}</div>
-                                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.item.sku}</div>
-                                                         </td>
-                                                         <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{s.item.brand || '—'}</td>
-                                                         <td style={{ padding: '0.75rem', textAlign: 'right' }}>{s.requiredQty}</td>
-                                                         <td style={{ padding: '0.75rem', textAlign: 'right', color: '#10b981' }}>{s.available}</td>
-                                                         <td style={{ padding: '0.75rem', textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>{s.shortfall}</td>
-                                                     </tr>
-                                                 ))}
-                                             </tbody>
-                                         </table>
-                                     </div>
-                                 </>
-                             ) : null}
-                         </div>
-                         {(wizardShortages ?? []).length > 0 && (
-                             <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem', background: 'var(--bg-dark)' }}>
-                                 <button className="btn btn-outline" onClick={() => setShowWizard(false)}>Cancel</button>
-                                 <button
-                                     className="btn btn-primary"
-                                     onClick={handleAutoProcure}
-                                     disabled={wizardProcuring}
-                                     style={{ background: '#f59e0b', borderColor: '#f59e0b' }}
-                                 >
-                                     {wizardProcuring ? 'Generating POs...' : `⚡ Auto-Generate ${(wizardShortages ?? []).length} PO Line(s)`}
-                                 </button>
-                             </div>
-                         )}
-                     </div>
-                 </div>
-             )}
-         </div>
-     );
- }
+        </div>
+    );
+}
