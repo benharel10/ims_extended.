@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems } from '../actions';
-import { Plus, Trash2, Save, ArrowLeft, Package } from 'lucide-react';
+import { Plus, Trash2, Save, ArrowLeft, Package, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
 
@@ -342,8 +342,31 @@ export default function PODetailPage() {
                                                     {line.item?.sku || line.newItemSku || <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>New Item</span>}
                                                 </td>
                                                 <td style={{ padding: '1rem' }}>
-                                                    {line.item?.name || line.newItemName || 'Unknown Item'}
-                                                    {!line.item && <span className="badge badge-secondary" style={{ marginLeft: '0.5rem', fontSize: '0.7em' }}>Pending Creation</span>}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        {line.item?.name || line.newItemName || 'Unknown Item'}
+                                                        {line.isAutoMapped && (
+                                                            <span
+                                                                title="Automatically mapped from iCount via ExternalMapping"
+                                                                style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.2rem',
+                                                                    background: 'rgba(99,102,241,0.15)',
+                                                                    color: '#818cf8',
+                                                                    borderRadius: '4px',
+                                                                    padding: '0.1rem 0.4rem',
+                                                                    fontSize: '0.7rem',
+                                                                    fontWeight: 600,
+                                                                    cursor: 'help'
+                                                                }}
+                                                            >
+                                                                <Zap size={10} /> Auto-Mapped
+                                                            </span>
+                                                        )}
+                                                        {!line.item && !line.isAutoMapped && (
+                                                            <span className="badge badge-secondary" style={{ marginLeft: '0.5rem', fontSize: '0.7em' }}>Pending Creation</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td style={{ padding: '1rem' }}>${line.unitCost.toFixed(2)}</td>
                                                 <td style={{ padding: '1rem' }}>{line.quantity}</td>

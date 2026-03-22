@@ -77,23 +77,40 @@ export async function POST(req: Request) {
             const unit_cost = Number(item.unit_price || item.price) || 0;
 
             if (item_sku) {
-                const dbItem = await prisma.item.findUnique({ where: { sku: String(item_sku) } });
-                if (dbItem) {
-                    // SKU exists -> proper linkage
+                // First check external mappings table
+                const mapping = await prisma.externalMapping.findFirst({
+                    where: { externalSku: String(item_sku), source: 'iCount' },
+                    include: { item: true }
+                });
+
+                if (mapping) {
+                    // Match found in mapping table -> auto map it!
                     lineData.push({
                         quantity: item_quantity,
                         unitCost: unit_cost,
-                        item: { connect: { id: dbItem.id } }
+                        isAutoMapped: true,
+                        item: { connect: { id: mapping.internalItemId } }
                     });
                 } else {
-                    // Unidentified SKU
-                    hasUnidentifiedSku = true;
-                    lineData.push({
-                        quantity: item_quantity,
-                        unitCost: unit_cost,
-                        newItemName: String(item.item_name || item_sku), 
-                        newItemSku: String(item_sku)
-                    });
+                    // Fallback to strict DB search by our internal SKU
+                    const dbItem = await prisma.item.findUnique({ where: { sku: String(item_sku) } });
+                    if (dbItem) {
+                        // SKU exists directly -> proper linkage
+                        lineData.push({
+                            quantity: item_quantity,
+                            unitCost: unit_cost,
+                            item: { connect: { id: dbItem.id } }
+                        });
+                    } else {
+                        // Unidentified SKU
+                        hasUnidentifiedSku = true;
+                        lineData.push({
+                            quantity: item_quantity,
+                            unitCost: unit_cost,
+                            newItemName: String(item.item_name || item_sku), 
+                            newItemSku: String(item_sku)
+                        });
+                    }
                 }
             } else {
                 hasUnidentifiedSku = true;

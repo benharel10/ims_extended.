@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2 } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2, Link2 } from 'lucide-react';
 import Link from 'next/link';
 import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO, deletePurchaseOrder, getBrands } from './actions';
 import { getSalesOrders } from '@/app/sales/actions';
@@ -131,6 +131,9 @@ export default function PurchasingPage() {
                     <p>Manage purchase orders and track low stock items.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
+                    <Link href="/purchasing/mapper" className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Link2 size={16} /> SKU Mapper
+                    </Link>
                     <Link href="/purchasing/receive" className="btn btn-outline">
                         <CheckSquare size={18} style={{ marginRight: '0.5rem' }} /> Receive Items
                     </Link>
@@ -242,9 +245,16 @@ export default function PurchasingPage() {
                                         <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
                                         <td style={{ padding: '1rem' }}>{po.supplier}</td>
                                         <td style={{ padding: '1rem' }}>
-                                            <span className={`badge badge-${po.status === 'Completed' ? 'success' : po.status === 'Partial' ? 'warning' : 'secondary'}`}>
-                                                {po.status}
-                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span className={`badge badge-${po.status === 'Completed' ? 'success' : po.status === 'Partial' ? 'warning' : po.status === 'Pending SKU Mapping' ? 'error' : po.status === 'Synced' ? 'success' : 'secondary'}`}>
+                                                    {po.status}
+                                                </span>
+                                                {po.pendingManualMapping && (
+                                                    <span title="Contains unidentified SKUs — go to SKU Mapper" style={{ color: '#f59e0b', display: 'flex', cursor: 'help' }}>
+                                                        <AlertTriangle size={14} />
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
                                         <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>

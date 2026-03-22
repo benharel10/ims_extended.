@@ -74,6 +74,7 @@ model Item {
   productionRuns ProductionRun[]
   stocks       ItemStock[]
   salesOrders  SalesOrder[]
+  externalMappings ExternalMapping[]
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -151,6 +152,7 @@ model POLine {
   
   newItemName String?
   newItemSku  String?
+  isAutoMapped Boolean @default(false)
 
   quantity    Int
   received    Int   @default(0)
@@ -327,4 +329,18 @@ model WebhookError {
   payload   String   // The raw payload string
   error     String   // The error message
   createdAt DateTime @default(now())
+}
+
+model ExternalMapping {
+  id             Int      @id @default(autoincrement())
+  externalName   String?
+  externalSku    String
+  source         String   @default("iCount")
+  internalItemId Int
+  item           Item     @relation(fields: [internalItemId], references: [id], onDelete: Cascade)
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([externalSku, source]) // An external SKU from a specific source maps to ONE internal ID
 }
