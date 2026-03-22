@@ -6,39 +6,31 @@ const prisma = new PrismaClient();
 export async function POST(req: Request) {
     let payload: any = {};
     let rawPayload = '';
-    let isPayloadParsed = false;
 
     try {
+        // Security Verification: validate request using ICOUNT_WEBHOOK_SECRET
         const expectedSecret = process.env.ICOUNT_WEBHOOK_SECRET;
-        
         if (!expectedSecret) {
             console.error('ICOUNT_WEBHOOK_SECRET is not configured on the server.');
             return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
         }
 
-        // 1. Payload Parsing (supports JSON and form-urlencoded)
+        // Parse Payload
         const contentType = req.headers.get('content-type') || '';
-        
         if (contentType.includes('application/json')) {
             payload = await req.json();
             rawPayload = JSON.stringify(payload);
-            isPayloadParsed = true;
         } else if (contentType.includes('application/x-www-form-urlencoded')) {
             const formData = await req.formData();
-            formData.forEach((value, key) => {
-                payload[key] = value;
-            });
+            formData.forEach((value, key) => { payload[key] = value; });
             rawPayload = JSON.stringify(payload);
-            isPayloadParsed = true;
         } else {
             return NextResponse.json({ error: 'Unsupported Media Type' }, { status: 415 });
         }
 
-        // 2. Security Handshake
-        // Validate request from iCount. 
-        // We check query string, header, or payload body for the secret
-        const { searchParams } = new URL(req.url);
-        const receivedSecret = searchParams.get('secret') || 
+        // Token checks
+        const urlParams = new URL(req.url).searchParams;
+        const receivedSecret = urlParams.get('secret') || 
                                req.headers.get('x-icount-secret') || 
                                req.headers.get('x-icount-signature') || 
                                payload.secret || 
@@ -49,117 +41,127 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 3. Database Integration & Event Filtering
-        // Expected event: 'Purchase Order' (הזמנת רכש)
-        const docName = payload.doc_name || payload.doc_type_name || payload.type || payload.doc_type;
-        
-        // If it's not a Purchase Order, we acknowledge receipt to prevent retries
-        if (docName !== 'הזמנת רכש' && docName !== 'Purchase Order') {
-            return NextResponse.json({ message: 'Ignored non-Purchase Order event' }, { status: 200 });
+        // Filter Logic:
+        // Inside the route, verify the payload: if (req.body.doctype !== "po") { return res.sendStatus(200); }.
+        if (payload.doctype !== 'po') {
+            return NextResponse.json({ message: 'OK' }, { status: 200 }); 
         }
 
-        const docId = payload.doc_id || payload.id;
-        const clientName = payload.client_name || payload.supplier || payload.client;
+        // Data Translation (Mapping):
+        // doc_id (from iCount) ➔ order_number (in our DB conceptually mapped to poNumber)
+        // client_name ➔ vendor_name (mapped to supplier)
+        // total_amount ➔ total_cost
+        const order_number = String(payload.doc_id);
+        const vendor_name = payload.client_name;
+        const total_cost = Number(payload.total_amount) || 0;
         
-        let items = payload.items || payload.lines || [];
-        if (typeof items === 'string') {
-            try { items = JSON.parse(items); } catch(e) {}
+        // items_array ➔ Loop through and map item_sku to our sku, and item_quantity to our quantity
+        let items_array = payload.items;
+        if (typeof items_array === 'string') {
+            try { items_array = JSON.parse(items_array); } catch(e) { items_array = []; }
         }
-        
-        if (!docId) {
-            throw new Error('doc_id missing from PO payload');
+        if (!Array.isArray(items_array)) {
+            items_array = [];
         }
 
-        const poNumber = String(docId); // Or \`PO-\${docId}\`, but matching iCount exactly is better
-        let pendingMapping = false;
+        if (!order_number || !vendor_name) {
+             throw new Error("Missing required mapping fields (doc_id, client_name). Payload: " + rawPayload);
+        }
+
+        let hasUnidentifiedSku = false;
         const lineData: any[] = [];
 
-        // 4. SKU Mapping
-        for (const item of items) {
-            const sku = item.sku || item.item_code || item.item_name || item.description;
-            const quantity = Number(item.quantity) || 1;
-            const unitCost = Number(item.unit_price || item.price || item.cost) || 0;
+        for (const item of items_array) {
+            const item_sku = item.sku || item.item_code || item.item_name || item.description;
+            const item_quantity = Number(item.quantity) || 1;
+            const unit_cost = Number(item.unit_price || item.price) || 0;
 
-            if (sku) {
-                // strict DB search
-                const dbItem = await prisma.item.findUnique({ where: { sku: String(sku) } });
-                
+            if (item_sku) {
+                const dbItem = await prisma.item.findUnique({ where: { sku: String(item_sku) } });
                 if (dbItem) {
-                    // Match found -> connect
+                    // SKU exists -> proper linkage
                     lineData.push({
-                        quantity,
-                        unitCost,
+                        quantity: item_quantity,
+                        unitCost: unit_cost,
                         item: { connect: { id: dbItem.id } }
                     });
                 } else {
-                    // No match -> pending mapping
-                    pendingMapping = true;
+                    // Unidentified SKU
+                    hasUnidentifiedSku = true;
                     lineData.push({
-                        quantity,
-                        unitCost,
-                        newItemName: String(item.item_name || sku),
-                        newItemSku: String(sku)
+                        quantity: item_quantity,
+                        unitCost: unit_cost,
+                        newItemName: String(item.item_name || item_sku), 
+                        newItemSku: String(item_sku)
                     });
                 }
             } else {
-                pendingMapping = true;
+                hasUnidentifiedSku = true;
                 lineData.push({
-                    quantity,
-                    unitCost,
+                    quantity: item_quantity,
+                    unitCost: unit_cost,
                     newItemName: item.item_name || 'Unknown Item'
                 });
             }
         }
 
-        // 5. Upsert Logic
-        const existingPo = await prisma.purchaseOrder.findUnique({ where: { poNumber } });
+        // Database Action (Upsert)
+        // Ensure the entire process is wrapped in a SQL Transaction to maintain data integrity.
+        const finalStatus = hasUnidentifiedSku ? 'Pending SKU Mapping' : 'Synced';
         
-        if (existingPo) {
-            // Update existing
-            await prisma.purchaseOrder.update({
-                where: { id: existingPo.id },
-                data: {
-                    supplier: clientName || existingPo.supplier,
-                    pendingManualMapping: pendingMapping,
-                    lines: {
-                        deleteMany: {}, // clear old lines and rewrite
-                        create: lineData
-                    }
-                }
-            });
-        } else {
-            // Create new
-            await prisma.purchaseOrder.create({
-                data: {
-                    poNumber,
-                    supplier: clientName || 'Unknown Supplier',
-                    pendingManualMapping: pendingMapping,
-                    lines: {
-                        create: lineData
-                    }
-                }
-            });
-        }
+        await prisma.$transaction(async (tx) => {
+             // If the doc_id already exists, update the record
+             const existingPo = await tx.purchaseOrder.findUnique({ 
+                 where: { poNumber: order_number } 
+             });
 
-        // 6. Status Codes -> 200 OK
-        return NextResponse.json({ message: 'Webhook processed successfully' }, { status: 200 });
+             if (existingPo) {
+                 await tx.purchaseOrder.update({
+                     where: { id: existingPo.id },
+                     data: {
+                         supplier: vendor_name,
+                         totalCost: total_cost,
+                         status: finalStatus,
+                         pendingManualMapping: hasUnidentifiedSku,
+                         lines: {
+                             deleteMany: {}, // Prevent orphaned lines by replacing
+                             create: lineData
+                         }
+                     }
+                 });
+             } else {
+                 // If not, create a new PO entry
+                 await tx.purchaseOrder.create({
+                     data: {
+                         poNumber: order_number,
+                         supplier: vendor_name,
+                         totalCost: total_cost,
+                         status: finalStatus,
+                         pendingManualMapping: hasUnidentifiedSku,
+                         lines: {
+                             create: lineData
+                         }
+                     }
+                 });
+             }
+        });
+
+        // Response: Return res.sendStatus(200) only after the data has been successfully committed to Neon.
+        return NextResponse.json({ message: 'OK' }, { status: 200 });
 
     } catch (error: any) {
-        // 7. Error Logging
         console.error('Webhook processing error:', error);
-        
+        // Error logging fallback
         try {
             await prisma.webhookError.create({
                 data: {
-                    payload: isPayloadParsed ? rawPayload : 'Error occurred before reading payload',
+                    payload: rawPayload || 'Error parsing payload',
                     error: error.message || String(error),
                     source: 'iCount'
                 }
             });
-        } catch (dbErr) {
-            console.error('Failed to write logic error to webhookError table:', dbErr);
-        }
-
+        } catch (_) {} // Ignore logging errors here
+        
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
