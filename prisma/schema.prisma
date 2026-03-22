@@ -127,6 +127,7 @@ model PurchaseOrder {
   supplier     String
   status       String    @default("Draft")
   leadTimeDays Int?
+  pendingManualMapping Boolean @default(false)
 
   lines        POLine[]
   
@@ -317,4 +318,12 @@ model Customer {
   name      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model WebhookError {
+  id        Int      @id @default(autoincrement())
+  source    String   @default("iCount")
+  payload   String   // The raw payload string
+  error     String   // The error message
+  createdAt DateTime @default(now())
 }
