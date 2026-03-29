@@ -214,27 +214,36 @@ export default function InventoryPage() {
 
     // -- Stock Adjustment Modal --
     const [showStockModal, setShowStockModal] = useState(false);
-    const [stockModalData, setStockModalData] = useState<{ item: any, warehouseId: string, mode: 'set' | 'add' | 'remove', quantity: number, currentWhStock: number }>({
+    const [stockModalData, setStockModalData] = useState<{ item: any, warehouseId: string, mode: 'set' | 'add' | 'remove', quantity: number, currentWhStock: number, location: string }>({
         item: null,
         warehouseId: '',
         mode: 'set',
         quantity: 0,
-        currentWhStock: 0
+        currentWhStock: 0,
+        location: ''
     });
 
     function openStockModal(item: any) {
         // Default to first warehouse if available, or empty
         const defaultWhId = warehouses.length > 0 ? String(warehouses[0].id) : '';
         const currentStock = getStockForWarehouse(item, defaultWhId);
+        const currentLocation = getLocationForWarehouse(item, defaultWhId);
 
         setStockModalData({
             item,
             warehouseId: defaultWhId,
             mode: 'set',
-            quantity: currentStock, // Default to current stock for 'set' mode clarity
-            currentWhStock: currentStock
+            quantity: currentStock,
+            currentWhStock: currentStock,
+            location: currentLocation
         });
         setShowStockModal(true);
+    }
+
+    function getLocationForWarehouse(item: any, whId: string): string {
+        if (!whId || !item.stocks) return '';
+        const stock = item.stocks.find((s: any) => String(s.warehouseId) === String(whId));
+        return stock?.location || '';
     }
 
     function getStockForWarehouse(item: any, whId: string) {
@@ -243,17 +252,18 @@ export default function InventoryPage() {
         return stock ? stock.quantity : 0;
     }
 
-    // Effect to update current stock display when warehouse changes in modal
+    // Effect to update current stock + location display when warehouse changes in modal
     useEffect(() => {
         if (showStockModal && stockModalData.item) {
             const current = getStockForWarehouse(stockModalData.item, stockModalData.warehouseId);
-            setStockModalData(prev => ({ ...prev, currentWhStock: current }));
+            const currentLocation = getLocationForWarehouse(stockModalData.item, stockModalData.warehouseId);
+            setStockModalData(prev => ({ ...prev, currentWhStock: current, location: currentLocation }));
         }
     }, [stockModalData.warehouseId, showStockModal, stockModalData.item]);
 
 
     async function handleStockSave() {
-        const { item, warehouseId, mode, quantity, currentWhStock } = stockModalData;
+        const { item, warehouseId, mode, quantity, currentWhStock, location } = stockModalData;
         if (!item) return;
         if (!warehouseId) {
             showAlert('Please select a warehouse', 'warning');
@@ -272,10 +282,10 @@ export default function InventoryPage() {
             return;
         }
 
-        const res = await updateStock(item.id, newQuantity, parseInt(warehouseId));
+        const res = await updateStock(item.id, newQuantity, parseInt(warehouseId), location);
         if (res.success) {
             setShowStockModal(false);
-            loadItems(); // Reload to get fresh stock data
+            loadItems();
             showAlert('Stock updated successfully', 'success');
         } else {
             showAlert(res.error || 'Failed to update stock', 'error');
@@ -1434,6 +1444,11 @@ export default function InventoryPage() {
                                         <thead>
                                             <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
                                                 <th style={{ padding: '0.75rem' }}>Warehouse</th>
+                                                <th style={{ padding: '0.75rem' }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                        <MapPin size={12} /> Location
+                                                    </span>
+                                                </th>
                                                 <th style={{ padding: '0.75rem', textAlign: 'right' }}>Quantity</th>
                                             </tr>
                                         </thead>
@@ -1443,13 +1458,22 @@ export default function InventoryPage() {
                                                     <td style={{ padding: '0.75rem', fontWeight: 500 }}>
                                                         {s.warehouse.name}
                                                     </td>
+                                                    <td style={{ padding: '0.75rem' }}>
+                                                        {s.location ? (
+                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 500 }}>
+                                                                <MapPin size={10} />{s.location}
+                                                            </span>
+                                                        ) : (
+                                                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>—</span>
+                                                        )}
+                                                    </td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: s.quantity < 0 ? 'var(--danger)' : 'var(--text-main)' }}>
                                                         {s.quantity}
                                                     </td>
                                                 </tr>
                                             ))}
                                             <tr style={{ borderTop: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                                                <td style={{ padding: '0.75rem', fontWeight: 600 }}>Total</td>
+                                                <td style={{ padding: '0.75rem', fontWeight: 600 }} colSpan={2}>Total</td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700 }}>
                                                     {viewStockItem.stocks?.reduce((acc: number, s: any) => acc + s.quantity, 0)}
                                                 </td>
@@ -1535,7 +1559,7 @@ export default function InventoryPage() {
                                         </button>
                                     </div>
 
-                                    {/* 3. Quantity Input */}
+                                    {/* 3. Quantity + Location Input */}
                                     <div style={{ marginBottom: '1.5rem' }}>
                                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
                                             {stockModalData.mode === 'set' ? 'New Total Quantity' : 'Quantity to ' + (stockModalData.mode === 'add' ? 'Add' : 'Remove')}
@@ -1559,6 +1583,21 @@ export default function InventoryPage() {
                                                 </strong>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* 4. Location Input */}
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                                            <MapPin size={13} style={{ color: '#10b981' }} /> Bin / Shelf Location <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="input-group"
+                                            style={{ width: '100%', padding: '0.65rem 0.75rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white', fontSize: '0.95rem' }}
+                                            placeholder="e.g. Shelf A3, Bin B-12, Row 4"
+                                            value={stockModalData.location}
+                                            onChange={e => setStockModalData(prev => ({ ...prev, location: e.target.value }))}
+                                        />
                                     </div>
 
                                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>

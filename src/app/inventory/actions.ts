@@ -253,7 +253,7 @@ export async function updateItem(id: number, data: {
 
 // ─── Stock Updates (fully transactional) ─────────────────────────────────────
 
-export async function updateStock(id: number, quantity: number, warehouseId?: number) {
+export async function updateStock(id: number, quantity: number, warehouseId?: number, location?: string) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
@@ -263,8 +263,8 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
             if (warehouseId) {
                 await tx.itemStock.upsert({
                     where: { itemId_warehouseId: { itemId: id, warehouseId } },
-                    update: { quantity },
-                    create: { itemId: id, warehouseId, quantity }
+                    update: { quantity, ...(location !== undefined ? { location: location || null } : {}) },
+                    create: { itemId: id, warehouseId, quantity, location: location || null }
                 });
 
                 const allStocks = await tx.itemStock.findMany({ where: { itemId: id } });
@@ -379,7 +379,7 @@ export async function bulkDeleteItems(ids: number[]) {
 
 // ─── Bulk Stock Update ────────────────────────────────────────────────────────
 
-export async function bulkUpdateStock(updates: { itemId: number; quantity: number; warehouseId: number }[]) {
+export async function bulkUpdateStock(updates: { itemId: number; quantity: number; warehouseId: number; location?: string }[]) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
@@ -392,8 +392,8 @@ export async function bulkUpdateStock(updates: { itemId: number; quantity: numbe
             for (const update of updates) {
                 await tx.itemStock.upsert({
                     where: { itemId_warehouseId: { itemId: update.itemId, warehouseId: update.warehouseId } },
-                    update: { quantity: update.quantity },
-                    create: { itemId: update.itemId, warehouseId: update.warehouseId, quantity: update.quantity }
+                    update: { quantity: update.quantity, ...(update.location !== undefined ? { location: update.location || null } : {}) },
+                    create: { itemId: update.itemId, warehouseId: update.warehouseId, quantity: update.quantity, location: update.location || null }
                 });
 
                 const allStocks = await tx.itemStock.findMany({ where: { itemId: update.itemId } });
