@@ -155,7 +155,15 @@ export default function SalesPage() {
 
     async function openNewOrderModal() {
         setNewCustomer('');
-        setNewSoNumber('');
+        
+        // Auto-generate SO Number (e.g. SO-240330-1234)
+        const d = new Date();
+        const yymmdd = d.getFullYear().toString().slice(-2) + 
+            String(d.getMonth() + 1).padStart(2, '0') + 
+            String(d.getDate()).padStart(2, '0');
+        const randomStr = Math.floor(1000 + Math.random() * 9000);
+        setNewSoNumber(`SO-${yymmdd}-${randomStr}`);
+        
         setNewCustomerOrderNum('');
         setAddingCustomer(false);
         setNewCustomerInput('');
