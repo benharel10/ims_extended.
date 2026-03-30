@@ -5,8 +5,23 @@ import { getSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/errorLogger';
 import { CreateItemSchema, UpdateItemSchema, UpdateStockSchema, parseSchema } from '@/lib/schemas';
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+async function logAudit(userId: number, action: string, entity: string, entityId?: number, details?: any) {
+    try {
+        await prisma.systemLog.create({
+            data: {
+                userId,
+                action,
+                entity,
+                entityId,
+                details: details ? JSON.stringify(details) : null
+            }
+        });
+    } catch (e) {
+        console.error('Audit log failed', e);
+    }
+}
 
 /** Filter active (non-soft-deleted) items in all queries */
 const ACTIVE = { deletedAt: null };
@@ -243,6 +258,15 @@ export async function updateItem(id: number, data: {
 
         const item = await prisma.item.findUnique({ where: { id } });
 
+        await logAudit(session.user.id, 'UPDATE_ITEM', 'Item', id, { 
+            sku: data.sku, 
+            name: data.name, 
+            cost: data.cost, 
+            price: data.price,
+            warehouse: data.warehouse,
+            isSerialized: data.isSerialized
+        });
+
         revalidatePath('/inventory');
         return { success: true, data: item };
     } catch (error) {
@@ -287,6 +311,8 @@ export async function updateStock(id: number, quantity: number, warehouseId?: nu
                 if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
             }
         });
+
+        await logAudit(session.user.id, 'UPDATE_STOCK', 'Item', id, { warehouseId, quantity, location });
 
         revalidatePath('/inventory');
         return { success: true };
@@ -342,6 +368,7 @@ export async function deleteItem(id: number) {
                 data: { deletedAt: now }
             });
         });
+        await logAudit(session.user.id, 'DELETE_ITEM', 'Item', id);
 
         revalidatePath('/inventory');
         revalidatePath('/production');
@@ -368,6 +395,7 @@ export async function bulkDeleteItems(ids: number[]) {
                 data: { deletedAt: now }
             });
         });
+        await logAudit(session.user.id, 'BULK_DELETE_ITEMS', 'Item', undefined, { counts: ids.length, ids });
 
         revalidatePath('/inventory');
         return { success: true, count: ids.length };
@@ -408,6 +436,8 @@ export async function bulkUpdateStock(updates: { itemId: number; quantity: numbe
                 if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
             }
         });
+
+        await logAudit(session.user.id, 'BULK_UPDATE_STOCK', 'ItemStock', undefined, { itemCount: updates.length });
 
         revalidatePath('/inventory');
         return { success: true };
@@ -753,5 +783,33 @@ export async function createSaleFromInventory(data: {
         await logError('createSaleFromInventory', error);
         const msg = error instanceof Error ? error.message : 'Failed to create sale';
         return { success: false, error: msg };
+    }
+}
+
+export async function getItemHistory(itemId: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const logs = await prisma.systemLog.findMany({
+            where: { entity: 'Item', entityId: itemId },
+            include: { user: { select: { id: true, name: true, email: true } } },
+            take: 100,
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Fetch logs related to bulk updates targeting this item
+        const stockLogs = await prisma.systemLog.findMany({
+            where: { entity: 'ItemStock', details: { contains: `"itemId":${itemId}` } },
+            include: { user: { select: { id: true, name: true, email: true } } },
+            take: 100,
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const combined = [...logs, ...stockLogs].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return { success: true, data: combined.slice(0, 100) };
+    } catch (error: unknown) {
+        await logError('getItemHistory', error);
+        return { success: false, error: 'Failed to load history' };
     }
 }

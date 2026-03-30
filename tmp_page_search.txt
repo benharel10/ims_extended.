@@ -1,0 +1,729 @@
+﻿
+5: import { getItems, 
+createItem, updateItem, 
+deleteItem, updateStock, 
+importBOM, importItems, 
+updateItemCost, 
+bulkDeleteItems, 
+bulkUpdateStock, 
+createAssemblyFromItems, 
+createSaleFromInventory } 
+from './actions';
+6: import { getWarehouses 
+} from 
+'../shipping/actions';
+14: const 
+[filterLowStock, 
+setFilterLowStock] = 
+useState(false);
+16: const [warehouses, 
+setWarehouses] = 
+useState<any[]>([]);
+24: // Stock Details Modal
+25: const [viewStockItem, 
+setViewStockItem] = 
+useState<any | 
+null>(null);
+42: const [sellFormData, 
+setSellFormData] = 
+useState({ sku: '', 
+customer: '', price: 0, 
+quantity: 1 });
+44: // Bulk Stock 
+Adjustment Modal
+45: const 
+[showBulkStockModal, 
+setShowBulkStockModal] = 
+useState(false);
+46: const 
+[bulkStockWarehouse, 
+setBulkStockWarehouse] = 
+useState('');
+47: const 
+[bulkStockQuantities, 
+setBulkStockQuantities] = 
+useState<{ [id: number]: 
+number }>({});
+57: minStock: number; 
+revision: string; 
+warehouse: string; brand: 
+string;
+65: minStock: 0,
+67: warehouse: '',
+105: 
+setShowStockModal(false);
+108: setShowBulkStockModal
+(false);
+109: 
+setViewStockItem(null);
+118: const [itemsRes, 
+whRes] = await 
+Promise.all([getItems(), 
+getWarehouses()]);
+124: 
+setWarehouses(whRes.data);
+183: setFormData({ sku: 
+'', name: '', type: 
+'Raw', cost: 0, price: 0, 
+minStock: 0, revision: 
+'', warehouse: '', brand: 
+'', isSerialized: false, 
+description: '', 
+icountId: undefined });
+196: minStock: 
+item.minStock,
+198: warehouse: 
+item.warehouse || '',
+208: setFormData({ sku: 
+'', name: '', type: 
+'Raw', cost: 0, price: 0, 
+minStock: 0, revision: 
+'', warehouse: '', brand: 
+'', isSerialized: false, 
+description: '', 
+icountId: undefined });
+213: // -- Stock Editing 
+--
+215: // -- Stock 
+Adjustment Modal --
+216: const 
+[showStockModal, 
+setShowStockModal] = 
+useState(false);
+217: const 
+[stockModalData, 
+setStockModalData] = 
+useState<{ item: any, 
+warehouseId: string, 
+mode: 'set' | 'add' | 
+'remove', quantity: 
+number, currentWhStock: 
+number }>({
+219: warehouseId: '',
+221: quantity: 0,
+222: currentWhStock: 0
+225: function 
+openStockModal(item: any) 
+{
+226: // Default to first 
+warehouse if available, 
+or empty
+227: const defaultWhId = 
+warehouses.length > 0 ? 
+String(warehouses[0].id) 
+: '';
+228: const currentStock = 
+getStockForWarehouse(item,
+ defaultWhId);
+230: setStockModalData({
+232: warehouseId: 
+defaultWhId,
+234: quantity: 
+currentStock, // Default 
+to current stock for 
+'set' mode clarity
+235: currentWhStock: 
+currentStock
+237: 
+setShowStockModal(true);
+240: function getStockForW
+arehouse(item: any, whId: 
+string) {
+241: if (!whId || 
+!item.stocks) return 0;
+242: const stock = 
+item.stocks.find((s: any) 
+=> String(s.warehouseId) 
+=== String(whId));
+243: return stock ? 
+stock.quantity : 0;
+246: // Effect to update 
+current stock display 
+when warehouse changes in 
+modal
+248: if (showStockModal 
+&& stockModalData.item) {
+249: const current = getSt
+ockForWarehouse(stockModal
+Data.item, stockModalData.
+warehouseId);
+250: 
+setStockModalData(prev => 
+({ ...prev, 
+currentWhStock: current 
+}));
+252: }, [stockModalData.wa
+rehouseId, 
+showStockModal, 
+stockModalData.item]);
+255: async function 
+handleStockSave() {
+256: const { item, 
+warehouseId, mode, 
+quantity, currentWhStock 
+} = stockModalData;
+258: if (!warehouseId) {
+259: showAlert('Please 
+select a warehouse', 
+'warning');
+263: let newQuantity = 
+quantity;
+265: newQuantity = 
+currentWhStock + quantity;
+267: newQuantity = 
+currentWhStock - quantity;
+270: if (newQuantity < 0) 
+{
+271: showAlert('Stock 
+cannot be negative', 
+'warning');
+275: const res = await 
+updateStock(item.id, 
+newQuantity, 
+parseInt(warehouseId));
+277: 
+setShowStockModal(false);
+278: loadItems(); // 
+Reload to get fresh stock 
+data
+279: showAlert('Stock 
+updated successfully', 
+'success');
+281: showAlert(res.error 
+|| 'Failed to update 
+stock', 'error');
+337: // NAME, SKU, PART 
+NUMBER, COST, PRICE, 
+UNITS, TAX(18%), WAREHOUSE
+359: // UNITS -> 
+currentStock
+360: currentStock: 
+Number(getVal('units') || 
+getVal('quantity') || 
+getVal('qty') || 0),
+361: minStock: 
+Number(getVal('min 
+stock') || 
+getVal('reorder point') 
+|| 0),
+363: warehouse: String(get
+Val('warehouse') || 
+getVal('location') || 
+'').trim(),
+414: // Expecting Format: 
+[ParentSKU, ChildSKU, 
+Quantity]
+415: const bomRows: { 
+parentSku: string; 
+childSku: string; 
+quantity: number }[] = [];
+425: quantity: 
+Number(row[2])
+430: showAlert('No valid 
+BOM rows found. Ensure 
+format: Parent SKU | 
+Child SKU | Quantity', 
+'warning');
+466: const 
+[selectedWarehouse, 
+setSelectedWarehouse] = 
+useState<string>('');
+475: let matchesWarehouse 
+= true;
+476: if 
+(selectedWarehouse) {
+478: // Look up warehouse 
+name from ID
+479: const selectedWhName 
+= warehouses.find(w => 
+String(w.id) === 
+selectedWarehouse)?.name;
+480: const matchesLegacy 
+= item.warehouse === 
+selectedWarehouse || 
+(selectedWhName && 
+item.warehouse === 
+selectedWhName);
+482: // Check stock 
+relation
+483: // Note: 
+selectedWarehouse is ID 
+string from select
+484: const whId = parseInt
+(selectedWarehouse);
+485: const 
+matchesRelation = 
+!isNaN(whId) && 
+item.stocks?.some((s: 
+any) => s.warehouseId === 
+whId && s.quantity > 0);
+487: matchesWarehouse = 
+matchesLegacy || 
+matchesRelation;
+492: const 
+matchesLowStock = 
+!filterLowStock || (Number
+(item.currentStock) < 
+Number(item.minStock));
+494: return matchesSearch 
+&& matchesWarehouse && 
+matchesType && 
+matchesBrand && 
+matchesLowStock;
+514: }, [searchTerm, 
+selectedWarehouse, 
+filterType, filterBrand, 
+filterLowStock, 
+sortConfig]);
+535: quantity: 1
+554: function 
+openBulkStockModal() {
+559: // Initialize 
+quantities with current 
+stock
+563: if (item) 
+initialQtys[id] = 
+item.currentStock || 0;
+565: setBulkStockQuantitie
+s(initialQtys);
+566: setBulkStockWarehouse
+(warehouses.length > 0 ? 
+String(warehouses[0].id) 
+: '');
+567: setShowBulkStockModal
+(true);
+570: async function 
+handleBulkStockUpdate() {
+571: if 
+(!bulkStockWarehouse) {
+572: showAlert('Select a 
+warehouse', 'warning');
+578: quantity: 
+bulkStockQuantities[id] 
+|| 0,
+579: warehouseId: parseInt
+(bulkStockWarehouse)
+582: showConfirm(`Update 
+stock for 
+${updates.length} items 
+in selected warehouse?`, 
+async () => {
+583: const res = await 
+bulkUpdateStock(updates);
+585: showAlert('Stock 
+updated successfully', 
+'success');
+586: setShowBulkStockModal
+(false);
+590: showAlert(res.error 
+|| 'Failed to update 
+stock', 'error');
+598: const 
+warehouseStocks = 
+item.stocks?.map((s: any) 
+=> {
+599: const wh = 
+warehouses.find(w => w.id 
+=== s.warehouseId);
+600: return `${wh?.name 
+|| 'Unknown'}: 
+${s.quantity}`;
+609: 'Warehouse': 
+item.warehouse || '',
+610: 'Total Physical': 
+item.currentStock || 0,
+611: 'Warehouse 
+Breakdown': 
+warehouseStocks,
+612: 'Allocated': 
+item.allocatedStock || 0,
+613: 'Available': 
+Math.max(0, 
+(item.currentStock || 0) 
+- (item.allocatedStock || 
+0)),
+614: 'Min Stock': 
+item.minStock || 0,
+631: { wch: 15 }, // 
+Warehouse
+632: { wch: 12 }, // 
+Total Stock
+633: { wch: 30 }, // 
+Warehouse Breakdown
+634: { wch: 10 }, // Min 
+Stock
+659: <p>Track items, 
+BOMs, and stock 
+levels.</p>
+725: 
+value={selectedWarehouse}
+726: onChange={e => setSel
+ectedWarehouse(e.target.va
+lue)}
+738: <option value="">All 
+Warehouses</option>
+739: {warehouses.map((w: 
+any) => <option 
+key={w.id} value={w.id}>{w
+.name}</option>)}
+788: background: 
+filterLowStock ? 
+'rgba(239, 68, 68, 0.1)' 
+: 'var(--bg-dark)',
+796: 
+checked={filterLowStock}
+797: onChange={e => setFil
+terLowStock(e.target.check
+ed)}
+800: Low Stock Only
+807: onClick={openBulkStoc
+kModal}
+822: Adjust Stock
+823: Adjust Stock
+874: <th style={{ 
+padding: '1rem', cursor: 
+'pointer' }} onClick={() 
+=> handleSort('warehouse')
+}>Warehouse 
+{sortConfig?.key === 
+'warehouse' && 
+(sortConfig.direction === 
+'asc' ? '↑' : '↓')}</th>
+875: <th style={{ 
+padding: '1rem', cursor: 
+'pointer' }} onClick={() 
+=> handleSort('currentStoc
+k')}>Available 
+{sortConfig?.key === 
+'currentStock' && 
+(sortConfig.direction === 
+'asc' ? '↑' : '↓')}</th>
+916: <td style={{ 
+padding: '1rem' }} 
+data-label="Warehouse">
+918: {item.warehouse ||
+919: (item.stocks && 
+item.stocks.length > 0 && 
+warehouses.length > 0
+920: ? Array.from(new 
+Set(item.stocks.map((s: 
+any) => 
+warehouses.find((w: any) 
+=> w.id === s.warehouseId)
+?.name).filter(Boolean))).
+join(', ')
+924: {item.stocks && 
+item.stocks.length > 0 && 
+(
+926: onClick={(e) => { 
+e.stopPropagation(); 
+setViewStockItem(item); }}
+942: View 
+{item.stocks.length} 
+Locations
+947: {/* Stock Cell with 
+Modal Trigger */}
+948: <td style={{ 
+padding: '1rem' }} 
+className="group" 
+data-label="Stock">
+951: {selectedWarehouse 
+&& !isNaN(parseInt(selecte
+dWarehouse)) ? (
+952: // Show filtered 
+warehouse stock
+954: 
+{item.stocks?.find((s: 
+any) => s.warehouseId === 
+parseInt(selectedWarehouse
+))?.quantity || 0}
+959: <span style={{ 
+fontSize: '1rem', 
+fontWeight: 600 }} 
+title="Available Stock 
+(Total Physical - 
+Allocated)">
+960: {Math.max(0, 
+(item.currentStock ?? 0) 
+- (item.allocatedStock ?? 
+0))}
+962: 
+{(item.allocatedStock ?? 
+0) > 0 && (
+964: Alloc: 
+{item.allocatedStock}
+971: onClick={() => 
+openStockModal(item)}
+975: title="Adjust Stock"
+1198: <label style={{ 
+display: 'block', 
+marginBottom: '0.5rem', 
+fontSize: '0.875rem' 
+}}>Warehouse / 
+Location</label>
+1201: 
+value={formData.warehouse}
+1202: onChange={e => 
+setFormData({ 
+...formData, warehouse: 
+e.target.value })}
+1292: <label style={{ 
+display: 'block', 
+marginBottom: '0.5rem', 
+fontSize: '0.875rem' 
+}}>Min Stock</label>
+1295: 
+value={formData.minStock}
+1296: onChange={e => 
+setFormData({ 
+...formData, minStock: 
+parseInt(e.target.value) 
+})}
+1386: 
+<label>Quantity</label>
+1390: value={sellFormData.
+quantity}
+1391: onChange={e => 
+setSellFormData({ 
+...sellFormData, 
+quantity: 
+parseInt(e.target.value) 
+})}
+1413: {/* Stock Details 
+Modal */}
+1415: viewStockItem && (
+1419: }} onClick={() => 
+setViewStockItem(null)}>
+1423: <h3 style={{ 
+marginBottom: '0.25rem' 
+}}>Stock Locations</h3>
+1424: <div style={{ 
+color: 
+'var(--text-muted)' 
+}}>{viewStockItem.sku} - 
+{viewStockItem.name}</div>
+1426: <button onClick={() 
+=> 
+setViewStockItem(null)} 
+style={{ background: 
+'none', border: 'none', 
+cursor: 'pointer', color: 
+'var(--text-muted)' }}>
+1436: <th style={{ 
+padding: '0.75rem' 
+}}>Warehouse</th>
+1437: <th style={{ 
+padding: '0.75rem', 
+textAlign: 'right' 
+}}>Quantity</th>
+1441: {viewStockItem.stock
+s?.sort((a: any, b: any) 
+=> b.quantity - 
+a.quantity).map((s: any) 
+=> (
+1444: {s.warehouse.name}
+1446: <td style={{ 
+padding: '0.75rem', 
+textAlign: 'right', 
+fontWeight: 600, color: 
+s.quantity < 0 ? 
+'var(--danger)' : 
+'var(--text-main)' }}>
+1447: {s.quantity}
+1454: {viewStockItem.stock
+s?.reduce((acc: number, 
+s: any) => acc + 
+s.quantity, 0)}
+1463: <button 
+className="btn 
+btn-outline" onClick={() 
+=> setViewStockItem(null)}
+>Close</button>
+1470: {/* Stock 
+Adjustment Modal */}
+1472: showStockModal && 
+stockModalData.item && (
+1480: <h3 style={{ 
+marginBottom: '0.25rem' 
+}}>Adjust Stock</h3>
+1482: 
+{stockModalData.item.sku} 
+- 
+{stockModalData.item.name}
+1485: <button onClick={() 
+=> 
+setShowStockModal(false)} 
+style={{ background: 
+'none', border: 'none', 
+cursor: 'pointer', color: 
+'var(--text-muted)' }}>
+1490: {/* 1. Warehouse 
+Selection */}
+1492: <label style={{ 
+display: 'block', 
+marginBottom: '0.5rem', 
+fontSize: '0.875rem' 
+}}>Warehouse</label>
+1496: value={stockModalDat
+a.warehouseId}
+1497: onChange={e => 
+setStockModalData(prev => 
+({ ...prev, warehouseId: 
+e.target.value }))}
+1499: <option value="" 
+disabled>Select 
+Warehouse...</option>
+1500: {warehouses.map(w 
+=> (
+1506: {stockModalData.ware
+houseId ? (
+1510: <span style={{ 
+color: 
+'var(--text-muted)' 
+}}>Current Stock:</span>
+1511: <span style={{ 
+fontWeight: 600, 
+fontSize: '1.1rem' }}>{sto
+ckModalData.currentWhStock
+}</span>
+1517: style={{ flex: 1, 
+padding: '0.5rem', 
+borderRadius: '0.375rem', 
+border: 'none', cursor: 
+'pointer', background: 
+stockModalData.mode === 
+'add' ? '#10b981' : 
+'var(--bg-dark)', color: 
+stockModalData.mode === 
+'add' ? 'white' : 
+'var(--text-muted)' }}
+1518: onClick={() => 
+setStockModalData(prev => 
+({ ...prev, mode: 'add', 
+quantity: 0 }))}
+1523: style={{ flex: 1, 
+padding: '0.5rem', 
+borderRadius: '0.375rem', 
+border: 'none', cursor: 
+'pointer', background: 
+stockModalData.mode === 
+'remove' ? '#ef4444' : 
+'var(--bg-dark)', color: 
+stockModalData.mode === 
+'remove' ? 'white' : 
+'var(--text-muted)' }}
+1524: onClick={() => 
+setStockModalData(prev => 
+({ ...prev, mode: 
+'remove', quantity: 0 }))}
+1531: style={{ flex: 1, 
+padding: '0.5rem', 
+borderRadius: '0.375rem', 
+border: 'none', cursor: 
+'pointer', background: 
+stockModalData.mode === 
+'set' ? 'var(--primary)' 
+: 'var(--bg-dark)', 
+color: 
+stockModalData.mode === 
+'set' ? 'white' : 
+'var(--text-muted)' }}
+1532: onClick={() => 
+setStockModalData(prev => 
+({ ...prev, mode: 'set', 
+quantity: stockModalData.c
+urrentWhStock }))}
+1538: {/* 3. Quantity 
+Input */}
+1541: 
+{stockModalData.mode === 
+'set' ? 'New Total 
+Quantity' : 'Quantity to 
+' + (stockModalData.mode 
+=== 'add' ? 'Add' : 
+'Remove')}
+1548: value={stockModalDat
+a.quantity}
+1549: onChange={e => 
+setStockModalData(prev => 
+({ ...prev, quantity: pars
+eFloat(e.target.value) || 
+0 }))}
+1555: Resulting Stock: 
+<strong style={{ color: 
+'var(--primary)' }}>
+1556: 
+{stockModalData.mode === 
+'set' ? 
+stockModalData.quantity :
+1557: stockModalData.mode 
+=== 'add' ? stockModalData
+.currentWhStock + 
+stockModalData.quantity :
+1558: stockModalData.curre
+ntWhStock - 
+stockModalData.quantity}
+1565: <button 
+className="btn 
+btn-outline" onClick={() 
+=> setShowStockModal(false
+)}>Cancel</button>
+1566: <button 
+className="btn 
+btn-primary" onClick={hand
+leStockSave}>Update 
+Stock</button>
+1571: Please select a 
+warehouse to manage stock.
+1579: {/* Bulk Stock 
+Adjustment Modal */}
+1581: showBulkStockModal 
+&& (
+1582: <div 
+className="modal-overlay" 
+onClick={() => setShowBulk
+StockModal(false)}>
+1585: <h2>Bulk Stock 
+Adjustment</h2>
+1586: <button onClick={() 
+=> setShowBulkStockModal(f
+alse)} style={{ 
+background: 
+'transparent', border: 
+'none', cursor: 
+'pointer', color: 
+'var(--text-muted)' }}>
+1592: <label style={{ 
+display: 'block', 
+marginBottom: '0.5rem', 
+fontWeight: 500 
+}}>Warehouse</label>
+1594: 
+value={bulkStockWarehouse}
+1595: onChange={e => setBu
+lkStockWarehouse(e.target.
+value)}
+1605: {warehouses.map(w 
+=> <option key={w.id} valu
+e={w.id}>{w.name}</option>
+)}
+1626: value={bulkStockQuan
+tities[id] || 0}
+1627: onChange={e => 
+setBulkStockQuantities({ 
+...bulkStockQuantities, 
+[id]: 
+parseInt(e.target.value) 
+|| 0 })}
+1645: <button 
+className="btn 
+btn-outline" onClick={() 
+=> setShowBulkStockModal(f
+alse)}>Cancel</button>
+1646: <button 
+className="btn 
+btn-primary" onClick={hand
+leBulkStockUpdate}>Update 
+Stock</button>
+
+

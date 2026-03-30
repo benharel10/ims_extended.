@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, Plus, Upload, MoreHorizontal, X, FileSpreadsheet, Edit2, Check, MapPin, Package } from 'lucide-react';
-import { getItems, createItem, updateItem, deleteItem, updateStock, importBOM, importItems, updateItemCost, bulkDeleteItems, bulkUpdateStock, createAssemblyFromItems, createSaleFromInventory } from './actions';
+import { Search, Filter, Plus, Upload, MoreHorizontal, X, FileSpreadsheet, Edit2, Check, MapPin, Package, History, Barcode } from 'lucide-react';
+import { getItems, createItem, updateItem, deleteItem, updateStock, importBOM, importItems, updateItemCost, bulkDeleteItems, bulkUpdateStock, createAssemblyFromItems, createSaleFromInventory, getItemHistory } from './actions';
 import { getWarehouses } from '../shipping/actions';
 import * as XLSX from 'xlsx';
 import { useSystem } from '@/components/SystemProvider';
@@ -31,6 +31,22 @@ export default function InventoryPage() {
 
     // Actions Dropdown State
     const [activeActionId, setActiveActionId] = useState<number | null>(null);
+
+    // History Modal State
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [historyData, setHistoryData] = useState<any[]>([]);
+    const [historyItem, setHistoryItem] = useState<any>(null);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+
+    async function openHistory(item: any) {
+        setHistoryItem(item);
+        setShowHistoryModal(true);
+        setLoadingHistory(true);
+        const res = await getItemHistory(item.id);
+        if (res.success) setHistoryData(res.data || []);
+        else showAlert('Failed to load history', 'error');
+        setLoadingHistory(false);
+    }
 
     // Assembly Creation Modal State
     const [showAssemblyModal, setShowAssemblyModal] = useState(false);
@@ -106,6 +122,7 @@ export default function InventoryPage() {
                 setShowAssemblyModal(false);
                 setShowSellModal(false);
                 setShowBulkStockModal(false);
+                setShowHistoryModal(false);
                 setViewStockItem(null);
             }
         };
@@ -712,6 +729,39 @@ export default function InventoryPage() {
                 <div className="card full-width-page" style={{ marginBottom: '2rem', paddingLeft: 0, paddingRight: 0, borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
 
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap', padding: '0 1.5rem' }}>
+                        {/* Barcode Scanner */}
+                        <div style={{ position: 'relative', width: '220px' }}>
+                            <Barcode size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)' }} />
+                            <input
+                                type="text"
+                                placeholder="Scan Barcode..."
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const scannedSku = e.currentTarget.value.trim();
+                                        if (!scannedSku) return;
+                                        const item = items.find(i => i.sku.toLowerCase() === scannedSku.toLowerCase());
+                                        e.currentTarget.value = ''; // clear
+                                        if (item) {
+                                            openStockModal(item);
+                                        } else {
+                                            showAlert(`SKU not found: ${scannedSku}`, 'error');
+                                        }
+                                    }
+                                }}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem 1rem 0.75rem 3rem',
+                                    background: 'var(--bg-dark)',
+                                    border: '1px solid var(--primary)',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: 'white',
+                                    fontSize: '0.95rem',
+                                    boxShadow: '0 0 0 1px rgba(16, 185, 129, 0.2)'
+                                }}
+                            />
+                        </div>
+
+                        {/* Text Search */}
                         <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                             <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                             <input
@@ -924,12 +974,35 @@ export default function InventoryPage() {
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '1rem' }} data-label="Warehouse">
-                                                        <div style={{ fontWeight: 500 }}>
-                                                            {item.warehouse ||
-                                                                (item.stocks && item.stocks.length > 0 && warehouses.length > 0
-                                                                    ? Array.from(new Set(item.stocks.map((s: any) => warehouses.find((w: any) => w.id === s.warehouseId)?.name).filter(Boolean))).join(', ')
-                                                                    : <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Unassigned</span>
-                                                                )}
+                                                        <div style={{ fontWeight: 500, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                                            {item.stocks && item.stocks.length > 0 && warehouses.length > 0 ? (
+                                                                item.stocks.map((s: any) => {
+                                                                    const wh = warehouses.find((w: any) => w.id === s.warehouseId);
+                                                                    if (!wh) return null;
+                                                                    return (
+                                                                        <div key={s.warehouseId} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                                            <span>{wh.name}</span>
+                                                                            {s.location && (
+                                                                                <span style={{ 
+                                                                                    padding: '0.1rem 0.5rem', 
+                                                                                    background: 'rgba(16,185,129,0.1)', 
+                                                                                    color: '#10b981', 
+                                                                                    borderRadius: '999px', 
+                                                                                    fontSize: '0.75rem', 
+                                                                                    fontWeight: 500,
+                                                                                    display: 'inline-flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '0.2rem'
+                                                                                }}>
+                                                                                    <MapPin size={10} /> {s.location}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })
+                                                            ) : (
+                                                                <span style={{ opacity: 0.5, fontStyle: 'italic' }}>{item.warehouse || 'Unassigned'}</span>
+                                                            )}
                                                         </div>
                                                         {item.stocks && item.stocks.length > 0 && (
                                                             <button
@@ -938,7 +1011,7 @@ export default function InventoryPage() {
                                                                     background: 'none',
                                                                     border: 'none',
                                                                     padding: 0,
-                                                                    marginTop: '0.25rem',
+                                                                    marginTop: '0.4rem',
                                                                     color: 'var(--primary)',
                                                                     cursor: 'pointer',
                                                                     display: 'flex',
@@ -948,8 +1021,7 @@ export default function InventoryPage() {
                                                                     fontWeight: 500
                                                                 }}
                                                             >
-                                                                <MapPin size={12} />
-                                                                View {item.stocks.length} Locations
+                                                                View Qty by Location
                                                             </button>
                                                         )}
                                                     </td>
@@ -1079,12 +1151,28 @@ export default function InventoryPage() {
                                                                                     setActiveActionId(null);
                                                                                 }}
                                                                             >
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                    <X size={14} /> Delete
-                                                                                </div>
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                <X size={14} /> Delete
+                                                                            </div>
+                                                                        </button>
+                                                                    )}
+
+                                                                    <button
+                                                                        type="button"
+                                                                        style={{ display: 'block', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', borderTop: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            openHistory(item);
+                                                                            setActiveActionId(null);
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                            <History size={14} /> Item History
+                                                                        </div>
+                                                                    </button>
+
+                                                                </div>
+
                                                                 )}
                                                             </div>
                                                         </div>
@@ -1683,6 +1771,95 @@ export default function InventoryPage() {
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <button className="btn btn-outline" onClick={() => setShowBulkStockModal(false)}>Cancel</button>
                                 <button className="btn btn-primary" onClick={handleBulkStockUpdate}>Update Stock</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* History Modal */}
+            {
+                showHistoryModal && historyItem && (
+                    <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}>
+                        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '750px', width: '90%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div>
+                                    <h2 style={{ marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <History size={20} style={{ color: 'var(--primary)' }} />
+                                        Item History
+                                    </h2>
+                                    <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+                                        Audit log for {historyItem.sku}
+                                    </p>
+                                </div>
+                                <button onClick={() => setShowHistoryModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem' }}>
+                                {loadingHistory ? (
+                                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading history...</div>
+                                ) : historyData.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)' }}>
+                                        No history found for this item.
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        {historyData.map((log: any) => {
+                                            const actionColor = log.action.includes('DELETE') ? 'var(--danger)' :
+                                                                log.action.includes('CREATE') ? 'var(--primary)' :
+                                                                'var(--warning)';
+                                            
+                                            return (
+                                                <div key={log.id} style={{ 
+                                                    padding: '1rem', 
+                                                    background: 'var(--bg-dark)', 
+                                                    border: '1px solid var(--border-color)', 
+                                                    borderRadius: 'var(--radius-md)',
+                                                    borderLeft: `4px solid ${actionColor}`
+                                                }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                        <strong style={{ fontSize: '0.95rem' }}>{log.action.replace(/_/g, ' ')}</strong>
+                                                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                            {new Date(log.createdAt).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-card)', color: 'var(--text-main)', fontWeight: 600, fontSize: '0.7rem' }}>
+                                                            {log.user?.name?.[0]?.toUpperCase() || '?'}
+                                                        </div>
+                                                        {log.user?.name}
+                                                    </div>
+
+                                                    {log.details && (
+                                                        <div style={{ 
+                                                            fontSize: '0.85rem', 
+                                                            background: 'rgba(0,0,0,0.2)', 
+                                                            padding: '0.75rem', 
+                                                            borderRadius: '4px',
+                                                            fontFamily: 'monospace',
+                                                            whiteSpace: 'pre-wrap',
+                                                            wordBreak: 'break-all',
+                                                            color: 'var(--text-main)',
+                                                            overflowX: 'auto'
+                                                        }}>
+                                                            {(() => {
+                                                                try {
+                                                                    const parsed = JSON.parse(log.details);
+                                                                    return JSON.stringify(parsed, null, 2);
+                                                                } catch {
+                                                                    return log.details;
+                                                                }
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

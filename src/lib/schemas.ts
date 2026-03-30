@@ -95,6 +95,11 @@ export const UpdatePOStatusSchema = z.object({
     status: z.enum(PO_STATUSES, { errorMap: () => ({ message: 'Invalid status value' }) }),
 });
 
+export const UpdatePONumberSchema = z.object({
+    id: z.number().int().positive(),
+    poNumber: z.string().trim().min(1, 'PO number is required').max(100),
+});
+
 // ─── Shipping ─────────────────────────────────────────────────────────────────
 
 const SHIP_TYPES = ['Outbound', 'Inbound', 'Transfer'] as const;

@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate } from '../actions';
-import { Plus, Trash2, Save, ArrowLeft, Package, Zap } from 'lucide-react';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory } from '../actions';
+import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
 
 function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine }: any) {
-    const isDraft = po.status === 'Draft';
+    const isDraft = po.status === 'Draft' || po.status === 'Sent';
     const pending = line.quantity - line.received;
     const isComplete = pending <= 0;
     
@@ -133,8 +133,17 @@ export default function PODetailPage() {
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // History State
+    const [showHistory, setShowHistory] = useState(false);
+    const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+
     // Add Line State
     const [showAddLine, setShowAddLine] = useState(false);
+
+    // Edit PO Number State
+    const [isEditingPo, setIsEditingPo] = useState(false);
+    const [editPoNumber, setEditPoNumber] = useState('');
 
     // Add Line State
     const [selectedItemId, setSelectedItemId] = useState('');
@@ -266,6 +275,34 @@ export default function PODetailPage() {
         }
     }
 
+    async function handleSavePoNumber() {
+        if (!editPoNumber.trim() || editPoNumber === po.poNumber) {
+            setIsEditingPo(false);
+            return;
+        }
+        const res = await updatePONumber(poId, editPoNumber.trim());
+        if (res.success) {
+            showAlert('PO Name updated', 'success');
+            loadData();
+        } else {
+            showAlert(res.error || 'Failed to update PO Name', 'error');
+            setEditPoNumber(po.poNumber);
+        }
+        setIsEditingPo(false);
+    }
+
+    async function handleViewHistory() {
+        setShowHistory(true);
+        setLoadingHistory(true);
+        const res = await getPOHistory(poId);
+        if (res.success && res.data) {
+            setHistoryLogs(res.data);
+        } else {
+            showAlert(res.error || 'Failed to load history', 'error');
+        }
+        setLoadingHistory(false);
+    }
+
     if (loading) {
         return <div className="animate-fade-in" style={{ padding: '2rem', textAlign: 'center' }}>Loading PO...</div>;
     }
@@ -315,7 +352,21 @@ export default function PODetailPage() {
                         <Link href="/purchasing" style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
                             <ArrowLeft size={20} />
                         </Link>
-                        <h1>{po.poNumber}</h1>
+                        {isEditingPo ? (
+                            <input
+                                autoFocus
+                                className="input-group"
+                                style={{ fontSize: '1.5rem', fontWeight: 700, padding: '0.25rem 0.5rem', width: '300px' }}
+                                value={editPoNumber}
+                                onChange={e => setEditPoNumber(e.target.value)}
+                                onBlur={handleSavePoNumber}
+                                onKeyDown={e => { if (e.key === 'Enter') handleSavePoNumber(); if (e.key === 'Escape') setIsEditingPo(false); }}
+                            />
+                        ) : (
+                            <h1 onClick={() => { setEditPoNumber(po.poNumber); setIsEditingPo(true); }} style={{ margin: 0, cursor: 'text' }} title="Click to edit Name/Number">
+                                {po.poNumber}
+                            </h1>
+                        )}
                         <span className={`badge badge-${po.status === 'Completed' ? 'success' : po.status === 'Partial' ? 'warning' : 'secondary'}`}>
                             {po.status}
                         </span>
@@ -344,6 +395,9 @@ export default function PODetailPage() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button className="btn btn-outline" onClick={handleViewHistory} title="View Audit Logs">
+                        <History size={18} />
+                    </button>
                     {po.status === 'Draft' && (
                         <button className="btn btn-outline" onClick={() => handleStatusChange('Sent')}>
                             Mark as Sent
@@ -512,6 +566,52 @@ export default function PODetailPage() {
                     )
                 }
             </div >
+
+            {/* History Modal */}
+            {showHistory && (
+                <div className="modal-overlay" onClick={() => setShowHistory(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '620px', maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <History size={22} color="var(--primary)" />
+                                PO History Log
+                            </h2>
+                            <button className="btn btn-outline" onClick={() => setShowHistory(false)}>Close</button>
+                        </div>
+                        {loadingHistory ? (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading history...</div>
+                        ) : historyLogs.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No history logs found for this PO yet.</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                {historyLogs.map((log: any) => {
+                                    let details: any = null;
+                                    try { details = log.details ? JSON.parse(log.details) : null; } catch {}
+                                    const actionLabel = log.action.replace(/_/g, ' ');
+                                    return (
+                                        <div key={log.id} style={{ background: 'var(--bg-dark)', padding: '1rem', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                                <strong style={{ textTransform: 'capitalize' }}>{actionLabel.toLowerCase()}</strong>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                    {new Date(log.createdAt).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: details ? '0.5rem' : 0 }}>
+                                                by {log.user.name || log.user.email}
+                                            </div>
+                                            {details && (
+                                                <pre style={{ background: 'rgba(0,0,0,0.25)', padding: '0.5rem', borderRadius: '4px', fontSize: '0.78rem', margin: 0, whiteSpace: 'pre-wrap' }}>
+                                                    {JSON.stringify(details, null, 2)}
+                                                </pre>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

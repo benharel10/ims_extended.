@@ -1,1 +1,75 @@
-﻿Checking user: ben.harel@ks-waves.com
+﻿node.exe : PrismaClientInitia
+lizationError: 
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (PrismaC  
+  lientInitializationError   
+ : :String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+Invalid 
+`prisma.user.findUnique()` 
+invocation in
+C:\Users\benha\.gemini\antigr
+avity\scratch\ims_extended\sc
+ripts\create-victor.ts:11:40
+
+   8 // Generate a strong 
+password combining random 
+strings and special 
+characters
+   9 const password = Math.ra
+ndom().toString(36).slice(-6)
+ + '!' + Math.random().toStri
+ng(36).slice(-6).toUpperCase(
+) + '#A1';
+  10 
+Γזע 11 const existing = 
+await prisma.user.findUnique(
+Can't reach database server 
+at `ep-curly-river-ai2v9888-p
+ooler.c-4.us-east-1.aws.neon.
+tech:5432`
+
+Please make sure your 
+database server is running 
+at `ep-curly-river-ai2v9888-p
+ooler.c-4.us-east-1.aws.neon.
+tech:5432`.
+    at $n.handleRequestError 
+(C:\Users\benha\.gemini\antig
+ravity\scratch\ims_extended\n
+ode_modules\@prisma\client\ru
+ntime\library.js:121:7615)
+    at 
+$n.handleAndLogRequestError (
+C:\Users\benha\.gemini\antigr
+avity\scratch\ims_extended\no
+de_modules\@prisma\client\run
+time\library.js:121:6623)
+    at $n.request (C:\Users\b
+enha\.gemini\antigravity\scra
+tch\ims_extended\node_modules
+\@prisma\client\runtime\libra
+ry.js:121:6307)
+    at async l (C:\Users\benh
+a\.gemini\antigravity\scratch
+\ims_extended\node_modules\@p
+risma\client\runtime\library.
+js:130:9633)
+    at async main (C:\Users\b
+enha\.gemini\antigravity\scra
+tch\ims_extended\scripts\crea
+te-victor.ts:11:22) {
+  clientVersion: '5.22.0',
+  errorCode: undefined
+}

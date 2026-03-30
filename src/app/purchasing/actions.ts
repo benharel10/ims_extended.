@@ -4,10 +4,20 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 import { logError } from '@/lib/errorLogger';
-import { CreatePOSchema, AddPOLineSchema, UpdatePOStatusSchema, parseSchema } from '@/lib/schemas';
+import { CreatePOSchema, AddPOLineSchema, UpdatePOStatusSchema, UpdatePONumberSchema, parseSchema } from '@/lib/schemas';
 
 /** Active (non-soft-deleted) items only */
 const ACTIVE = { deletedAt: null };
+
+async function logAudit(userId: number, action: string, entity: string, entityId?: number, details?: any) {
+    try {
+        await prisma.systemLog.create({
+            data: { userId, action, entity, entityId, details: details ? JSON.stringify(details) : null }
+        });
+    } catch (e) {
+        logError('audit', e);
+    }
+}
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
@@ -85,7 +95,7 @@ export async function getOpenPurchaseOrders() {
 
         const pos = await prisma.purchaseOrder.findMany({
             where: { status: { not: 'Completed' } },
-            include: { lines: { include: { item: true } } },
+            include: { lines: { include: { item: true } }, salesOrder: true },
             orderBy: { createdAt: 'desc' },
             take: 500
         });
@@ -182,6 +192,9 @@ export async function createEmptyPO(supplier: string, leadTimeDays?: number, shi
                 salesOrderId: p.data.salesOrderId ?? null
             }
         });
+        
+        await logAudit(session.user.id, 'CREATE_PO', 'PurchaseOrder', po.id, { supplier: po.supplier, poNumber });
+
         revalidatePath('/purchasing');
         return { success: true, data: po };
     } catch (error) {
@@ -208,8 +221,8 @@ export async function addPOLine(
         if (!p.success) return { success: false, error: p.error };
 
         const po = await prisma.purchaseOrder.findUnique({ where: { id: poId }, select: { status: true } });
-        if (po?.status !== 'Draft') {
-            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft status' };
+        if (po?.status !== 'Draft' && po?.status !== 'Sent') {
+            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft or Sent status' };
         }
 
         let existing = null;
@@ -250,8 +263,8 @@ export async function removePOLine(lineId: number) {
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
         const line = await prisma.pOLine.findUnique({ where: { id: lineId }, select: { po: { select: { status: true } } } });
-        if (line?.po?.status !== 'Draft') {
-            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft status' };
+        if (line?.po?.status !== 'Draft' && line?.po?.status !== 'Sent') {
+            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft or Sent status' };
         }
 
         await prisma.pOLine.delete({ where: { id: lineId } });
@@ -272,8 +285,8 @@ export async function updatePOLine(lineId: number, quantity: number, unitCost: n
         if (unitCost < 0) return { success: false, error: 'Cost cannot be negative' };
 
         const line = await prisma.pOLine.findUnique({ where: { id: lineId }, select: { po: { select: { status: true, id: true } } } });
-        if (line?.po?.status !== 'Draft') {
-            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft status' };
+        if (line?.po?.status !== 'Draft' && line?.po?.status !== 'Sent') {
+            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft or Sent status' };
         }
 
         await prisma.pOLine.update({
@@ -373,6 +386,45 @@ export async function updatePODueDate(id: number, dueDateStr: string) {
     }
 }
 
+export async function updatePONumber(id: number, poNumber: string) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const p = parseSchema(UpdatePONumberSchema, { id, poNumber });
+        if (!p.success) return { success: false, error: p.error };
+
+        // Check if number is taken
+        const existing = await prisma.purchaseOrder.findUnique({ where: { poNumber: p.data.poNumber } });
+        if (existing && existing.id !== id) {
+            return { success: false, error: 'That PO Number is already in use' };
+        }
+
+        await prisma.purchaseOrder.update({
+            where: { id },
+            data: { poNumber: p.data.poNumber }
+        });
+
+        // Audit log
+        await prisma.systemLog.create({
+            data: {
+                userId: session.user.id,
+                action: 'UPDATE_PO_NUMBER',
+                entity: 'PurchaseOrder',
+                entityId: id,
+                details: JSON.stringify({ poNumber: p.data.poNumber })
+            }
+        });
+
+        revalidatePath(`/purchasing/${id}`);
+        revalidatePath('/purchasing');
+        return { success: true };
+    } catch (error) {
+        await logError('purchasing.updatePONumber', error);
+        return { success: false, error: 'Failed to update PO number' };
+    }
+}
+
 // ─── Status Update ────────────────────────────────────────────────────────────
 
 export async function updatePOStatus(id: number, status: string) {
@@ -384,6 +436,8 @@ export async function updatePOStatus(id: number, status: string) {
         if (!p.success) return { success: false, error: p.error };
 
         await prisma.purchaseOrder.update({ where: { id }, data: { status } });
+        await logAudit(session.user.id, 'UPDATE_STATUS', 'PurchaseOrder', id, { status });
+        
         revalidatePath(`/purchasing/${id}`);
         revalidatePath('/purchasing');
         return { success: true };
@@ -504,6 +558,16 @@ export async function receivePOItems(
                 where: { id: poId },
                 data: { status: allCompleted ? 'Completed' : 'Partial' }
             });
+            
+            await tx.systemLog.create({
+                data: {
+                    userId: session.user.id,
+                    action: 'RECEIVE_ITEMS',
+                    entity: 'PurchaseOrder',
+                    entityId: poId,
+                    details: JSON.stringify({ itemsReceived: items.length, status: allCompleted ? 'Completed' : 'Partial' })
+                }
+            });
         });
 
         revalidatePath('/purchasing');
@@ -515,3 +579,21 @@ export async function receivePOItems(
         return { success: false, error: msg };
     }
 }
+
+export async function getPOHistory(poId: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const logs = await prisma.systemLog.findMany({
+            where: { entity: 'PurchaseOrder', entityId: poId },
+            include: { user: { select: { name: true, email: true } } },
+            orderBy: { createdAt: 'desc' }
+        });
+        return { success: true, data: logs };
+    } catch (error) {
+        await logError('purchasing.getPOHistory', error);
+        return { success: false, error: 'Failed to fetch PO history' };
+    }
+}
+

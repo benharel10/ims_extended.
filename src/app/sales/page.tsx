@@ -1,10 +1,10 @@
-﻿'use client'
+'use client'
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
 import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer } from './actions';
-import { createEmptyPO, getBrands } from '../purchasing/actions';
+import { createEmptyPO, getBrands, getWarehouses } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
 // Simple Types for the UI
@@ -512,6 +512,13 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
     const [qty, setQty] = useState(1);
     const [adding, setAdding] = useState(false);
 
+    // Production modal state
+    const [produceModal, setProduceModal] = useState<null | { item: any; soldQty: number }>(null);
+    const [produceQty, setProduceQty] = useState(0);
+    const [produceWarehouse, setProduceWarehouse] = useState('');
+    const [warehouses, setWarehouses] = useState<any[]>([]);
+    const [producing, setProducing] = useState(false);
+
     // Filter items
     const filteredItems = items.filter((i: Item) => {
         const matchSearch = i.name.toLowerCase().includes(itemSearch.toLowerCase()) || i.sku.toLowerCase().includes(itemSearch.toLowerCase());
@@ -552,27 +559,54 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
         });
     }
 
-    async function handleProduce(item: Item, qty: number) {
-        showConfirm(`Run production for ${qty} x ${item.name}? This will deduct components and add to stock.`, async () => {
-            let serials: string[] = [];
-            if (item.isSerialized) {
-                const input = prompt(`Enter ${qty} Serial Numbers (comma separated):`);
-                if (!input) return;
-                serials = input.split(',').map(s => s.trim()).filter(Boolean);
-                if (serials.length !== qty) {
-                    showAlert(`Expected ${qty} serial numbers, got ${serials.length}`, 'warning');
-                    return;
-                }
-            }
+    async function handleProduce(item: any, soldQty: number) {
+        // Load warehouses on demand
+        if (warehouses.length === 0) {
+            const wRes = await getWarehouses();
+            if (wRes.success && wRes.data) setWarehouses(wRes.data);
+        }
+        setProduceQty(soldQty);
+        setProduceWarehouse('');
+        setProduceModal({ item, soldQty });
+    }
 
-            const res = await runProduction(item.id, qty, serials);
-            if (res.success) {
-                showAlert('Production complete! Stock updated.', 'success');
-                onUpdate();
-            } else {
-                showAlert('Production failed: ' + res.error, 'error');
+    async function handleConfirmProduce() {
+        if (!produceModal) return;
+        const { item, soldQty } = produceModal;
+        if (!produceWarehouse) {
+            showAlert('Select a destination warehouse', 'warning');
+            return;
+        }
+        if (produceQty < soldQty) {
+            showAlert(`Production quantity cannot be less than sold quantity (${soldQty})`, 'warning');
+            return;
+        }
+        let serials: string[] = [];
+        if (item.isSerialized) {
+            const input = prompt(`Enter ${produceQty} Serial Numbers (comma separated):`);
+            if (!input) return;
+            serials = input.split(',').map((s: string) => s.trim()).filter(Boolean);
+            if (serials.length !== produceQty) {
+                showAlert(`Expected ${produceQty} serial numbers, got ${serials.length}`, 'warning');
+                return;
             }
-        });
+        }
+        setProducing(true);
+        const surplus = produceQty - soldQty;
+        const res = await runProduction(item.id, produceQty, serials, parseInt(produceWarehouse));
+        setProducing(false);
+        if (res.success) {
+            setProduceModal(null);
+            showAlert(
+                surplus > 0
+                    ? `Production complete! ${soldQty} units will be sold. ${surplus} surplus unit(s) stay in stock.`
+                    : 'Production complete! Stock updated.',
+                'success'
+            );
+            onUpdate();
+        } else {
+            showAlert('Production failed: ' + res.error, 'error');
+        }
     }
 
     const [exploding, setExploding] = useState(false);
@@ -739,6 +773,7 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
         const data = res.data.map((row: any) => ({
             SKU: row.item.sku,
             Name: row.item.name,
+            Brand: row.item.brand || '',
             'Base Qty': row.baseQuantity,
             'Required Qty (+10%)': row.requiredQuantity,
         }));
@@ -1163,6 +1198,56 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                 </div>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+            {/* Produce Modal */}
+            {produceModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
+                    <div className="card" style={{ width: '420px', maxWidth: '90%' }} onClick={(e) => e.stopPropagation()}>
+                        <h3 style={{ marginBottom: '0.5rem' }}>Produce {produceModal.item.name}</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                            Specify how many units to produce. The required {produceModal.soldQty} units will be allocated to this order, and any surplus will be returned to the warehouse.
+                        </p>
+                        
+                        <div className="form-group" style={{ marginBottom: '1rem' }}>
+                            <label>Production Quantity</label>
+                            <input
+                                type="number"
+                                className="input-group"
+                                value={produceQty}
+                                onChange={e => setProduceQty(parseInt(e.target.value) || 0)}
+                                min={produceModal.soldQty}
+                                style={{ width: '100%', padding: '0.6rem', fontSize: '1.2rem', fontWeight: 'bold' }}
+                            />
+                            {produceQty > produceModal.soldQty && (
+                                <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#10b981' }}>
+                                    + {produceQty - produceModal.soldQty} units surplus for stock
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                            <label>Destination Warehouse (for surplus/records)</label>
+                            <select
+                                className="input-group"
+                                value={produceWarehouse}
+                                onChange={e => setProduceWarehouse(e.target.value)}
+                                style={{ width: '100%', padding: '0.6rem' }}
+                            >
+                                <option value="">Select a warehouse...</option>
+                                {warehouses.map(w => (
+                                    <option key={w.id} value={w.id}>{w.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                            <button className="btn btn-outline" onClick={() => setProduceModal(null)} disabled={producing}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleConfirmProduce} disabled={producing}>
+                                {producing ? 'Producing...' : `Produce ${produceQty}`}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

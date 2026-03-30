@@ -79,6 +79,10 @@ export default function PurchasingPage() {
     const [salesOrderId, setSalesOrderId] = useState('');
     const [brands, setBrands] = useState<string[]>([]);
     const [salesOrders, setSalesOrders] = useState<any[]>([]);
+    const [poSearch, setPoSearch] = useState('');
+    const [dueTodayPOs, setDueTodayPOs] = useState<any[]>([]);
+    const [showDuePrompt, setShowDuePrompt] = useState(false);
+    const [duePromptIndex, setDuePromptIndex] = useState(0);
 
     useEffect(() => {
         loadData();
@@ -110,6 +114,21 @@ export default function PurchasingPage() {
 
         if (posRes.success && posRes.data) {
             setPos(posRes.data);
+            // Check for POs due today
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const due = posRes.data.filter((po: any) => {
+                if (!po.leadTimeDays || (po.status !== 'Sent' && po.status !== 'Partial')) return false;
+                const dueDate = new Date(po.createdAt);
+                dueDate.setDate(dueDate.getDate() + po.leadTimeDays);
+                dueDate.setHours(0, 0, 0, 0);
+                return dueDate <= today;
+            });
+            if (due.length > 0) {
+                setDueTodayPOs(due);
+                setDuePromptIndex(0);
+                setShowDuePrompt(true);
+            }
         }
         if (brandsRes.success && brandsRes.data) {
             setBrands(brandsRes.data);
@@ -299,15 +318,57 @@ export default function PurchasingPage() {
                 </div>
             )}
 
+            {/* Arrival Due Prompt */}
+            {showDuePrompt && dueTodayPOs[duePromptIndex] && (
+                <div className="modal-overlay" onClick={() => setShowDuePrompt(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
+                        <h2 style={{ marginBottom: '0.75rem' }}>Shipment Due!</h2>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                            Purchase Order <strong>{dueTodayPOs[duePromptIndex].poNumber}</strong> from <strong>{dueTodayPOs[duePromptIndex].supplier}</strong> was due today.
+                            Has it arrived?
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                            <button className="btn btn-outline" onClick={() => {
+                                if (duePromptIndex + 1 < dueTodayPOs.length) {
+                                    setDuePromptIndex(duePromptIndex + 1);
+                                } else {
+                                    setShowDuePrompt(false);
+                                }
+                            }}>Not Yet</button>
+                            <button className="btn btn-primary" onClick={() => {
+                                setShowDuePrompt(false);
+                                router.push('/purchasing/receive');
+                            }}>Yes — Receive Items</button>
+                        </div>
+                        {dueTodayPOs.length > 1 && (
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
+                                {duePromptIndex + 1} of {dueTodayPOs.length} due POs
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Active Purchase Orders */}
             <div className="card" style={{ marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <h3 style={{ margin: 0 }}>Active Purchase Orders</h3>
-                    {selectedPoIds.size > 0 && isAdmin && (
-                        <button className="btn btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }} onClick={handleDeleteSelectedPOs}>
-                            <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete Selected ({selectedPoIds.size})
-                        </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <input
+                            type="text"
+                            className="input-group"
+                            placeholder="Search by PO#, Supplier or SO#..."
+                            value={poSearch}
+                            onChange={e => setPoSearch(e.target.value)}
+                            style={{ width: '260px', margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
+                        />
+                        {selectedPoIds.size > 0 && isAdmin && (
+                            <button className="btn btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }} onClick={handleDeleteSelectedPOs}>
+                                <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete Selected ({selectedPoIds.size})
+                            </button>
+                        )}
+                    </div>
                 </div>
                 {loading ? (
                     <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
@@ -335,8 +396,9 @@ export default function PurchasingPage() {
                                             </div>
                                         )}
                                     </th>
-                                    <th style={{ padding: '1rem' }}>PO Number</th>
+                            <th style={{ padding: '1rem' }}>PO Number</th>
                                     <th style={{ padding: '1rem' }}>Supplier</th>
+                                    <th style={{ padding: '1rem' }}>Linked SO</th>
                                     <th style={{ padding: '1rem' }}>Status</th>
                                     <th style={{ padding: '1rem' }}>Items</th>
                                     <th style={{ padding: '1rem' }}>Created</th>
@@ -345,7 +407,17 @@ export default function PurchasingPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {pos.map(po => (
+                                {pos
+                                    .filter((po: any) => {
+                                        const q = poSearch.toLowerCase();
+                                        if (!q) return true;
+                                        return (
+                                            po.poNumber.toLowerCase().includes(q) ||
+                                            po.supplier.toLowerCase().includes(q) ||
+                                            (po.salesOrder?.soNumber || '').toLowerCase().includes(q)
+                                        );
+                                    })
+                                    .map(po => (
                                     <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedPoIds.has(po.id) ? 'rgba(7, 89, 133, 0.1)' : 'transparent' }}>
                                         <td style={{ padding: '1rem' }}>
                                             {(po.status === 'Draft' && isAdmin) ? (
@@ -362,6 +434,13 @@ export default function PurchasingPage() {
                                         </td>
                                         <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
                                         <td style={{ padding: '1rem' }}>{po.supplier}</td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {po.salesOrder ? (
+                                                <span style={{ fontSize: '0.85rem', color: 'var(--primary)' }}>{po.salesOrder.soNumber}</span>
+                                            ) : (
+                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>—</span>
+                                            )}
+                                        </td>
                                         <td style={{ padding: '1rem' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 <span className={`badge badge-${po.status === 'Completed' ? 'success' : po.status === 'Partial' ? 'warning' : po.status === 'Pending SKU Mapping' ? 'error' : po.status === 'Synced' ? 'success' : 'secondary'}`}>
