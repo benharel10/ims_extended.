@@ -778,13 +778,23 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
             showAlert(res.error || 'Failed to explode BOM', 'error');
             return;
         }
-        const data = res.data.map((row: any) => ({
-            SKU: row.item.sku,
-            Name: row.item.name,
-            Brand: row.item.brand || '',
-            'Base Qty': row.baseQuantity,
-            'Required Qty (+10%)': row.requiredQuantity,
-        }));
+        const data = res.data.map((row: any) => {
+            const current = Number(row.item.currentStock || 0);
+            const allocated = Number(row.item.allocatedStock || 0);
+            const available = Math.max(0, current - allocated);
+            const required = row.requiredQuantity;
+            const shortfall = Math.max(0, required - available);
+
+            return {
+                SKU: row.item.sku,
+                Name: row.item.name,
+                Brand: row.item.brand || '',
+                'Base Qty': row.baseQuantity,
+                'Required Qty (+10%)': required,
+                'Available Stock': available,
+                'Quantity to Order': shortfall
+            };
+        });
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'BOM Requirements');
