@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory } from '../actions';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems } from '../actions';
 import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
@@ -145,6 +145,12 @@ export default function PODetailPage() {
     const [isEditingPo, setIsEditingPo] = useState(false);
     const [editPoNumber, setEditPoNumber] = useState('');
 
+    // Quick Receipt State
+    const [showReceiveModal, setShowReceiveModal] = useState(false);
+    const [warehouses, setWarehouses] = useState<any[]>([]);
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
+    const [isReceiving, setIsReceiving] = useState(false);
+
     // Add Line State
     const [selectedItemId, setSelectedItemId] = useState('');
     const [quantity, setQuantity] = useState(1);
@@ -161,9 +167,10 @@ export default function PODetailPage() {
 
     async function loadData() {
         setLoading(true);
-        const [poRes, itemsRes] = await Promise.all([
+        const [poRes, itemsRes, whRes] = await Promise.all([
             getPurchaseOrder(poId),
-            getItems()
+            getItems(),
+            getWarehouses()
         ]);
 
         if (poRes.success && poRes.data) {
@@ -175,6 +182,10 @@ export default function PODetailPage() {
 
         if (itemsRes.success && itemsRes.data) {
             setItems(itemsRes.data);
+        }
+        if (whRes.success && whRes.data) {
+            setWarehouses(whRes.data);
+            if (whRes.data.length > 0) setSelectedWarehouseId(whRes.data[0].id.toString());
         }
         setLoading(false);
     }
@@ -291,6 +302,38 @@ export default function PODetailPage() {
         setIsEditingPo(false);
     }
 
+    async function handleQuickReceive() {
+        if (!selectedWarehouseId) {
+            showAlert('Please select a warehouse', 'warning');
+            return;
+        }
+
+        const itemsToReceive = po.lines
+            .filter((l: any) => l.quantity > l.received)
+            .map((l: any) => ({
+                lineId: l.id,
+                qty: l.quantity - l.received
+            }));
+
+        if (itemsToReceive.length === 0) {
+            showAlert('No pending items to receive', 'info');
+            setShowReceiveModal(false);
+            return;
+        }
+
+        setIsReceiving(true);
+        const res = await receivePOItems(poId, itemsToReceive, parseInt(selectedWarehouseId));
+        setIsReceiving(false);
+
+        if (res.success) {
+            showAlert('Purchase Order received successfully', 'success');
+            setShowReceiveModal(false);
+            loadData();
+        } else {
+            showAlert(res.error || 'Failed to receive items', 'error');
+        }
+    }
+
     async function handleViewHistory() {
         setShowHistory(true);
         setLoadingHistory(true);
@@ -403,9 +446,14 @@ export default function PODetailPage() {
                             Mark as Sent
                         </button>
                     )}
-                    <Link href="/purchasing/receive" className="btn btn-primary">
-                        <Package size={18} />
-                        Receive Items
+                    {po.status !== 'Completed' && (
+                        <button className="btn btn-primary" onClick={() => setShowReceiveModal(true)}>
+                            <Package size={18} />
+                            Confirm Receipt
+                        </button>
+                    )}
+                    <Link href="/purchasing/receive" className="btn btn-outline">
+                        <ArrowLeft size={18} style={{ transform: 'rotate(180deg)' }} /> Detailed Receive
                     </Link>
                 </div>
             </div>
@@ -609,6 +657,52 @@ export default function PODetailPage() {
                                 })}
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Quick Receipt Modal */}
+            {showReceiveModal && (
+                <div className="modal-overlay" onClick={() => !isReceiving && setShowReceiveModal(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                        <h2 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Package size={24} color="var(--primary)" />
+                            Confirm Delivery
+                        </h2>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                            Choose the destination warehouse to receive all {totalOrdered - totalReceived} pending items.
+                        </p>
+                        
+                        <div className="form-group">
+                            <label>Destination Warehouse</label>
+                            <select 
+                                className="input-group"
+                                value={selectedWarehouseId}
+                                onChange={e => setSelectedWarehouseId(e.target.value)}
+                                disabled={isReceiving}
+                            >
+                                {warehouses.map(wh => (
+                                    <option key={wh.id} value={wh.id}>{wh.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '2rem' }}>
+                            <button 
+                                className="btn btn-outline" 
+                                onClick={() => setShowReceiveModal(false)}
+                                disabled={isReceiving}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handleQuickReceive}
+                                disabled={isReceiving || !selectedWarehouseId}
+                            >
+                                {isReceiving ? 'Processing...' : 'Confirm Receipt'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
