@@ -28,7 +28,7 @@ function EditableDueCell({ po, onUpdate }: any) {
         }
     }, [po.leadTimeDays, po.createdAt]);
 
-    if (po.status !== 'Draft' && po.status !== 'Sent') {
+    if (po.status === 'Completed' || po.status === 'Partial') {
         if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
         const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
         const isOverdue = new Date() > due && po.status !== 'Completed';
@@ -395,13 +395,13 @@ export default function PurchasingPage() {
                                             <div
                                                 className="checkbox"
                                                 onClick={() => {
-                                                    const validPos = pos.filter(p => p.status === 'Draft' || p.status === 'Sent'); // Draft or Sent POs can be deleted
+                                                    const validPos = pos.filter(p => p.status !== 'Completed' && p.status !== 'Partial');
                                                     if (selectedPoIds.size === validPos.length && validPos.length > 0) setSelectedPoIds(new Set());
                                                     else setSelectedPoIds(new Set(validPos.map(p => p.id)));
                                                 }}
                                                 style={{ cursor: 'pointer' }}
                                             >
-                                                {(selectedPoIds.size === pos.filter(p => p.status === 'Draft' || p.status === 'Sent').length && pos.filter(p => p.status === 'Draft' || p.status === 'Sent').length > 0) ? <CheckSquare size={18} /> : <Square size={18} />}
+                                                {(selectedPoIds.size === pos.filter(p => p.status !== 'Completed' && p.status !== 'Partial').length && pos.filter(p => p.status !== 'Completed' && p.status !== 'Partial').length > 0) ? <CheckSquare size={18} /> : <Square size={18} />}
                                             </div>
                                         )}
                                     </th>
@@ -430,7 +430,7 @@ export default function PurchasingPage() {
                                     .map(po => (
                                     <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedPoIds.has(po.id) ? 'rgba(7, 89, 133, 0.1)' : 'transparent' }}>
                                         <td style={{ padding: '1rem' }}>
-                                            {((po.status === 'Draft' || po.status === 'Sent') && isAdmin) ? (
+                                            {((po.status !== 'Completed' && po.status !== 'Partial') && isAdmin) ? (
                                                 <div
                                                     className="checkbox"
                                                     onClick={() => toggleSelectPo(po.id)}

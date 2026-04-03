@@ -315,8 +315,8 @@ export async function deletePurchaseOrder(id: number) {
         }
 
         const po = await prisma.purchaseOrder.findUnique({ where: { id }, select: { status: true } });
-        if (po?.status !== 'Draft' && po?.status !== 'Sent') {
-            return { success: false, error: 'Cannot delete a Purchase Order that is not in Draft or Sent status' };
+        if (po?.status === 'Completed' || po?.status === 'Partial') {
+            return { success: false, error: 'Cannot delete a Purchase Order that has received items (Completed or Partial)' };
         }
 
         await prisma.purchaseOrder.delete({
@@ -339,9 +339,9 @@ export async function deleteMultiplePOs(ids: number[]) {
         }
 
         const pos = await prisma.purchaseOrder.findMany({ where: { id: { in: ids } } });
-        const invalidPOs = pos.filter(po => po.status !== 'Draft' && po.status !== 'Sent');
+        const invalidPOs = pos.filter(po => po.status === 'Completed' || po.status === 'Partial');
         if (invalidPOs.length > 0) {
-            return { success: false, error: 'Can only delete Draft or Sent Purchase Orders' };
+            return { success: false, error: 'Cannot delete Purchase Orders that are Completed or Partial' };
         }
 
         await prisma.purchaseOrder.deleteMany({

@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
 
 function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine }: any) {
-    const isDraft = po.status === 'Draft' || po.status === 'Sent';
+    const isDraft = po.status !== 'Completed' && po.status !== 'Partial';
     const pending = line.quantity - line.received;
     const isComplete = pending <= 0;
     
@@ -417,7 +417,7 @@ export default function PODetailPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         Supplier: <strong>{po.supplier}</strong> •
                         Created: <span>{poDate.toISOString().split('T')[0]}</span>
-                        {po.status === 'Draft' || po.status === 'Sent' ? (
+                        {po.status !== 'Completed' && po.status !== 'Partial' ? (
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.5rem' }}>
                                 • Due: 
                                 <input 
