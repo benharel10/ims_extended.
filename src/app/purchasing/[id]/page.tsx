@@ -417,16 +417,31 @@ export default function PODetailPage() {
                             {po.status}
                         </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        Supplier: <strong>{po.supplier}</strong> •
-                        Created: <span>{poDate.toISOString().split('T')[0]}</span>
-                        {po.status !== 'Completed' && po.status !== 'Partial' ? (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.5rem' }}>
-                                • Due: 
+                    <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                        gap: '1.5rem', 
+                        marginTop: '1rem',
+                        padding: '1rem',
+                        background: 'var(--bg-dark)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-color)'
+                    }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Supplier</label>
+                            <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{po.supplier}</span>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Created Date</label>
+                            <span style={{ fontWeight: 500 }}>{poDate.toLocaleDateString()}</span>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimated Due Date</label>
+                            {po.status !== 'Completed' && po.status !== 'Partial' ? (
                                 <input 
                                     type="date"
                                     className="input-group"
-                                    style={{ padding: '0.25rem 0.5rem', margin: 0, width: '130px', fontSize: '0.875rem' }}
+                                    style={{ padding: '0.4rem 0.75rem', margin: 0, width: '100%', maxWidth: '200px' }}
                                     defaultValue={initialDate}
                                     onBlur={(e) => {
                                         if (e.target.value !== initialDate && e.target.value !== '') {
@@ -434,10 +449,16 @@ export default function PODetailPage() {
                                         }
                                     }}
                                 />
-                                • Linked SO:
+                            ) : (
+                                <span style={{ fontWeight: 500 }}>{dueElement}</span>
+                            )}
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Linked Sales Order</label>
+                            {po.status !== 'Completed' && po.status !== 'Partial' ? (
                                 <select 
                                     className="input-group"
-                                    style={{ padding: '0.25rem 0.5rem', margin: 0, width: '130px', fontSize: '0.875rem' }}
+                                    style={{ padding: '0.4rem 0.75rem', margin: 0, width: '100%', maxWidth: '200px' }}
                                     value={po.salesOrderId || ''}
                                     onChange={async (e) => {
                                         const soId = e.target.value ? parseInt(e.target.value) : null;
@@ -450,22 +471,25 @@ export default function PODetailPage() {
                                         }
                                     }}
                                 >
-                                    <option value="">None</option>
-                                    {salesOrders.map(so => (
-                                        <option key={so.id} value={so.id}>{so.soNumber}</option>
-                                    ))}
+                                    <option value="">None (Standalone)</option>
+                                    {salesOrders && salesOrders.length > 0 ? (
+                                        salesOrders.map(so => (
+                                            <option key={so.id} value={so.id}>{so.soNumber} - {so.customer}</option>
+                                        ))
+                                    ) : (
+                                        <option disabled>No Sales Orders found</option>
+                                    )}
                                 </select>
-                            </span>
-                        ) : (
-                            <>
-                                {dueElement}
-                                {po.salesOrder && (
-                                    <span style={{ marginLeft: '0.5rem' }}>
-                                        • Joined to SO: <strong>{po.salesOrder.soNumber}</strong>
-                                    </span>
-                                )}
-                            </>
-                        )}
+                            ) : (
+                                <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                                    {po.salesOrder ? (
+                                        <Link href={`/sales?id=${po.salesOrderId}`} style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+                                            {po.salesOrder.soNumber}
+                                        </Link>
+                                    ) : 'None'}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>

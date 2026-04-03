@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
 import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer } from './actions';
-import { createEmptyPO, getBrands, getWarehouses } from '../purchasing/actions';
+import { createEmptyPO, getBrands, getWarehouses, getPurchaseOrders, updatePOLinkedSO } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
 // Simple Types for the UI
@@ -713,12 +713,18 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
     const [leadTime, setLeadTime] = useState('');
     const [shippingCost, setShippingCost] = useState('');
 
+    const [allPOs, setAllPOs] = useState<any[]>([]);
+
     useEffect(() => {
         if (showCreatePO && brands.length === 0) {
             getBrands().then(res => {
                 if (res.success) setBrands(res.data || []);
             });
         }
+        // Load POs for linking
+        getPurchaseOrders(true).then(res => {
+            if (res.success) setAllPOs(res.data || []);
+        });
     }, [showCreatePO]);
 
     async function handleCreateEmptyPO() {
@@ -958,6 +964,91 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                        
+                        {/* Linked Purchase Orders Section */}
+                        <div className="card" style={{ background: 'var(--bg-dark)', border: '1px solid var(--border-color)', marginTop: '2rem', padding: '1.25rem' }}>
+                            <h4 style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#3b82f6' }}>
+                                <Package size={18} /> Linked Purchase Orders
+                            </h4>
+                            
+                            {order.purchaseOrders && order.purchaseOrders.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                                    {order.purchaseOrders.map((po: any) => (
+                                        <div key={po.id} style={{ 
+                                            padding: '0.6rem 0.875rem', 
+                                            background: 'rgba(59, 130, 246, 0.12)', 
+                                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                                            borderRadius: 'var(--radius-md)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '1rem',
+                                            fontSize: '0.9rem'
+                                        }}>
+                                            <span style={{ fontWeight: 600 }}>{po.poNumber}</span>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{po.status}</span>
+                                            <button 
+                                                onClick={async () => {
+                                                    showConfirm(`Unlink PO ${po.poNumber}?`, async () => {
+                                                        const res = await updatePOLinkedSO(po.id, null);
+                                                        if (res.success) {
+                                                            showAlert('PO unlinked', 'success');
+                                                            onUpdate();
+                                                        } else {
+                                                            showAlert(res.error || 'Failed to unlink', 'error');
+                                                        }
+                                                    });
+                                                }}
+                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem', display: 'flex', alignItems: 'center' }}
+                                                title="Unlink from this SO"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem', fontStyle: 'italic' }}>
+                                    No Purchase Orders officially linked to this SO yet.
+                                </p>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <select 
+                                        className="input-group"
+                                        style={{ margin: 0, width: '100%', padding: '0.55rem' }}
+                                        onChange={async (e) => {
+                                            if (!e.target.value) return;
+                                            const poId = parseInt(e.target.value);
+                                            const res = await updatePOLinkedSO(poId, order.id);
+                                            if (res.success) {
+                                                showAlert('PO linked successfully', 'success');
+                                                onUpdate();
+                                            } else {
+                                                showAlert(res.error || 'Failed to link PO', 'error');
+                                            }
+                                            e.target.value = '';
+                                        }}
+                                    >
+                                        <option value="">Link existing PO...</option>
+                                        {allPOs && allPOs.length > 0 ? (
+                                            allPOs.filter(po => po.salesOrderId !== order.id).map(po => (
+                                                <option key={po.id} value={po.id}>{po.poNumber} ({po.supplier})</option>
+                                            ))
+                                        ) : (
+                                            <option disabled>Loading or no other POs found...</option>
+                                        )}
+                                    </select>
+                                </div>
+                                <button 
+                                    className="btn btn-outline" 
+                                    style={{ whiteSpace: 'nowrap', padding: '0.55rem 1rem' }}
+                                    onClick={() => setShowCreatePO(true)}
+                                >
+                                    + New PO
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1203,6 +1294,7 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                                     Creates <strong style={{ color: 'var(--text-main)' }}>{wizardSupplierList.length} PO(s)</strong> — one per supplier
                                 </div>
+
                                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                                     <button className="btn btn-outline" onClick={() => setShowWizard(false)}>Cancel</button>
                                     <button
