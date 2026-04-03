@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { getOpenPurchaseOrders, receivePOItems, getWarehouses } from '../actions';
+import { getPurchaseOrders, receivePOItems, getWarehouses } from '../actions';
 import { PackageCheck, ChevronDown, ChevronRight, Save } from 'lucide-react';
 import Link from 'next/link';
 
@@ -23,7 +23,7 @@ export default function ReceivePOPage() {
     async function loadData() {
         setLoading(true);
         const [posRes, whRes] = await Promise.all([
-            getOpenPurchaseOrders(),
+            getPurchaseOrders(),
             getWarehouses()
         ]);
 
