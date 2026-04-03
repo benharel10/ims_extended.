@@ -190,6 +190,10 @@ export default function PODetailPage() {
             setWarehouses(whRes.data);
             if (whRes.data.length > 0) setSelectedWarehouseId(whRes.data[0].id.toString());
         }
+        if (soRes.success && soRes.data) {
+            // Only show Draft (Not Confirmed) sales orders for linking
+            setSalesOrders(soRes.data.filter((so: any) => so.status === 'Draft'));
+        }
         setLoading(false);
     }
 
@@ -477,7 +481,7 @@ export default function PODetailPage() {
                                             <option key={so.id} value={so.id}>{so.soNumber} - {so.customer}</option>
                                         ))
                                     ) : (
-                                        <option disabled>No Sales Orders found</option>
+                                        <option disabled>No Draft Sales Orders found</option>
                                     )}
                                 </select>
                             ) : (
