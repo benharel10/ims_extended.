@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2, Link2 } from 'lucide-react';
 import Link from 'next/link';
-import { getLowStockItems, generatePurchaseOrder, getOpenPurchaseOrders, createEmptyPO, deletePurchaseOrder, deleteMultiplePOs, updatePODueDate, getBrands } from './actions';
+import { getLowStockItems, generatePurchaseOrder, getPurchaseOrders, createEmptyPO, deletePurchaseOrder, deleteMultiplePOs, updatePODueDate, getBrands } from './actions';
 import { getSalesOrders } from '@/app/sales/actions';
 
 import { useSystem } from '@/components/SystemProvider';
@@ -28,7 +28,7 @@ function EditableDueCell({ po, onUpdate }: any) {
         }
     }, [po.leadTimeDays, po.createdAt]);
 
-    if (po.status !== 'Draft') {
+    if (po.status !== 'Draft' && po.status !== 'Sent') {
         if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
         const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
         const isOverdue = new Date() > due && po.status !== 'Completed';
@@ -83,16 +83,17 @@ export default function PurchasingPage() {
     const [dueTodayPOs, setDueTodayPOs] = useState<any[]>([]);
     const [showDuePrompt, setShowDuePrompt] = useState(false);
     const [duePromptIndex, setDuePromptIndex] = useState(0);
+    const [includeCompleted, setIncludeCompleted] = useState(false);
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [includeCompleted]);
 
     async function loadData() {
         setLoading(true);
         const [itemsRes, posRes, brandsRes, soRes] = await Promise.all([
             getLowStockItems(),
-            getOpenPurchaseOrders(),
+            getPurchaseOrders(includeCompleted),
             getBrands(),
             getSalesOrders()
         ]);
@@ -363,6 +364,14 @@ export default function PurchasingPage() {
                             onChange={e => setPoSearch(e.target.value)}
                             style={{ width: '260px', margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
                         />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                            <input 
+                                type="checkbox" 
+                                checked={includeCompleted} 
+                                onChange={e => setIncludeCompleted(e.target.checked)} 
+                            />
+                            Search Arrived/All
+                        </label>
                         {selectedPoIds.size > 0 && isAdmin && (
                             <button className="btn btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }} onClick={handleDeleteSelectedPOs}>
                                 <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete Selected ({selectedPoIds.size})
@@ -386,13 +395,13 @@ export default function PurchasingPage() {
                                             <div
                                                 className="checkbox"
                                                 onClick={() => {
-                                                    const validPos = pos.filter(p => p.status === 'Draft'); // Only Draft POs can be deleted
+                                                    const validPos = pos.filter(p => p.status === 'Draft' || p.status === 'Sent'); // Draft or Sent POs can be deleted
                                                     if (selectedPoIds.size === validPos.length && validPos.length > 0) setSelectedPoIds(new Set());
                                                     else setSelectedPoIds(new Set(validPos.map(p => p.id)));
                                                 }}
                                                 style={{ cursor: 'pointer' }}
                                             >
-                                                {(selectedPoIds.size === pos.filter(p => p.status === 'Draft').length && pos.filter(p => p.status === 'Draft').length > 0) ? <CheckSquare size={18} /> : <Square size={18} />}
+                                                {(selectedPoIds.size === pos.filter(p => p.status === 'Draft' || p.status === 'Sent').length && pos.filter(p => p.status === 'Draft' || p.status === 'Sent').length > 0) ? <CheckSquare size={18} /> : <Square size={18} />}
                                             </div>
                                         )}
                                     </th>
@@ -402,6 +411,7 @@ export default function PurchasingPage() {
                                     <th style={{ padding: '1rem' }}>Status</th>
                                     <th style={{ padding: '1rem' }}>Items</th>
                                     <th style={{ padding: '1rem' }}>Created</th>
+                                    <th style={{ padding: '1rem' }}>Arrival Status</th>
                                     <th style={{ padding: '1rem' }}>Due Date</th>
                                     <th style={{ padding: '1rem' }}>Actions</th>
                                 </tr>
@@ -420,7 +430,7 @@ export default function PurchasingPage() {
                                     .map(po => (
                                     <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedPoIds.has(po.id) ? 'rgba(7, 89, 133, 0.1)' : 'transparent' }}>
                                         <td style={{ padding: '1rem' }}>
-                                            {(po.status === 'Draft' && isAdmin) ? (
+                                            {((po.status === 'Draft' || po.status === 'Sent') && isAdmin) ? (
                                                 <div
                                                     className="checkbox"
                                                     onClick={() => toggleSelectPo(po.id)}
@@ -456,6 +466,33 @@ export default function PurchasingPage() {
                                         <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
                                         <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
                                             {new Date(po.createdAt).toLocaleDateString()}
+                                        </td>
+                                        <td style={{ padding: '1rem' }}>
+                                            {po.status === 'Completed' ? (
+                                                (() => {
+                                                    const due = new Date(po.createdAt);
+                                                    due.setDate(due.getDate() + (po.leadTimeDays || 0));
+                                                    const delivered = new Date(po.deliveredAt || po.updatedAt);
+                                                    const isOnTime = delivered <= due;
+                                                    return (
+                                                        <span style={{ 
+                                                            padding: '0.25rem 0.6rem', 
+                                                            borderRadius: '4px', 
+                                                            fontSize: '0.75rem',
+                                                            background: isOnTime ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                            color: isOnTime ? '#22c55e' : '#ef4444',
+                                                            border: `1px solid ${isOnTime ? '#22c55e' : '#ef4444'}`
+                                                        }}>
+                                                            {isOnTime ? 'On Time' : 'Late Arrival'}
+                                                            <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>{delivered.toLocaleDateString()}</div>
+                                                        </span>
+                                                    );
+                                                })()
+                                            ) : po.status === 'Partial' ? (
+                                                <span style={{ color: 'var(--warning)', fontSize: '0.85rem' }}>Partial delivery</span>
+                                            ) : (
+                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Awaiting</span>
+                                            )}
                                         </td>
                                         <td style={{ padding: '1rem' }}>
                                             <EditableDueCell po={po} onUpdate={handleUpdateDueDate} />

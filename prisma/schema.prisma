@@ -140,6 +140,8 @@ model PurchaseOrder {
   shippingCost Float?    @default(0.0)
   totalCost    Float?    @default(0.0)
 
+  deliveredAt  DateTime?
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }

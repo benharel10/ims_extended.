@@ -88,20 +88,25 @@ export async function getLowStockItems() {
     }
 }
 
-export async function getOpenPurchaseOrders() {
+export async function getPurchaseOrders(includeCompleted = false) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
+        const where: any = {};
+        if (!includeCompleted) {
+            where.status = { not: 'Completed' };
+        }
+
         const pos = await prisma.purchaseOrder.findMany({
-            where: { status: { not: 'Completed' } },
+            where,
             include: { lines: { include: { item: true } }, salesOrder: true },
             orderBy: { createdAt: 'desc' },
             take: 500
         });
         return { success: true, data: pos };
     } catch (error) {
-        await logError('purchasing.getOpenPurchaseOrders', error);
+        await logError('purchasing.getPurchaseOrders', error);
         return { success: false, error: 'Failed to fetch purchase orders. Please try again.' };
     }
 }
@@ -310,8 +315,8 @@ export async function deletePurchaseOrder(id: number) {
         }
 
         const po = await prisma.purchaseOrder.findUnique({ where: { id }, select: { status: true } });
-        if (po?.status !== 'Draft') {
-            return { success: false, error: 'Cannot delete a Purchase Order that is not in Draft status' };
+        if (po?.status !== 'Draft' && po?.status !== 'Sent') {
+            return { success: false, error: 'Cannot delete a Purchase Order that is not in Draft or Sent status' };
         }
 
         await prisma.purchaseOrder.delete({
@@ -334,9 +339,9 @@ export async function deleteMultiplePOs(ids: number[]) {
         }
 
         const pos = await prisma.purchaseOrder.findMany({ where: { id: { in: ids } } });
-        const invalidPOs = pos.filter(po => po.status !== 'Draft');
+        const invalidPOs = pos.filter(po => po.status !== 'Draft' && po.status !== 'Sent');
         if (invalidPOs.length > 0) {
-            return { success: false, error: 'Can only delete Draft Purchase Orders' };
+            return { success: false, error: 'Can only delete Draft or Sent Purchase Orders' };
         }
 
         await prisma.purchaseOrder.deleteMany({
@@ -359,8 +364,8 @@ export async function updatePODueDate(id: number, dueDateStr: string) {
         const po = await prisma.purchaseOrder.findUnique({ where: { id } });
         if (!po) return { success: false, error: 'PO not found' };
 
-        if (po.status !== 'Draft') {
-            return { success: false, error: 'Can only update due date for Draft POs' };
+        if (po.status !== 'Draft' && po.status !== 'Sent') {
+            return { success: false, error: 'Can only update due date for Draft or Sent POs' };
         }
 
         const createdAt = new Date(po.createdAt);
@@ -556,7 +561,10 @@ export async function receivePOItems(
 
             await tx.purchaseOrder.update({
                 where: { id: poId },
-                data: { status: allCompleted ? 'Completed' : 'Partial' }
+                data: { 
+                    status: allCompleted ? 'Completed' : 'Partial',
+                    deliveredAt: allCompleted ? new Date() : null
+                }
             });
             
             await tx.systemLog.create({

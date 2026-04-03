@@ -374,7 +374,7 @@ export default function PODetailPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         Supplier: <strong>{po.supplier}</strong> •
                         Created: <span>{poDate.toISOString().split('T')[0]}</span>
-                        {po.status === 'Draft' ? (
+                        {po.status === 'Draft' || po.status === 'Sent' ? (
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.5rem' }}>
                                 • Due: 
                                 <input 
