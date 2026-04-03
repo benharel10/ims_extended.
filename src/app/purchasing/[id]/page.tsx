@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems } from '../actions';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO } from '../actions';
+import { getSalesOrders } from '@/app/sales/actions';
 import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
@@ -131,6 +132,7 @@ export default function PODetailPage() {
 
     const [po, setPo] = useState<any>(null);
     const [items, setItems] = useState<any[]>([]);
+    const [salesOrders, setSalesOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     // History State
@@ -167,10 +169,11 @@ export default function PODetailPage() {
 
     async function loadData() {
         setLoading(true);
-        const [poRes, itemsRes, whRes] = await Promise.all([
+        const [poRes, itemsRes, whRes, soRes] = await Promise.all([
             getPurchaseOrder(poId),
             getItems(),
-            getWarehouses()
+            getWarehouses(),
+            getSalesOrders()
         ]);
 
         if (poRes.success && poRes.data) {
@@ -431,9 +434,37 @@ export default function PODetailPage() {
                                         }
                                     }}
                                 />
+                                • Linked SO:
+                                <select 
+                                    className="input-group"
+                                    style={{ padding: '0.25rem 0.5rem', margin: 0, width: '130px', fontSize: '0.875rem' }}
+                                    value={po.salesOrderId || ''}
+                                    onChange={async (e) => {
+                                        const soId = e.target.value ? parseInt(e.target.value) : null;
+                                        const res = await updatePOLinkedSO(po.id, soId);
+                                        if (res.success) {
+                                            showAlert('Linked Sales Order updated', 'success');
+                                            loadData();
+                                        } else {
+                                            showAlert(res.error || 'Failed to update link', 'error');
+                                        }
+                                    }}
+                                >
+                                    <option value="">None</option>
+                                    {salesOrders.map(so => (
+                                        <option key={so.id} value={so.id}>{so.soNumber}</option>
+                                    ))}
+                                </select>
                             </span>
                         ) : (
-                            dueElement
+                            <>
+                                {dueElement}
+                                {po.salesOrder && (
+                                    <span style={{ marginLeft: '0.5rem' }}>
+                                        • Joined to SO: <strong>{po.salesOrder.soNumber}</strong>
+                                    </span>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>

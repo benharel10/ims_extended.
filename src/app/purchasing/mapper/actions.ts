@@ -67,6 +67,13 @@ export async function saveSkuMapping(externalSku: string, externalName: string, 
             });
 
             // 2. Retroactively fix existing historical PO Lines
+            // Find the internal item to get its cost
+            const internalItem = await tx.item.findUnique({
+                where: { id: internalItemId },
+                select: { cost: true }
+            });
+            const newCost = internalItem?.cost || 0;
+
             // Find all lines with this unidentified SKU
             const linesToFix = await tx.pOLine.findMany({
                 where: { itemId: null, newItemSku: externalSku }
@@ -80,7 +87,8 @@ export async function saveSkuMapping(externalSku: string, externalName: string, 
                         itemId: internalItemId,
                         newItemSku: null,
                         newItemName: null,
-                        isAutoMapped: true
+                        isAutoMapped: true,
+                        ...(newCost > 0 ? { unitCost: newCost } : {})
                     }
                 });
 

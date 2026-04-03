@@ -226,8 +226,8 @@ export async function addPOLine(
         if (!p.success) return { success: false, error: p.error };
 
         const po = await prisma.purchaseOrder.findUnique({ where: { id: poId }, select: { status: true } });
-        if (po?.status !== 'Draft' && po?.status !== 'Sent') {
-            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft or Sent status' };
+        if (po?.status === 'Completed' || po?.status === 'Partial') {
+            return { success: false, error: 'Cannot modify a Purchase Order that has received items (Completed or Partial)' };
         }
 
         let existing = null;
@@ -268,8 +268,8 @@ export async function removePOLine(lineId: number) {
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
         const line = await prisma.pOLine.findUnique({ where: { id: lineId }, select: { po: { select: { status: true } } } });
-        if (line?.po?.status !== 'Draft' && line?.po?.status !== 'Sent') {
-            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft or Sent status' };
+        if (line?.po?.status === 'Completed' || line?.po?.status === 'Partial') {
+            return { success: false, error: 'Cannot modify a Purchase Order that has received items (Completed or Partial)' };
         }
 
         await prisma.pOLine.delete({ where: { id: lineId } });
@@ -290,8 +290,8 @@ export async function updatePOLine(lineId: number, quantity: number, unitCost: n
         if (unitCost < 0) return { success: false, error: 'Cost cannot be negative' };
 
         const line = await prisma.pOLine.findUnique({ where: { id: lineId }, select: { po: { select: { status: true, id: true } } } });
-        if (line?.po?.status !== 'Draft' && line?.po?.status !== 'Sent') {
-            return { success: false, error: 'Cannot modify a Purchase Order that is not in Draft or Sent status' };
+        if (line?.po?.status === 'Completed' || line?.po?.status === 'Partial') {
+            return { success: false, error: 'Cannot modify a Purchase Order that has received items (Completed or Partial)' };
         }
 
         await prisma.pOLine.update({
@@ -605,3 +605,24 @@ export async function getPOHistory(poId: number) {
     }
 }
 
+
+export async function updatePOLinkedSO(poId: number, salesOrderId: number | null) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        await prisma.purchaseOrder.update({
+            where: { id: poId },
+            data: { salesOrderId }
+        });
+
+        await logAudit(session.user.id, 'LINK_SO', 'PurchaseOrder', poId, { salesOrderId });
+        
+        revalidatePath(`/purchasing/${poId}`);
+        revalidatePath('/purchasing');
+        return { success: true };
+    } catch (error) {
+        await logError('purchasing.updatePOLinkedSO', error);
+        return { success: false, error: 'Failed to update linked Sales Order' };
+    }
+}

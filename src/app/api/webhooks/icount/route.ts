@@ -51,9 +51,20 @@ export async function POST(req: Request) {
         // doc_id (from iCount) ➔ order_number (in our DB conceptually mapped to poNumber)
         // client_name ➔ vendor_name (mapped to supplier)
         // total_amount ➔ total_cost
-        const order_number = String(payload.doc_id);
+        const order_number = String(payload.docnum || payload.doc_id); // docnum prioritized as per user request
         const vendor_name = payload.client_name;
         const total_cost = Number(payload.total_amount) || 0;
+        
+        let lead_time_days = 0;
+        if (payload.delivery_time) {
+            const dt = new Date(payload.delivery_time);
+            if (!isNaN(dt.getTime())) {
+                const diffTime = dt.getTime() - new Date().getTime();
+                lead_time_days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            } else {
+                lead_time_days = Number(payload.delivery_time) || 0;
+            }
+        }
         
         // items_array ➔ Loop through and map item_sku to our sku, and item_quantity to our quantity
         let items_array = payload.items;
@@ -72,7 +83,7 @@ export async function POST(req: Request) {
         const lineData: any[] = [];
 
         for (const item of items_array) {
-            const item_sku = item.sku || item.item_code || item.item_name || item.description;
+            const item_sku = item.makat || item.sku || item.item_code || item.item_name || item.description;
             const item_quantity = Number(item.quantity) || 1;
             const unit_cost = Number(item.unit_price || item.price) || 0;
 
@@ -138,6 +149,7 @@ export async function POST(req: Request) {
                      data: {
                          supplier: vendor_name,
                          totalCost: total_cost,
+                         leadTimeDays: lead_time_days,
                          status: finalStatus,
                          pendingManualMapping: hasUnidentifiedSku,
                          lines: {
@@ -150,10 +162,11 @@ export async function POST(req: Request) {
                  // If not, create a new PO entry
                  await tx.purchaseOrder.create({
                      data: {
-                         poNumber: order_number,
-                         supplier: vendor_name,
-                         totalCost: total_cost,
-                         status: finalStatus,
+                          poNumber: order_number,
+                          supplier: vendor_name,
+                          totalCost: total_cost,
+                          leadTimeDays: lead_time_days,
+                          status: finalStatus,
                          pendingManualMapping: hasUnidentifiedSku,
                          lines: {
                              create: lineData
