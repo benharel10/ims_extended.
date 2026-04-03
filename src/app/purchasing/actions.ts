@@ -290,7 +290,8 @@ export async function updatePOLine(lineId: number, quantity: number, unitCost: n
         if (unitCost < 0) return { success: false, error: 'Cost cannot be negative' };
 
         const line = await prisma.pOLine.findUnique({ where: { id: lineId }, select: { po: { select: { status: true, id: true } } } });
-        if (line?.po?.status === 'Completed' || line?.po?.status === 'Partial') {
+        if (!line?.po) return { success: false, error: 'Line or PO not found' };
+        if (line.po.status === 'Completed' || line.po.status === 'Partial') {
             return { success: false, error: 'Cannot modify a Purchase Order that has received items (Completed or Partial)' };
         }
 
