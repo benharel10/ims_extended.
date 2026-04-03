@@ -87,7 +87,7 @@ export async function POST(req: Request) {
                     // Match found in mapping table -> auto map it!
                     lineData.push({
                         quantity: item_quantity,
-                        unitCost: unit_cost,
+                        unitCost: mapping.item.cost > 0 ? mapping.item.cost : unit_cost,
                         isAutoMapped: true,
                         item: { connect: { id: mapping.internalItemId } }
                     });
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
                         // SKU exists directly -> proper linkage
                         lineData.push({
                             quantity: item_quantity,
-                            unitCost: unit_cost,
+                            unitCost: dbItem.cost > 0 ? dbItem.cost : unit_cost,
                             item: { connect: { id: dbItem.id } }
                         });
                     } else {

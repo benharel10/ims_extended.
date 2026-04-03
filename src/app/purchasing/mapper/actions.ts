@@ -118,3 +118,51 @@ export async function saveSkuMapping(externalSku: string, externalName: string, 
         return { success: false, error: error.message || 'Database error' };
     }
 }
+
+export async function deleteUnmappedItem(externalSku: string, externalName: string) {
+    try {
+        await prisma.$transaction(async (tx) => {
+            // Find all lines with this unidentified SKU
+            const linesToDelete = await tx.pOLine.findMany({
+                where: { itemId: null, newItemSku: externalSku, newItemName: externalName }
+            });
+
+            if (linesToDelete.length > 0) {
+                // Gather affected PO IDs to review before deleting
+                const poIds = [...new Set(linesToDelete.map(l => l.poId))];
+
+                // Delete the lines
+                await tx.pOLine.deleteMany({
+                    where: { itemId: null, newItemSku: externalSku, newItemName: externalName }
+                });
+
+                // For each PO, check if it's now fully mapped or empty
+                for (const poId of poIds) {
+                    const remainingUnmapped = await tx.pOLine.count({
+                        where: { poId: poId, itemId: null }
+                    });
+
+                    // If zero remaining unmapped -> PO status might change
+                    if (remainingUnmapped === 0) {
+                        const po = await tx.purchaseOrder.findUnique({ where: { id: poId } });
+                        if (po) {
+                            const finalStatus = po.status === 'Pending SKU Mapping' ? 'Synced' : po.status;
+                            await tx.purchaseOrder.update({
+                                where: { id: poId },
+                                data: {
+                                    pendingManualMapping: false,
+                                    status: finalStatus
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
+
+        return { success: true, message: 'Unmapped item records deleted successfully' };
+    } catch (error: any) {
+        console.error('Error deleting unmapped item:', error);
+        return { success: false, error: 'Database error' };
+    }
+}

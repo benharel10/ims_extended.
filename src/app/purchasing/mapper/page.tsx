@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getUnmappedItems, getInternalItems, saveSkuMapping } from './actions';
+import { getUnmappedItems, getInternalItems, saveSkuMapping, deleteUnmappedItem } from './actions';
 import { useSystem } from '@/components/SystemProvider';
-import { Link2, Search, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Link2, Search, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function MapperPage() {
@@ -45,6 +45,18 @@ export default function MapperPage() {
                 showAlert(res.error || 'Failed to save mapping', 'error');
             }
         }, `Are you sure you want to permanently map [${externalSku}] to this internal database item? This action affects all existing pending POs.`);
+    }
+
+    async function handleDelete(externalSku: string, externalName: string) {
+        await showConfirm(`Delete Unidentified Record`, async () => {
+            const res = await deleteUnmappedItem(externalSku, externalName);
+            if (res.success) {
+                showAlert(res.message || 'Records deleted successfully', 'success');
+                setUnmappedItems(prev => prev.filter(item => !(item.newItemSku === externalSku && item.newItemName === externalName)));
+            } else {
+                showAlert(res.error || 'Failed to delete records', 'error');
+            }
+        }, `Are you sure you want to delete all PO lines containing [${externalSku}]? This will remove these items from their respective Purchase Orders.`);
     }
 
     // Fuzzy matching filter helper
@@ -103,7 +115,14 @@ export default function MapperPage() {
                                                 <AlertCircle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
                                                 <div>
                                                     <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{item.newItemName}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>SKU: {item.newItemSku}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '0.5rem' }}>SKU: {item.newItemSku}</div>
+                                                    <button 
+                                                        onClick={() => handleDelete(item.newItemSku, item.newItemName)}
+                                                        className="btn btn-outline"
+                                                        style={{ color: '#ef4444', borderColor: '#ef4444', padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                                                    >
+                                                        <Trash2 size={14} style={{ marginRight: '0.25rem' }} /> Dismiss/Delete
+                                                    </button>
                                                 </div>
                                             </div>
                                         </td>
