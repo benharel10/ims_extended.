@@ -56,13 +56,14 @@ export async function POST(req: Request) {
         const total_cost = Number(payload.total_amount) || 0;
         
         let lead_time_days = 0;
-        if (payload.delivery_time) {
-            const dt = new Date(payload.delivery_time);
+        const rawDeliveryDate = payload.delivery_date || payload.delivery_time;
+        if (rawDeliveryDate) {
+            const dt = new Date(rawDeliveryDate);
             if (!isNaN(dt.getTime())) {
                 const diffTime = dt.getTime() - new Date().getTime();
                 lead_time_days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             } else {
-                lead_time_days = Number(payload.delivery_time) || 0;
+                lead_time_days = Number(rawDeliveryDate) || 0;
             }
         }
         
@@ -144,12 +145,22 @@ export async function POST(req: Request) {
              });
 
              if (existingPo) {
+                 // Calculate leadTimeDays relative to the original createdAt to keep the Due Date correct
+                 let updatedLeadTime = lead_time_days;
+                 if (rawDeliveryDate) {
+                     const dt = new Date(rawDeliveryDate);
+                     if (!isNaN(dt.getTime())) {
+                         const diffTime = dt.getTime() - new Date(existingPo.createdAt).getTime();
+                         updatedLeadTime = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                     }
+                 }
+
                  await tx.purchaseOrder.update({
                      where: { id: existingPo.id },
                      data: {
                          supplier: vendor_name,
                          totalCost: total_cost,
-                         leadTimeDays: lead_time_days,
+                         leadTimeDays: updatedLeadTime,
                          status: finalStatus,
                          pendingManualMapping: hasUnidentifiedSku,
                          lines: {
