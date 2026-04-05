@@ -695,7 +695,7 @@ export async function generateInspectionReports(poId: number) {
                 });
 
                 const buffer = await workbook.xlsx.writeBuffer();
-                zip.file(`${item.sku}_Inspection_Report.xlsx`, buffer);
+                zip.file(`${item.sku}_${po.poNumber}.xlsx`, buffer);
                 reportsCount++;
             } catch (err) {
                 console.error(`Error generating report for ${item.sku}:`, err);
