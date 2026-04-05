@@ -121,7 +121,12 @@ export async function getPurchaseOrder(id: number) {
 
         const po = await prisma.purchaseOrder.findUnique({
             where: { id },
-            include: { lines: { include: { item: true } } }
+            include: { 
+                lines: { include: { item: true } },
+                inspectionRecords: {
+                    select: { id: true, itemId: true, fileName: true, status: true, createdAt: true }
+                }
+            }
         });
         return { success: true, data: po };
     } catch (error) {

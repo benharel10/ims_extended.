@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Filter, Plus, Upload, MoreHorizontal, X, FileSpreadsheet, Edit2, Check, MapPin, Package, History, Barcode } from 'lucide-react';
 import { getItems, createItem, updateItem, deleteItem, updateStock, importBOM, importItems, updateItemCost, bulkDeleteItems, bulkUpdateStock, createAssemblyFromItems, createSaleFromInventory, getItemHistory } from './actions';
+import { getInspectionRecords } from '../quality/actions';
 import { getWarehouses } from '../shipping/actions';
 import * as XLSX from 'xlsx';
 import { useSystem } from '@/components/SystemProvider';
@@ -37,15 +38,29 @@ export default function InventoryPage() {
     const [historyData, setHistoryData] = useState<any[]>([]);
     const [historyItem, setHistoryItem] = useState<any>(null);
     const [loadingHistory, setLoadingHistory] = useState(false);
+    
+    // Quality History State
+    const [activeHistoryTab, setActiveHistoryTab] = useState<'Stock' | 'Quality'>('Stock');
+    const [qualityData, setQualityData] = useState<any[]>([]);
+    const [loadingQuality, setLoadingQuality] = useState(false);
 
     async function openHistory(item: any) {
         setHistoryItem(item);
         setShowHistoryModal(true);
+        setActiveHistoryTab('Stock');
         setLoadingHistory(true);
-        const res = await getItemHistory(item.id);
-        if (res.success) setHistoryData(res.data || []);
-        else showAlert('Failed to load history', 'error');
+        setLoadingQuality(true);
+        
+        const [historyRes, qualityRes] = await Promise.all([
+            getItemHistory(item.id),
+            getInspectionRecords({ itemId: item.id })
+        ]);
+        
+        if (historyRes.success) setHistoryData(historyRes.data || []);
+        if (qualityRes.success) setQualityData(qualityRes.data || []);
+        
         setLoadingHistory(false);
+        setLoadingQuality(false);
     }
 
     // Assembly Creation Modal State
@@ -1872,68 +1887,168 @@ export default function InventoryPage() {
                                 </button>
                             </div>
 
-                            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem' }}>
-                                {loadingHistory ? (
-                                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading history...</div>
-                                ) : historyData.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)' }}>
-                                        No history found for this item.
-                                    </div>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        {historyData.map((log: any) => {
-                                            const actionColor = log.action.includes('DELETE') ? 'var(--danger)' :
-                                                                log.action.includes('CREATE') ? 'var(--primary)' :
-                                                                'var(--warning)';
-                                            
-                                            return (
-                                                <div key={log.id} style={{ 
-                                                    padding: '1rem', 
-                                                    background: 'var(--bg-dark)', 
-                                                    border: '1px solid var(--border-color)', 
-                                                    borderRadius: 'var(--radius-md)',
-                                                    borderLeft: `4px solid ${actionColor}`
-                                                }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                        <strong style={{ fontSize: '0.95rem' }}>{log.action.replace(/_/g, ' ')}</strong>
-                                                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                                            {new Date(log.createdAt).toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                    
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-card)', color: 'var(--text-main)', fontWeight: 600, fontSize: '0.7rem' }}>
-                                                            {log.user?.name?.[0]?.toUpperCase() || '?'}
-                                                        </div>
-                                                        {log.user?.name}
-                                                    </div>
+                            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', gap: '2rem' }}>
+                                <button 
+                                    onClick={() => setActiveHistoryTab('Stock')}
+                                    style={{ 
+                                        padding: '0.75rem 0.25rem', 
+                                        background: 'transparent', 
+                                        border: 'none', 
+                                        borderBottom: `2px solid ${activeHistoryTab === 'Stock' ? 'var(--primary)' : 'transparent'}`,
+                                        color: activeHistoryTab === 'Stock' ? 'var(--primary)' : 'var(--text-muted)',
+                                        fontWeight: activeHistoryTab === 'Stock' ? 600 : 400,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Stock Movements
+                                </button>
+                                <button 
+                                    onClick={() => setActiveHistoryTab('Quality')}
+                                    style={{ 
+                                        padding: '0.75rem 0.25rem', 
+                                        background: 'transparent', 
+                                        border: 'none', 
+                                        borderBottom: `2px solid ${activeHistoryTab === 'Quality' ? 'var(--primary)' : 'transparent'}`,
+                                        color: activeHistoryTab === 'Quality' ? 'var(--primary)' : 'var(--text-muted)',
+                                        fontWeight: activeHistoryTab === 'Quality' ? 600 : 400,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Inspection History (FA)
+                                </button>
+                            </div>
 
-                                                    {log.details && (
-                                                        <div style={{ 
-                                                            fontSize: '0.85rem', 
-                                                            background: 'rgba(0,0,0,0.2)', 
-                                                            padding: '0.75rem', 
-                                                            borderRadius: '4px',
-                                                            fontFamily: 'monospace',
-                                                            whiteSpace: 'pre-wrap',
-                                                            wordBreak: 'break-all',
-                                                            color: 'var(--text-main)',
-                                                            overflowX: 'auto'
+                            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem' }}>
+                                {activeHistoryTab === 'Stock' ? (
+                                    <>
+                                        {loadingHistory ? (
+                                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading history...</div>
+                                        ) : historyData.length === 0 ? (
+                                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)' }}>
+                                                No stock activities found for this item.
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                {historyData.map((log: any) => {
+                                                    const actionColor = log.action.includes('DELETE') ? 'var(--danger)' :
+                                                                        log.action.includes('CREATE') ? 'var(--primary)' :
+                                                                        'var(--warning)';
+                                                    
+                                                    return (
+                                                        <div key={log.id} style={{ 
+                                                            padding: '1rem', 
+                                                            background: 'var(--bg-dark)', 
+                                                            border: '1px solid var(--border-color)', 
+                                                            borderRadius: 'var(--radius-md)',
+                                                            borderLeft: `4px solid ${actionColor}`
                                                         }}>
-                                                            {(() => {
-                                                                try {
-                                                                    const parsed = JSON.parse(log.details);
-                                                                    return JSON.stringify(parsed, null, 2);
-                                                                } catch {
-                                                                    return log.details;
-                                                                }
-                                                            })()}
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                                <strong style={{ fontSize: '0.95rem' }}>{log.action.replace(/_/g, ' ')}</strong>
+                                                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                                    {new Date(log.createdAt).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-card)', color: 'var(--text-main)', fontWeight: 600, fontSize: '0.7rem' }}>
+                                                                    {log.user?.name?.[0]?.toUpperCase() || '?'}
+                                                                </div>
+                                                                {log.user?.name}
+                                                            </div>
+
+                                                            {log.details && (
+                                                                <div style={{ 
+                                                                    fontSize: '0.85rem', 
+                                                                    background: 'rgba(0,0,0,0.2)', 
+                                                                    padding: '0.75rem', 
+                                                                    borderRadius: '4px',
+                                                                    fontFamily: 'monospace',
+                                                                    whiteSpace: 'pre-wrap',
+                                                                    wordBreak: 'break-all',
+                                                                    color: 'var(--text-main)',
+                                                                    overflowX: 'auto'
+                                                                }}>
+                                                                    {(() => {
+                                                                        try {
+                                                                            const parsed = JSON.parse(log.details);
+                                                                            return JSON.stringify(parsed, null, 2);
+                                                                        } catch {
+                                                                            return log.details;
+                                                                        }
+                                                                    })()}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        {loadingQuality ? (
+                                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading reports...</div>
+                                        ) : qualityData.length === 0 ? (
+                                            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)' }}>
+                                                No inspection reports found for this item.
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                {qualityData.map((record: any) => (
+                                                    <div key={record.id} style={{ 
+                                                        padding: '1rem', 
+                                                        background: 'var(--bg-dark)', 
+                                                        border: '1px solid var(--border-color)', 
+                                                        borderRadius: 'var(--radius-md)',
+                                                        borderLeft: `4px solid ${record.status === 'Pass' ? '#22c55e' : '#ef4444'}`
+                                                    }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                            <div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                                                    <strong style={{ fontSize: '1rem' }}>{record.fileName}</strong>
+                                                                    <span style={{ 
+                                                                        fontSize: '0.7rem', 
+                                                                        padding: '0.1rem 0.4rem', 
+                                                                        borderRadius: '4px', 
+                                                                        background: record.status === 'Pass' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                                                        color: record.status === 'Pass' ? '#22c55e' : '#ef4444',
+                                                                        fontWeight: 600
+                                                                    }}>
+                                                                        {record.status.toUpperCase()}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem' }}>
+                                                                    <span>PO: {record.po?.poNumber || 'N/A'}</span>
+                                                                    <span>Date: {new Date(record.createdAt).toLocaleDateString()}</span>
+                                                                    <span>By: {record.inspector?.name}</span>
+                                                                </div>
+                                                                {record.notes && (
+                                                                    <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                                                        "{record.notes}"
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <button 
+                                                                className="btn btn-sm btn-outline" 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const link = document.createElement('a');
+                                                                    link.href = record.fileData;
+                                                                    link.download = record.fileName;
+                                                                    document.body.appendChild(link);
+                                                                    link.click();
+                                                                    document.body.removeChild(link);
+                                                                }}
+                                                                style={{ padding: '0.4rem' }}
+                                                            >
+                                                                <Upload size={14} style={{ transform: 'rotate(180deg)' }} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>

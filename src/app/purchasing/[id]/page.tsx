@@ -3,15 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports } from '../actions';
+import { createInspectionRecord } from '../../quality/actions';
 import { getSalesOrders } from '@/app/sales/actions';
-import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet, ShieldCheck, ShieldAlert, Upload, Check, X } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
 
-function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine }: any) {
+function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleShowUploadQC }: any) {
     const isDraft = po.status !== 'Completed' && po.status !== 'Partial';
     const pending = line.quantity - line.received;
     const isComplete = pending <= 0;
+    
+    // Check if there is an inspection record for this item in this PO
+    const qcRecords = po.inspectionRecords || [];
+    const record = qcRecords.find((r: any) => r.itemId === line.itemId);
     
     const [quantity, setQuantity] = useState(line.quantity);
     const [unitCost, setUnitCost] = useState(line.unitCost);
@@ -153,6 +158,13 @@ export default function PODetailPage() {
     const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
     const [isReceiving, setIsReceiving] = useState(false);
     const [isGeneratingReports, setIsGeneratingReports] = useState(false);
+
+    const [showQUploadModal, setShowQUploadModal] = useState(false);
+    const [selectedLine, setSelectedLine] = useState<any>(null);
+    const [qcStatus, setQcStatus] = useState('Pass');
+    const [qcNotes, setQcNotes] = useState('');
+    const [isUploadingQC, setIsUploadingQC] = useState(false);
+    const qcInputRef = React.useRef<HTMLInputElement>(null);
 
     // Add Line State
     const [selectedItemId, setSelectedItemId] = useState('');
@@ -371,6 +383,49 @@ export default function PODetailPage() {
         } else {
             showAlert(res.error || 'Failed to generate reports', 'error');
         }
+    }
+
+    function handleShowUploadQC(line: any) {
+        if (!line.itemId) {
+            showAlert('This item is not in the inventory system. Map it first to record QC.', 'info');
+            return;
+        }
+        setSelectedLine(line);
+        setQcStatus('Pass');
+        setQcNotes('');
+        setShowQUploadModal(true);
+    }
+
+    async function handleSaveQC(e: React.FormEvent) {
+        e.preventDefault();
+        const file = qcInputRef.current?.files?.[0];
+        if (!file) {
+            showAlert('Please select a file to upload', 'warning');
+            return;
+        }
+        setIsUploadingQC(true);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const base64 = event.target?.result as string;
+            const res = await createInspectionRecord({
+                itemId: selectedLine.itemId,
+                poId: poId,
+                fileName: file.name,
+                fileData: base64,
+                status: qcStatus,
+                notes: qcNotes
+            });
+
+            if (res.success) {
+                showAlert('Inspection record saved', 'success');
+                setShowQUploadModal(false);
+                loadData(); // Reload to show badge
+            } else {
+                showAlert(res.error || 'Failed to save record', 'error');
+            }
+            setIsUploadingQC(false);
+        };
+        reader.readAsDataURL(file);
     }
 
     if (loading) {
@@ -697,6 +752,7 @@ export default function PODetailPage() {
                                             po={po} 
                                             handleRemoveLine={handleRemoveLine} 
                                             handleUpdateLine={handleUpdateLine} 
+                                            handleShowUploadQC={handleShowUploadQC}
                                         />
                                     ))}
                                 </tbody>
@@ -798,6 +854,98 @@ export default function PODetailPage() {
                                 {isReceiving ? 'Processing...' : 'Confirm Receipt'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* QC Upload Modal */}
+            {showQUploadModal && (
+                <div className="modal-overlay" onClick={() => !isUploadingQC && setShowQUploadModal(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <ShieldCheck size={24} color="var(--primary)" />
+                                Record Inspection (FA)
+                            </h2>
+                            <button className="btn btn-outline" onClick={() => setShowQUploadModal(false)} disabled={isUploadingQC}>
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div style={{ marginBottom: '1.5rem', background: 'var(--bg-dark)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Item</div>
+                            <div style={{ fontWeight: 600 }}>{selectedLine?.item?.sku || selectedLine?.newItemSku}</div>
+                            <div style={{ fontSize: '0.9rem' }}>{selectedLine?.item?.name || selectedLine?.newItemName}</div>
+                        </div>
+
+                        <form onSubmit={handleSaveQC}>
+                            <div className="form-group">
+                                <label>Report File (Completed Excel/PDF)</label>
+                                <input 
+                                    type="file" 
+                                    className="input-group" 
+                                    ref={qcInputRef} 
+                                    disabled={isUploadingQC}
+                                    style={{ padding: '0.5rem' }}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Overall Inspection Result</label>
+                                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                                    <label style={{ 
+                                        flex: 1, 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        gap: '0.5rem', 
+                                        padding: '0.75rem', 
+                                        borderRadius: '8px', 
+                                        border: `2px solid ${qcStatus === 'Pass' ? 'var(--primary)' : 'var(--border-color)'}`,
+                                        background: qcStatus === 'Pass' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                        cursor: 'pointer'
+                                    }}>
+                                        <input type="radio" style={{ display: 'none' }} name="status" value="Pass" checked={qcStatus === 'Pass'} onChange={() => setQcStatus('Pass')} />
+                                        <Check size={18} color={qcStatus === 'Pass' ? 'var(--primary)' : 'gray'} />
+                                        <span>PASS</span>
+                                    </label>
+                                    <label style={{ 
+                                        flex: 1, 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        gap: '0.5rem', 
+                                        padding: '0.75rem', 
+                                        borderRadius: '8px', 
+                                        border: `2px solid ${qcStatus === 'Fail' ? '#ef4444' : 'var(--border-color)'}`,
+                                        background: qcStatus === 'Fail' ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                                        cursor: 'pointer'
+                                    }}>
+                                        <input type="radio" style={{ display: 'none' }} name="status" value="Fail" checked={qcStatus === 'Fail'} onChange={() => setQcStatus('Fail')} />
+                                        <X size={18} color={qcStatus === 'Fail' ? '#ef4444' : 'gray'} />
+                                        <span>FAIL</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label>Notes / Observations</label>
+                                <textarea 
+                                    className="input-group" 
+                                    rows={3} 
+                                    placeholder="Add any specific measurement comments or reasons for failure..."
+                                    value={qcNotes}
+                                    onChange={e => setQcNotes(e.target.value)}
+                                    disabled={isUploadingQC}
+                                ></textarea>
+                            </div>
+
+                            <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                <button type="button" className="btn btn-outline" onClick={() => setShowQUploadModal(false)} disabled={isUploadingQC}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={isUploadingQC}>
+                                    {isUploadingQC ? 'Uploading...' : 'Save Inspection'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

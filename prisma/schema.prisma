@@ -82,7 +82,8 @@ model Item {
 
   inspectionTemplateUrl  String?
   inspectionTemplateName String?
-
+  inspectionRecords      InspectionRecord[]
+  
   @@index([deletedAt])
   @@index([sku])
 }
@@ -144,7 +145,8 @@ model PurchaseOrder {
   totalCost    Float?    @default(0.0)
 
   deliveredAt  DateTime?
-
+  inspectionRecords InspectionRecord[]
+  
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -194,7 +196,7 @@ model SalesLine {
   soId      Int
   so        SalesOrder @relation(fields: [soId], references: [id], onDelete: Cascade)
   itemId    Int
-  item      Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item        Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
   
   quantity  Int
   shipped   Int   @default(0)
@@ -296,6 +298,7 @@ model User {
   role       String   @default("Warehouse")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  inspectionRecords InspectionRecord[]
   
   systemLogs SystemLog[]
 
@@ -349,4 +352,23 @@ model ExternalMapping {
   updatedAt      DateTime @updatedAt
 
   @@unique([externalSku, source]) // An external SKU from a specific source maps to ONE internal ID
+}
+
+model InspectionRecord {
+  id          Int      @id @default(autoincrement())
+  itemId      Int
+  item        Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  poId        Int?
+  po          PurchaseOrder? @relation(fields: [poId], references: [id])
+  fileName    String
+  fileData    String   @db.Text // Store base64 Data URL
+  status      String   @default("Pass") // Pass, Fail
+  notes       String?
+  inspectorId Int
+  inspector   User     @relation(fields: [inspectorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([poId])
 }

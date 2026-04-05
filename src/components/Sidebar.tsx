@@ -14,7 +14,8 @@ import {
     Truck,
     LogOut,
     Menu,
-    X
+    X,
+    ShieldCheck
 } from 'lucide-react';
 import { logoutAction } from '../app/auth/actions';
 
@@ -25,6 +26,7 @@ const navItems = [
     { name: 'Sales', href: '/sales', icon: DollarSign },
     { name: 'Shipping', href: '/shipping', icon: Truck },
     { name: 'Purchasing', href: '/purchasing', icon: ShoppingCart },
+    { name: 'Quality Control', href: '/quality', icon: ShieldCheck },
     { name: 'Finance', href: '/finance', icon: DollarSign },
     { name: 'Reports', href: '/reports', icon: BarChart4 },
 ];
