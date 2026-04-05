@@ -676,11 +676,13 @@ export async function generateInspectionReports(poId: number) {
                         row.eachCell(cell => {
                             if (cell.value && typeof cell.value === 'string') {
                                 let val = cell.value;
-                                val = val.replace(/{{PN}}/g, item.sku);
-                                val = val.replace(/{{DESC}}/g, item.name);
+                                val = val.replace(/{{PN}}|{{SKU}}/g, item.sku);
+                                val = val.replace(/{{DESC}}|{{NAME}}/g, item.name || '');
                                 val = val.replace(/{{REV}}/g, item.revision || '');
-                                val = val.replace(/{{USER}}/g, userName);
+                                val = val.replace(/{{USER}}|{{USERNAME}}/g, userName);
                                 val = val.replace(/{{DATE}}/g, currentDate);
+                                val = val.replace(/{{SUPPLIER}}/g, po.supplier || '');
+                                val = val.replace(/{{QUANTITY}}/g, String(line.quantity));
                                 cell.value = val;
                             }
                         });
