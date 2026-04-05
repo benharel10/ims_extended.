@@ -653,11 +653,20 @@ export async function generateInspectionReports(poId: number) {
             if (!item || !item.inspectionTemplateUrl) continue;
 
             try {
-                // Fetch template
-                const response = await fetch(item.inspectionTemplateUrl);
-                if (!response.ok) throw new Error(`Failed to fetch template for ${item.sku}`);
+                // Fetch or Load template
+                let arrayBuffer: ArrayBuffer;
+                if (item.inspectionTemplateUrl.startsWith('data:')) {
+                    const base64Data = item.inspectionTemplateUrl.split(',')[1];
+                    const buffer = Buffer.from(base64Data, 'base64');
+                    // In some environments, buffer.buffer might have offset issues
+                    // Using buffer directly or creating a new Uint8Array is safer
+                    arrayBuffer = new Uint8Array(buffer).buffer;
+                } else {
+                    const response = await fetch(item.inspectionTemplateUrl);
+                    if (!response.ok) throw new Error(`Failed to fetch template for ${item.sku}`);
+                    arrayBuffer = await response.arrayBuffer();
+                }
                 
-                const arrayBuffer = await response.arrayBuffer();
                 const workbook = new ExcelJS.Workbook();
                 await workbook.xlsx.load(arrayBuffer);
 

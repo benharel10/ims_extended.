@@ -66,6 +66,24 @@ export default function InventoryPage() {
     // File Upload Refs
     const bomInputRef = useRef<HTMLInputElement>(null);
     const itemInputRef = useRef<HTMLInputElement>(null);
+    const templateInputRef = useRef<HTMLInputElement>(null);
+
+    async function handleTemplateUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            showAlert('File is too large. Max size is 2MB.', 'warning');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            setFormData({ ...formData, inspectionTemplateUrl: base64, inspectionTemplateName: file.name });
+        };
+        reader.readAsDataURL(file);
+    }
 
     // Item Form State
     const [formData, setFormData] = useState<{
@@ -1427,21 +1445,25 @@ export default function InventoryPage() {
                                     ) : (
                                         <div>
                                             {(isAdmin || user?.role === 'Warehouse') ? (
-                                                <div 
-                                                    onClick={() => {
-                                                        const url = prompt("Enter Template URL (e.g. from a cloud storage) or use a placeholder:");
-                                                        if (url) {
-                                                            setFormData({ ...formData, inspectionTemplateUrl: url, inspectionTemplateName: "Inspection_Template.xlsx" });
-                                                        }
-                                                    }}
-                                                    style={{ border: '2px dashed var(--border-color)', padding: '1.5rem', textAlign: 'center', borderRadius: '0.5rem', cursor: 'pointer', color: 'var(--text-muted)', transition: 'background 0.2s' }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                                >
-                                                    <Upload size={24} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-                                                    <div style={{ fontSize: '0.85rem' }}>Click to set Template URL</div>
-                                                    <div style={{ fontSize: '0.7rem', marginTop: '0.25rem', opacity: 0.6 }}>Only Admins and Warehouse Managers</div>
-                                                </div>
+                                                <>
+                                                    <input 
+                                                        type="file" 
+                                                        ref={templateInputRef} 
+                                                        onChange={handleTemplateUpload} 
+                                                        style={{ display: 'none' }} 
+                                                        accept=".xlsx,.xls" 
+                                                    />
+                                                    <div 
+                                                        onClick={() => templateInputRef.current?.click()}
+                                                        style={{ border: '2px dashed var(--border-color)', padding: '1.5rem', textAlign: 'center', borderRadius: '0.5rem', cursor: 'pointer', color: 'var(--text-muted)', transition: 'background 0.2s' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                    >
+                                                        <Upload size={24} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
+                                                        <div style={{ fontSize: '0.85rem' }}>Click to Upload Template File</div>
+                                                        <div style={{ fontSize: '0.7rem', marginTop: '0.25rem', opacity: 0.6 }}>Excel only (.xlsx, .xls)</div>
+                                                    </div>
+                                                </>
                                             ) : (
                                                 <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
                                                     No template uploaded.
