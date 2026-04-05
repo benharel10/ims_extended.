@@ -14,9 +14,11 @@ import {
     Calendar,
     User,
     Package,
-    ShoppingCart
+    ShoppingCart,
+    X
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useDebounce } from '@/hooks/useDebounce'; // Assuming this exists or I will create it
 
 export default function QualityPage() {
     const { user, showAlert, showConfirm } = useSystem();
@@ -26,25 +28,21 @@ export default function QualityPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
+    const debouncedSearch = useDebounce(search, 500);
 
     useEffect(() => {
         loadRecords();
-    }, [statusFilter]);
+    }, [statusFilter, debouncedSearch]);
 
     async function loadRecords() {
         setLoading(true);
-        const res = await getInspectionRecords({ status: statusFilter, search });
+        const res = await getInspectionRecords({ status: statusFilter, search: debouncedSearch });
         if (res.success) {
             setRecords(res.data || []);
         } else {
             showAlert(res.error || 'Failed to load records', 'error');
         }
         setLoading(false);
-    }
-
-    async function handleSearch(e: React.FormEvent) {
-        e.preventDefault();
-        loadRecords();
     }
 
     async function handleDelete(id: number) {
@@ -81,46 +79,99 @@ export default function QualityPage() {
                 </div>
             </div>
 
-            <div className="card" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
-                <form onSubmit={handleSearch} style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                    <div className="input-group" style={{ flex: 1, minWidth: '250px' }}>
-                        <Search size={18} className="input-icon" />
+            <div className="card" style={{ 
+                padding: '1.25rem', 
+                marginBottom: '2rem', 
+                background: 'rgba(30, 41, 59, 0.5)', 
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+            }}>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <div style={{ position: 'relative', flex: 1, minWidth: '300px' }}>
+                        <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                         <input 
                             type="text" 
-                            placeholder="Search SKU, PO Number, or File Name..." 
+                            placeholder="Search SKU, PO, or File..." 
+                            style={{ 
+                                width: '100%', 
+                                padding: '0.85rem 3rem 0.85rem 3rem', 
+                                background: 'var(--bg-dark)', 
+                                border: '1px solid var(--border-color)', 
+                                borderRadius: '12px', 
+                                color: 'white',
+                                outline: 'none',
+                                fontSize: '1rem',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                            }}
+                            onFocus={(e) => {
+                                e.target.style.borderColor = 'var(--primary)';
+                                e.target.style.boxShadow = '0 0 0 4px var(--primary-glow), inset 0 2px 4px rgba(0,0,0,0.1)';
+                            }}
+                            onBlur={(e) => {
+                                e.target.style.borderColor = 'var(--border-color)';
+                                e.target.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.1)';
+                            }}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
+                        {search && (
+                            <button 
+                                onClick={() => setSearch('')}
+                                style={{ 
+                                    position: 'absolute', 
+                                    right: '1rem', 
+                                    top: '50%', 
+                                    transform: 'translateY(-50%)', 
+                                    background: 'var(--bg-hover)', 
+                                    border: 'none', 
+                                    borderRadius: '50%', 
+                                    width: '24px', 
+                                    height: '24px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    cursor: 'pointer',
+                                    color: 'var(--text-muted)',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = 'white'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Filter size={18} style={{ color: 'var(--text-muted)' }} />
-                        <select 
-                            className="input-group" 
-                            style={{ 
-                                padding: '0.5rem', 
-                                background: 'var(--bg-dark)', 
-                                border: '1px solid var(--border-color)', 
-                                borderRadius: '0.5rem', 
-                                color: 'white',
-                                outline: 'none'
-                            }}
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                        >
-                            <option value="All">All Statuses</option>
-                            <option value="Pass">Pass</option>
-                            <option value="Fail">Fail</option>
-                        </select>
+                    
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {['All', 'Pass', 'Fail'].map((status) => (
+                            <button
+                                key={status}
+                                onClick={() => setStatusFilter(status)}
+                                style={{
+                                    padding: '0.6rem 1.25rem',
+                                    borderRadius: '10px',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    border: '1px solid',
+                                    borderColor: statusFilter === status ? 'var(--primary)' : 'var(--border-color)',
+                                    background: statusFilter === status ? 'var(--primary)' : 'transparent',
+                                    color: statusFilter === status ? 'white' : 'var(--text-muted)',
+                                    boxShadow: statusFilter === status ? '0 4px 12px var(--primary-glow)' : 'none'
+                                }}
+                            >
+                                {status}
+                            </button>
+                        ))}
                     </div>
-                    <button type="submit" className="btn btn-primary">Filter</button>
-                    <button 
-                        type="button" 
-                        className="btn btn-outline" 
-                        onClick={() => { setSearch(''); setStatusFilter('All'); loadRecords(); }}
-                    >
-                        Reset
-                    </button>
-                </form>
+
+                    <div style={{ marginLeft: 'auto', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                        {loading ? 'Searching...' : `${records.length} record${records.length === 1 ? '' : 's'} found`}
+                    </div>
+                </div>
             </div>
 
             {loading ? (
