@@ -688,6 +688,7 @@ export async function generateInspectionReports(poId: number) {
                                 val = val.replace(/{{DATE}}/g, currentDate);
                                 val = val.replace(/{{SUPPLIER}}/g, po.supplier || '');
                                 val = val.replace(/{{QUANTITY}}/g, String(line.quantity));
+                                val = val.replace(/{{PO}}/g, po.poNumber);
                                 cell.value = val;
                             }
                         });
