@@ -1959,19 +1959,39 @@ export default function InventoryPage() {
                                                             {log.details && (
                                                                 <div style={{ 
                                                                     fontSize: '0.85rem', 
-                                                                    background: 'rgba(0,0,0,0.2)', 
+                                                                    background: 'rgba(255,255,255,0.03)', 
                                                                     padding: '0.75rem', 
-                                                                    borderRadius: '4px',
-                                                                    fontFamily: 'monospace',
-                                                                    whiteSpace: 'pre-wrap',
-                                                                    wordBreak: 'break-all',
-                                                                    color: 'var(--text-main)',
-                                                                    overflowX: 'auto'
+                                                                    borderRadius: '8px',
+                                                                    border: '1px solid rgba(255,255,255,0.05)',
+                                                                    color: 'var(--text-main)'
                                                                 }}>
                                                                     {(() => {
                                                                         try {
                                                                             const parsed = JSON.parse(log.details);
-                                                                            return JSON.stringify(parsed, null, 2);
+                                                                            return (
+                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                                                    {Object.entries(parsed).map(([key, value]: [string, any]) => {
+                                                                                        let label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+                                                                                        let displayValue = value === null || value === undefined || value === "" ? "N/A" : String(value);
+
+                                                                                        // Special cases for better UI
+                                                                                        if (key === 'warehouseId') {
+                                                                                            label = 'Warehouse';
+                                                                                            const wh = warehouses.find(w => w.id === value);
+                                                                                            displayValue = wh ? wh.name : `ID: ${value}`;
+                                                                                        }
+                                                                                        if (key === 'quantity') label = 'Quantity';
+                                                                                        if (key === 'cost') displayValue = `$${Number(value).toFixed(2)}`;
+
+                                                                                        return (
+                                                                                            <div key={key} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                                                <span style={{ color: 'var(--text-muted)' }}>{label}:</span>
+                                                                                                <span style={{ fontWeight: 500 }}>{displayValue}</span>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            );
                                                                         } catch {
                                                                             return log.details;
                                                                         }
