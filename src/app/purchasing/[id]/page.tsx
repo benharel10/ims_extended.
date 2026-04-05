@@ -375,6 +375,13 @@ export default function PODetailPage() {
         }
     }
 
+    async function handleConfirmReceiptPreCheck() {
+        showConfirm(
+            "QUALITY CONTROL CHECK: Have you performed the First Article (FA) inspection for these items and confirmed that the result is PASS?",
+            () => setShowReceiveModal(true)
+        );
+    }
+
     async function handleViewHistory() {
         setShowHistory(true);
         setLoadingHistory(true);
@@ -618,7 +625,7 @@ export default function PODetailPage() {
                         </button>
                     )}
                     {po.status !== 'Completed' && (
-                        <button className="btn btn-primary" onClick={() => setShowReceiveModal(true)}>
+                        <button className="btn btn-primary" onClick={handleConfirmReceiptPreCheck}>
                             <Package size={18} />
                             Confirm Receipt
                         </button>
