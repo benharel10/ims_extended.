@@ -1,5 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { PackageCheck, ScanLine, History, Settings, Play, Plus, Trash2, Save, Edit2 } from 'lucide-react';
 import { getAssemblyParents, getComponentOptions, getBOM, saveBOM, runProduction, getProductionRuns, updateProductionRun, deleteProductionRun, bulkDeleteProductionRuns, getWarehouses } from './actions';
 import { createItem, deleteItem, updateItemCost } from '../inventory/actions';
@@ -820,8 +821,17 @@ export default function ProductionPage() {
                                                                     Deleted Product (Item #{run.itemId})
                                                                 </span>
                                                             )}
-                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                                                                Produced to {run.toWarehouse?.name || 'Unassigned'}
+                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                                                <span>Produced to {run.toWarehouse?.name || 'Unassigned'}</span>
+                                                                {run.salesOrder && (
+                                                                    <Link 
+                                                                        href={`/sales?id=${run.salesOrderId}`} 
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        style={{ color: 'var(--primary)', textDecoration: 'underline' }}
+                                                                    >
+                                                                        SO: {run.salesOrder.soNumber}
+                                                                    </Link>
+                                                                )}
                                                             </div>
                                                         </td>
                                                         <td style={{ padding: '0.75rem' }}>

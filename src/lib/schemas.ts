@@ -28,6 +28,8 @@ export const CreateItemSchema = z.object({
     isSerialized: z.boolean().optional(),
     description: z.string().max(2000).optional(),
     icountId: z.number().int().positive().optional(),
+    inspectionTemplateUrl: z.string().url().nullable().optional(),
+    inspectionTemplateName: z.string().max(200).nullable().optional(),
 });
 
 export const UpdateItemSchema = CreateItemSchema.extend({

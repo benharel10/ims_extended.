@@ -80,6 +80,9 @@ model Item {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  inspectionTemplateUrl  String?
+  inspectionTemplateName String?
+
   @@index([deletedAt])
   @@index([sku])
 }

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer } from './actions';
 import { createEmptyPO, getBrands, getWarehouses, getPurchaseOrders, updatePOLinkedSO } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
@@ -48,6 +49,7 @@ import { useSystem } from '@/components/SystemProvider';
 export default function SalesPage() {
     const { user, showAlert, showConfirm } = useSystem();
     const isAdmin = user?.role === 'Admin';
+    const searchParams = useSearchParams();
     const [orders, setOrders] = useState<SalesOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -69,9 +71,6 @@ export default function SalesPage() {
     // Selection State
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-    useEffect(() => {
-        loadOrders();
-    }, []);
 
     function toggleSelect(id: number) {
         const next = new Set(selectedIds);
@@ -137,6 +136,20 @@ export default function SalesPage() {
 
         setLoading(false);
     }
+
+    // Handle deep linking from query params (e.g. /sales?id=123)
+    useEffect(() => {
+        const orderId = searchParams.get('id');
+        if (orderId && orders.length > 0) {
+            const idToFind = parseInt(orderId);
+            const order = orders.find(o => o.id === idToFind);
+            if (order) {
+                // Pre-fill item picker search for clarity? (No, let's just open the details)
+                setSelectedOrder(order);
+                setIsDetailsOpen(true);
+            }
+        }
+    }, [searchParams, orders]);
 
     // Refresh single order details if open
     async function refreshOrder(id: number) {

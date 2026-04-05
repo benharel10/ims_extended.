@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO } from '../actions';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports } from '../actions';
 import { getSalesOrders } from '@/app/sales/actions';
-import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History } from 'lucide-react';
+import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
 
@@ -152,6 +152,7 @@ export default function PODetailPage() {
     const [warehouses, setWarehouses] = useState<any[]>([]);
     const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
     const [isReceiving, setIsReceiving] = useState(false);
+    const [isGeneratingReports, setIsGeneratingReports] = useState(false);
 
     // Add Line State
     const [selectedItemId, setSelectedItemId] = useState('');
@@ -353,6 +354,25 @@ export default function PODetailPage() {
         setLoadingHistory(false);
     }
 
+    async function handleDownloadReports() {
+        setIsGeneratingReports(true);
+        const res = await generateInspectionReports(poId);
+        setIsGeneratingReports(false);
+
+        if (res.success && res.data) {
+            const { base64, fileName } = res.data;
+            const link = document.createElement('a');
+            link.href = `data:application/zip;base64,${base64}`;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showAlert('Reports generated successfully', 'success');
+        } else {
+            showAlert(res.error || 'Failed to generate reports', 'error');
+        }
+    }
+
     if (loading) {
         return <div className="animate-fade-in" style={{ padding: '2rem', textAlign: 'center' }}>Loading PO...</div>;
     }
@@ -460,30 +480,42 @@ export default function PODetailPage() {
                         <div>
                             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Linked Sales Order</label>
                             {po.status !== 'Completed' && po.status !== 'Partial' ? (
-                                <select 
-                                    className="input-group"
-                                    style={{ padding: '0.4rem 0.75rem', margin: 0, width: '100%', maxWidth: '200px' }}
-                                    value={po.salesOrderId || ''}
-                                    onChange={async (e) => {
-                                        const soId = e.target.value ? parseInt(e.target.value) : null;
-                                        const res = await updatePOLinkedSO(po.id, soId);
-                                        if (res.success) {
-                                            showAlert('Linked Sales Order updated', 'success');
-                                            loadData();
-                                        } else {
-                                            showAlert(res.error || 'Failed to update link', 'error');
-                                        }
-                                    }}
-                                >
-                                    <option value="">None (Standalone)</option>
-                                    {salesOrders && salesOrders.length > 0 ? (
-                                        salesOrders.map(so => (
-                                            <option key={so.id} value={so.id}>{so.soNumber} - {so.customer}</option>
-                                        ))
-                                    ) : (
-                                        <option disabled>No Draft Sales Orders found</option>
+                                <>
+                                    <select 
+                                        className="input-group"
+                                        style={{ padding: '0.4rem 0.75rem', margin: 0, width: '100%', maxWidth: '200px' }}
+                                        value={po.salesOrderId || ''}
+                                        onChange={async (e) => {
+                                            const soId = e.target.value ? parseInt(e.target.value) : null;
+                                            const res = await updatePOLinkedSO(po.id, soId);
+                                            if (res.success) {
+                                                showAlert('Linked Sales Order updated', 'success');
+                                                loadData();
+                                            } else {
+                                                showAlert(res.error || 'Failed to update link', 'error');
+                                            }
+                                        }}
+                                    >
+                                        <option value="">None (Standalone)</option>
+                                        {salesOrders && salesOrders.length > 0 ? (
+                                            salesOrders.map(so => (
+                                                <option key={so.id} value={so.id}>{so.soNumber} - {so.customer}</option>
+                                            ))
+                                        ) : (
+                                            <option disabled>No Draft Sales Orders found</option>
+                                        )}
+                                    </select>
+                                    {po.salesOrderId && (
+                                        <div style={{ marginTop: '0.5rem' }}>
+                                            <Link 
+                                                href={`/sales?id=${po.salesOrderId}`} 
+                                                style={{ fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                            >
+                                                View Sales Order {po.salesOrder?.soNumber}
+                                            </Link>
+                                        </div>
                                     )}
-                                </select>
+                                </>
                             ) : (
                                 <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
                                     {po.salesOrder ? (
@@ -497,6 +529,10 @@ export default function PODetailPage() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button className="btn btn-outline" onClick={handleDownloadReports} disabled={isGeneratingReports} title="Download Inspection Reports">
+                        {isGeneratingReports ? <span className="animate-spin mr-2">⏳</span> : <FileSpreadsheet size={18} style={{ marginRight: '0.5rem' }} />}
+                        {isGeneratingReports ? 'Generating...' : 'Download Reports'}
+                    </button>
                     <button className="btn btn-outline" onClick={handleViewHistory} title="View Audit Logs">
                         <History size={18} />
                     </button>

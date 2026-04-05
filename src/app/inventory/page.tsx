@@ -72,6 +72,7 @@ export default function InventoryPage() {
         sku: string; name: string; type: string; cost: number; price: number;
         minStock: number; revision: string; warehouse: string; brand: string;
         isSerialized: boolean; description: string; icountId: number | undefined;
+        inspectionTemplateUrl: string | null; inspectionTemplateName: string | null;
     }>({
         sku: '',
         name: '',
@@ -84,7 +85,9 @@ export default function InventoryPage() {
         brand: '',
         isSerialized: false,
         description: '',
-        icountId: undefined
+        icountId: undefined,
+        inspectionTemplateUrl: null,
+        inspectionTemplateName: null
     });
 
     useEffect(() => {
@@ -197,7 +200,7 @@ export default function InventoryPage() {
     function openCreateModal() {
         setIsEditing(false);
         setEditId(null);
-        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: undefined });
+        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: undefined, inspectionTemplateUrl: null, inspectionTemplateName: null });
         setShowModal(true);
     }
 
@@ -216,13 +219,15 @@ export default function InventoryPage() {
             brand: item.brand || '',
             isSerialized: item.isSerialized || false,
             description: item.description || '',
-            icountId: item.icountId || undefined
+            icountId: item.icountId || undefined,
+            inspectionTemplateUrl: item.inspectionTemplateUrl || null,
+            inspectionTemplateName: item.inspectionTemplateName || null
         });
         setShowModal(true);
     }
 
     function resetForm() {
-        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: undefined });
+        setFormData({ sku: '', name: '', type: 'Raw', cost: 0, price: 0, minStock: 0, revision: '', warehouse: '', brand: '', isSerialized: false, description: '', icountId: undefined, inspectionTemplateUrl: null, inspectionTemplateName: null });
         setIsEditing(false);
         setEditId(null);
     }
@@ -1396,6 +1401,54 @@ export default function InventoryPage() {
                                             style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
                                         />
                                     </div>
+                                </div>
+
+                                <div style={{ marginBottom: '1.5rem', marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+                                    <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <FileSpreadsheet size={16} /> Inspection Report Template
+                                    </h4>
+                                    
+                                    {formData.inspectionTemplateName ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(59, 130, 246, 0.05)', padding: '0.75rem', borderRadius: '4px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <Check size={16} style={{ color: 'var(--success)' }} />
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{formData.inspectionTemplateName}</span>
+                                            </div>
+                                            {(isAdmin || user?.role === 'Warehouse') && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setFormData({ ...formData, inspectionTemplateName: null, inspectionTemplateUrl: null })}
+                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+                                                >
+                                                    Remove
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            {(isAdmin || user?.role === 'Warehouse') ? (
+                                                <div 
+                                                    onClick={() => {
+                                                        const url = prompt("Enter Template URL (e.g. from a cloud storage) or use a placeholder:");
+                                                        if (url) {
+                                                            setFormData({ ...formData, inspectionTemplateUrl: url, inspectionTemplateName: "Inspection_Template.xlsx" });
+                                                        }
+                                                    }}
+                                                    style={{ border: '2px dashed var(--border-color)', padding: '1.5rem', textAlign: 'center', borderRadius: '0.5rem', cursor: 'pointer', color: 'var(--text-muted)', transition: 'background 0.2s' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                >
+                                                    <Upload size={24} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
+                                                    <div style={{ fontSize: '0.85rem' }}>Click to set Template URL</div>
+                                                    <div style={{ fontSize: '0.7rem', marginTop: '0.25rem', opacity: 0.6 }}>Only Admins and Warehouse Managers</div>
+                                                </div>
+                                            ) : (
+                                                <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                                                    No template uploaded.
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>

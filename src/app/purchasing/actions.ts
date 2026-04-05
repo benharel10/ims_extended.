@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 import { logError } from '@/lib/errorLogger';
 import { CreatePOSchema, AddPOLineSchema, UpdatePOStatusSchema, UpdatePONumberSchema, parseSchema } from '@/lib/schemas';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
+import { format } from 'date-fns';
 
 /** Active (non-soft-deleted) items only */
 const ACTIVE = { deletedAt: null };
@@ -625,5 +628,82 @@ export async function updatePOLinkedSO(poId: number, salesOrderId: number | null
     } catch (error) {
         await logError('purchasing.updatePOLinkedSO', error);
         return { success: false, error: 'Failed to update linked Sales Order' };
+    }
+}
+
+export async function generateInspectionReports(poId: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const po = await prisma.purchaseOrder.findUnique({
+            where: { id: poId },
+            include: { lines: { include: { item: true } } }
+        });
+
+        if (!po) return { success: false, error: 'Purchase Order not found' };
+
+        const zip = new JSZip();
+        let reportsCount = 0;
+        const userName = session.user.name || 'Unknown User';
+        const currentDate = format(new Date(), 'yyyy-MM-dd');
+
+        for (const line of po.lines) {
+            const item = line.item as any;
+            if (!item || !item.inspectionTemplateUrl) continue;
+
+            try {
+                // Fetch template
+                const response = await fetch(item.inspectionTemplateUrl);
+                if (!response.ok) throw new Error(`Failed to fetch template for ${item.sku}`);
+                
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(arrayBuffer);
+
+                // Placeholder Replacement
+                workbook.eachSheet(sheet => {
+                    sheet.eachRow(row => {
+                        row.eachCell(cell => {
+                            if (cell.value && typeof cell.value === 'string') {
+                                let val = cell.value;
+                                val = val.replace(/{{PN}}/g, item.sku);
+                                val = val.replace(/{{DESC}}/g, item.name);
+                                val = val.replace(/{{REV}}/g, item.revision || '');
+                                val = val.replace(/{{USER}}/g, userName);
+                                val = val.replace(/{{DATE}}/g, currentDate);
+                                cell.value = val;
+                            }
+                        });
+                    });
+                });
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                zip.file(`${item.sku}_Inspection_Report.xlsx`, buffer);
+                reportsCount++;
+            } catch (err) {
+                console.error(`Error generating report for ${item.sku}:`, err);
+                // Continue with other items
+            }
+        }
+
+        if (reportsCount === 0) {
+            return { success: false, error: 'No inspection templates found for any items in this PO.' };
+        }
+
+        const zipBuffer = await zip.generateAsync({ type: 'base64' });
+        const fileName = (po.poNumber.startsWith('PO') ? po.poNumber : `PO${po.poNumber}`) + '_Inspection_Reports.zip';
+
+        return { 
+            success: true, 
+            data: { 
+                base64: zipBuffer, 
+                fileName 
+            } 
+        };
+
+    } catch (error) {
+        await logError('purchasing.generateInspectionReports', error);
+        return { success: false, error: 'Failed to generate inspection reports.' };
     }
 }

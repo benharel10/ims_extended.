@@ -349,7 +349,7 @@ export async function getProductionRuns() {
         const runs = await prisma.productionRun.findMany({
             orderBy: { createdAt: 'desc' },
             take: 50,
-            include: { item: true, toWarehouse: true }
+            include: { item: true, toWarehouse: true, salesOrder: true }
         });
 
         return {

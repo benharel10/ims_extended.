@@ -446,7 +446,7 @@ export default function PurchasingPage() {
                                         <td style={{ padding: '1rem' }}>{po.supplier}</td>
                                         <td style={{ padding: '1rem' }}>
                                             {po.salesOrder ? (
-                                                <Link href={`/sales/${po.salesOrder.id}`} style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'underline' }}>
+                                                <Link href={`/sales?id=${po.salesOrderId}`} style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'underline' }}>
                                                     {po.salesOrder.soNumber}
                                                 </Link>
                                             ) : (

@@ -140,6 +140,8 @@ export async function createItem(data: {
     isSerialized?: boolean;
     description?: string;
     icountId?: number;
+    inspectionTemplateUrl?: string | null;
+    inspectionTemplateName?: string | null;
 }) {
     try {
         const session = await getSession();
@@ -160,6 +162,8 @@ export async function createItem(data: {
             return { success: false, error: `SKU "${sku}" already exists` };
         }
 
+        const isAdminOrWarehouse = session.user.role === 'Admin' || session.user.role === 'Warehouse';
+
         const item = await prisma.item.create({
             data: {
                 sku,
@@ -175,8 +179,10 @@ export async function createItem(data: {
                 isSerialized: p.data.isSerialized || false,
                 description: p.data.description || '',
                 icountId: p.data.icountId || null,
+                inspectionTemplateUrl: isAdminOrWarehouse ? (p.data.inspectionTemplateUrl || null) : null,
+                inspectionTemplateName: isAdminOrWarehouse ? (p.data.inspectionTemplateName || null) : null,
                 version: 0,
-            }
+            } as any
         });
 
         revalidatePath('/inventory');
@@ -203,6 +209,8 @@ export async function updateItem(id: number, data: {
     description?: string;
     icountId?: number;
     version?: number; // Optimistic concurrency token
+    inspectionTemplateUrl?: string | null;
+    inspectionTemplateName?: string | null;
 }) {
     try {
         const session = await getSession();
@@ -230,23 +238,32 @@ export async function updateItem(id: number, data: {
             targetVersion = current.version;
         }
 
+        const isAdminOrWarehouse = session.user.role === 'Admin' || session.user.role === 'Warehouse';
+
+        const updateData: any = {
+            sku,
+            name: data.name.trim(),
+            type: data.type,
+            cost: data.cost,
+            price: data.price,
+            minStock: data.minStock,
+            revision: data.revision,
+            warehouse: data.warehouse,
+            brand: data.brand,
+            isSerialized: data.isSerialized,
+            description: data.description,
+            icountId: data.icountId,
+            version: { increment: 1 }
+        };
+
+        if (isAdminOrWarehouse) {
+            updateData.inspectionTemplateUrl = data.inspectionTemplateUrl;
+            updateData.inspectionTemplateName = data.inspectionTemplateName;
+        }
+
         const occResult = await prisma.item.updateMany({
             where: { id, version: targetVersion },
-            data: {
-                sku,
-                name: data.name.trim(),
-                type: data.type,
-                cost: data.cost,
-                price: data.price,
-                minStock: data.minStock,
-                revision: data.revision,
-                warehouse: data.warehouse,
-                brand: data.brand,
-                isSerialized: data.isSerialized,
-                description: data.description,
-                icountId: data.icountId,
-                version: { increment: 1 }, // Bump version on every write
-            }
+            data: updateData
         });
 
         if (occResult.count === 0) {

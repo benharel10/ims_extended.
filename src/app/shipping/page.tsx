@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft } from 'lucide-react';
 import { getShipments, createShipment, createPackage, addItemToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival } from './actions';
 import { getItems } from '../inventory/actions'; // Reuse getItems
@@ -382,6 +383,15 @@ export default function ShippingPage() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                             <Truck style={{ color: 'var(--primary)' }} size={20} />
                                             <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{shipment.shipmentNo}</span>
+                                            {shipment.salesOrder && (
+                                                <Link 
+                                                    href={`/sales?id=${shipment.soId}`} 
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    style={{ fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'underline', marginLeft: '0.5rem', fontWeight: 500 }}
+                                                >
+                                                    SO: {shipment.salesOrder.soNumber}
+                                                </Link>
+                                            )}
                                         </div>
                                         <span className={`badge ${shipment.status === 'Draft' ? 'badge-warning' : 'badge-success'}`}>{shipment.status}</span>
                                     </div>
