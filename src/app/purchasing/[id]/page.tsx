@@ -108,22 +108,43 @@ function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleSh
             </td>
             <td style={{ padding: '1rem', fontWeight: 600 }}>${(line.quantity * line.unitCost).toFixed(2)}</td>
             <td style={{ padding: '1rem' }}>
-                {po.status !== 'Completed' && line.received === 0 && (
-                    <button
-                        onClick={() => handleRemoveLine(line.id, line.item?.name || line.newItemName || 'Item')}
-                        style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            padding: '0.25rem',
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {po.status !== 'Completed' && line.received === 0 && (
+                        <button
+                            onClick={() => handleRemoveLine(line.id, line.item?.name || line.newItemName || 'Item')}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '0.25rem',
+                                display: 'flex',
+                                alignItems: 'center'
+                            }}
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    )}
+                    <button 
+                        className={`btn btn-sm ${record ? 'btn-primary' : 'btn-outline'}`}
+                        onClick={() => handleShowUploadQC(line)} 
+                        title={record ? `QC Passed: ${record.fileName}` : "Upload Inspection Report"}
+                        style={{ 
+                            padding: '0.25rem', 
+                            height: '32px', 
+                            width: '32px',
+                            minWidth: '32px',
+                            background: record?.status === 'Fail' ? '#ef4444' : (record ? 'var(--primary)' : 'transparent'), 
+                            borderColor: record?.status === 'Fail' ? '#ef4444' : (record ? 'var(--primary)' : 'var(--border-color)'),
+                            color: record ? 'white' : 'var(--text-muted)',
                             display: 'flex',
-                            alignItems: 'center'
+                            alignItems: 'center',
+                            justifyContent: 'center'
                         }}
                     >
-                        <Trash2 size={16} />
+                        {record?.status === 'Fail' ? <ShieldAlert size={16} /> : <ShieldCheck size={16} />}
                     </button>
-                )}
+                </div>
             </td>
         </tr>
     );
