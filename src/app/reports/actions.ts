@@ -28,6 +28,7 @@ export async function getInventoryValuation() {
 export async function getSalesPerformance() {
     try {
         const orders = await prisma.salesOrder.findMany({
+            where: { status: { not: 'Draft' } },
             include: {
                 lines: {
                     include: { item: true }
@@ -214,7 +215,10 @@ export async function getReportSummary() {
         const [items, pos, sales, production, warehouses] = await Promise.all([
             prisma.item.findMany({ where: { deletedAt: null }, select: { currentStock: true, cost: true, minStock: true } }),
             prisma.purchaseOrder.count({ where: { status: { not: 'Completed' } } }),
-            prisma.salesOrder.findMany({ include: { lines: true } }),
+            prisma.salesOrder.findMany({ 
+                where: { status: { not: 'Draft' } },
+                include: { lines: true } 
+            }),
             prisma.productionRun.findMany({ select: { quantity: true, item: { select: { cost: true } } } }),
             prisma.warehouse.count()
         ]);
@@ -280,7 +284,10 @@ export async function getProfitLossReport(year?: number, month?: number) {
 
         // Fetch sales orders with filter
         const salesOrders = await prisma.salesOrder.findMany({
-            where: dateFilter,
+            where: {
+                ...dateFilter,
+                status: { not: 'Draft' }
+            },
             include: {
                 lines: {
                     include: { item: true }
@@ -359,7 +366,8 @@ export async function getProfitLossReport(year?: number, month?: number) {
                         createdAt: {
                             gte: monthStart,
                             lte: monthEnd
-                        }
+                        },
+                        status: { not: 'Draft' }
                     },
                     include: {
                         lines: {

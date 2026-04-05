@@ -69,7 +69,7 @@ export async function getFinancialDataForChart() {
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
         const salesLines = await prisma.salesLine.findMany({
-            where: { so: { status: 'Confirmed' } },
+            where: { so: { status: { not: 'Draft' } } },
             include: {
                 item: { select: { cost: true } },
                 so: { select: { createdAt: true } }
