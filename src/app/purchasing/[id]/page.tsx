@@ -377,7 +377,7 @@ export default function PODetailPage() {
 
     async function handleConfirmReceiptPreCheck() {
         showConfirm(
-            "QUALITY CONTROL CHECK: Have you performed the First Article (FA) inspection for these items and confirmed that the result is PASS?",
+            "QUALITY CONTROL CHECK: Have you performed the First Article (FA) inspection for these items and confirmed that the result is PASS? AND DOES THE ORDER HAVE A CERTIFICATE OF CONFORMANCE (CoC)?",
             () => setShowReceiveModal(true)
         );
     }
