@@ -477,23 +477,37 @@ export default function PurchasingPage() {
                                                     const delivered = new Date(po.deliveredAt || po.updatedAt);
                                                     const isOnTime = delivered <= due;
                                                     return (
-                                                        <span style={{ 
-                                                            padding: '0.25rem 0.6rem', 
-                                                            borderRadius: '4px', 
+                                                        <div style={{ 
+                                                            display: 'inline-flex',
+                                                            flexDirection: 'column',
+                                                            gap: '2px',
+                                                            padding: '0.4rem 0.6rem', 
+                                                            borderRadius: '6px', 
                                                             fontSize: '0.75rem',
                                                             background: isOnTime ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
                                                             color: isOnTime ? '#22c55e' : '#ef4444',
-                                                            border: `1px solid ${isOnTime ? '#22c55e' : '#ef4444'}`
+                                                            border: `1px solid ${isOnTime ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                                                            minWidth: '90px',
+                                                            textAlign: 'center',
+                                                            alignItems: 'center'
                                                         }}>
-                                                            {isOnTime ? 'On Time' : 'Late Arrival'}
-                                                            <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>{delivered.toLocaleDateString()}</div>
-                                                        </span>
+                                                            <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                                                                {isOnTime ? 'On Time' : 'Late Arrival'}
+                                                            </span>
+                                                            <div style={{ fontSize: '0.7rem', opacity: 0.9, borderTop: `1px solid ${isOnTime ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, width: '100%', paddingTop: '2px', marginTop: '1px' }}>
+                                                                {delivered.toLocaleDateString()}
+                                                            </div>
+                                                        </div>
                                                     );
                                                 })()
                                             ) : po.status === 'Partial' ? (
-                                                <span style={{ color: 'var(--warning)', fontSize: '0.85rem' }}>Partial delivery</span>
+                                                <span style={{ color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 500 }}>
+                                                    Partial delivery
+                                                </span>
                                             ) : (
-                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Awaiting</span>
+                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                                    Awaiting...
+                                                </span>
                                             )}
                                         </td>
                                         <td style={{ padding: '1rem' }}>
