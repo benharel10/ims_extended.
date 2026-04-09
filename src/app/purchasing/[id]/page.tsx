@@ -193,6 +193,7 @@ export default function PODetailPage() {
     const [quantity, setQuantity] = useState(1);
     const [itemSearch, setItemSearch] = useState('');
     const [itemSearchResults, setItemSearchResults] = useState<any[]>([]);
+    const [selectedItemData, setSelectedItemData] = useState<any>(null);
     const [isSearchingItems, setIsSearchingItems] = useState(false);
     const debouncedItemSearch = useDebounce(itemSearch, 500);
 
@@ -262,10 +263,12 @@ export default function PODetailPage() {
         let itemId: number | undefined;
 
         if (!isNewItem) {
-            const item = items.find(i => i.id === parseInt(selectedItemId));
-            if (!item) return;
-            cost = item.cost;
-            itemId = item.id;
+            if (!selectedItemData) {
+                showAlert('Please select an item from the search results.', 'warning');
+                return;
+            }
+            cost = Number(selectedItemData.cost);
+            itemId = selectedItemData.id;
         } else {
             cost = newItemCost;
         }
@@ -283,6 +286,9 @@ export default function PODetailPage() {
             showAlert('Item added to PO', 'success');
             // Reset form
             setSelectedItemId('');
+            setSelectedItemData(null);
+            setItemSearch('');
+            setItemSearchResults([]);
             setNewItemName('');
             setNewItemSku('');
             setNewItemCost(0);
@@ -725,6 +731,7 @@ export default function PODetailPage() {
                                                     key={item.id}
                                                     onClick={() => {
                                                         setSelectedItemId(item.id.toString());
+                                                        setSelectedItemData(item);
                                                         setItemSearch(`${item.sku} — ${item.name}`);
                                                         setItemSearchResults([]);
                                                     }}
