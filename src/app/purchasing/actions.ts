@@ -122,10 +122,7 @@ export async function getPurchaseOrder(id: number) {
         const po = await prisma.purchaseOrder.findUnique({
             where: { id },
             include: { 
-                lines: { include: { item: true } },
-                inspectionRecords: {
-                    select: { id: true, itemId: true, fileName: true, status: true, createdAt: true }
-                }
+                lines: { include: { item: true } }
             }
         });
         return { success: true, data: po };
@@ -136,6 +133,49 @@ export async function getPurchaseOrder(id: number) {
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────────
+
+export async function searchItems(query: string) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+        if (!query || query.length < 2) return { success: true, data: [] };
+
+        const items = await prisma.item.findMany({
+            where: {
+                deletedAt: null,
+                OR: [
+                    { name: { contains: query, mode: 'insensitive' } },
+                    { sku: { contains: query, mode: 'insensitive' } }
+                ]
+            },
+            select: { id: true, name: true, sku: true, cost: true },
+            take: 20,
+            orderBy: { name: 'asc' }
+        });
+        return { success: true, data: items };
+    } catch (error) {
+        await logError('purchasing.searchItems', error);
+        return { success: false, error: 'Failed to search items' };
+    }
+}
+
+export async function getDraftSalesOrders() {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const orders = await prisma.salesOrder.findMany({
+            where: { status: 'Draft' },
+            select: { id: true, soNumber: true, customer: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        return { success: true, data: orders };
+    } catch (error) {
+        await logError('purchasing.getDraftSalesOrders', error);
+        return { success: false, error: 'Failed to fetch sales orders' };
+    }
+}
+
 
 export async function generatePurchaseOrder(
     items: {

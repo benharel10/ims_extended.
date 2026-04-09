@@ -57,9 +57,10 @@ export async function getComponentOptions() {
 
         const items = await prisma.item.findMany({
             where: { deletedAt: null },
+            select: { id: true, name: true, sku: true, type: true, currentStock: true, cost: true },
             orderBy: { name: 'asc' }
         });
-        return { success: true, data: items };
+        return { success: true, data: items.map(i => ({ ...i, currentStock: Number(i.currentStock), cost: Number(i.cost) })) };
     } catch (error) {
         await logError('getComponentOptions', error);
         return { success: false, error: 'Failed to fetch components. Please try again.' };

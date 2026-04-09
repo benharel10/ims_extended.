@@ -86,18 +86,32 @@ async function wouldCreateCycle(parentId: number, childId: number): Promise<bool
 
 // ─── Read ────────────────────────────────────────────────────────────────────
 
-export async function getItems() {
+export async function getItems(page = 1, limit = 50, search = '') {
     try {
         const session = await getSession();
         const isAdmin = session?.user?.role === 'Admin';
 
-        const items = await prisma.item.findMany({
-            where: ACTIVE,
-            include: {
-                stocks: { include: { warehouse: true } }
-            },
-            orderBy: { createdAt: 'desc' }
-        });
+        const skip = (page - 1) * limit;
+
+        const where: any = { ...ACTIVE };
+        if (search) {
+            where.OR = [
+                { sku: { contains: search, mode: 'insensitive' } },
+                { name: { contains: search, mode: 'insensitive' } },
+                { brand: { contains: search, mode: 'insensitive' } },
+            ];
+        }
+
+        const [items, totalCount] = await Promise.all([
+            prisma.item.findMany({
+                where,
+                include: { stocks: { include: { warehouse: true } } },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            prisma.item.count({ where })
+        ]);
 
         const serializedItems = items.map(item => ({
             ...item,
@@ -111,14 +125,20 @@ export async function getItems() {
             }))
         }));
 
-        if (!isAdmin) {
-            return {
-                success: true,
-                data: serializedItems.map(i => ({ ...i, cost: 0 }))
-            };
-        }
+        const data = !isAdmin
+            ? serializedItems.map(i => ({ ...i, cost: 0 }))
+            : serializedItems;
 
-        return { success: true, data: serializedItems };
+        return {
+            success: true,
+            data,
+            pagination: {
+                totalCount,
+                totalPages: Math.ceil(totalCount / limit),
+                currentPage: page,
+                limit
+            }
+        };
     } catch (error) {
         await logError('getItems', error);
         return { success: false, error: 'Failed to fetch inventory. Please try again.' };

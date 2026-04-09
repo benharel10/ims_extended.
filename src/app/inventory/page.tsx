@@ -7,9 +7,14 @@ import { getInspectionRecords } from '../quality/actions';
 import { getWarehouses } from '../shipping/actions';
 import * as XLSX from 'xlsx';
 import { useSystem } from '@/components/SystemProvider';
+import { useDebounce } from '@/hooks/useDebounce';
 
 export default function InventoryPage() {
     const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearch = useDebounce(searchTerm, 500);
+    const [page, setPage] = useState(1);
+    const [pagination, setPagination] = useState<any>(null);
+    const pageSize = 50;
     const [filterType, setFilterType] = useState('');
     const [filterBrand, setFilterBrand] = useState('');
     const [filterLowStock, setFilterLowStock] = useState(false);
@@ -125,7 +130,12 @@ export default function InventoryPage() {
 
     useEffect(() => {
         loadItems();
-    }, []);
+    }, [page, debouncedSearch]);
+
+    // Reset to page 1 when search changes
+    useEffect(() => {
+        setPage(1);
+    }, [debouncedSearch]);
 
     // Close actions dropdown when clicking elsewhere
     useEffect(() => {
@@ -168,10 +178,14 @@ export default function InventoryPage() {
 
     async function loadItems() {
         setLoading(true);
-        const [itemsRes, whRes] = await Promise.all([getItems(), getWarehouses()]);
+        const [itemsRes, whRes] = await Promise.all([
+            getItems(page, pageSize, debouncedSearch),
+            getWarehouses()
+        ]);
 
         if (itemsRes.success && itemsRes.data) {
             setItems(itemsRes.data);
+            if (itemsRes.pagination) setPagination(itemsRes.pagination);
         }
         if (whRes.success && whRes.data) {
             setWarehouses(whRes.data);

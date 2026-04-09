@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports } from '../actions';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports, searchItems, getDraftSalesOrders } from '../actions';
 import { createInspectionRecord } from '../../quality/actions';
 import { getSalesOrders } from '@/app/sales/actions';
-import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet, ShieldCheck, ShieldAlert, Upload, Check, X } from 'lucide-react';
+import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet, ShieldCheck, ShieldAlert, Upload, Check, X, Search, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
+import { useDebounce } from '@/hooks/useDebounce';
 
 function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleShowUploadQC }: any) {
     const isDraft = po.status !== 'Completed' && po.status !== 'Partial';
@@ -190,6 +191,10 @@ export default function PODetailPage() {
     // Add Line State
     const [selectedItemId, setSelectedItemId] = useState('');
     const [quantity, setQuantity] = useState(1);
+    const [itemSearch, setItemSearch] = useState('');
+    const [itemSearchResults, setItemSearchResults] = useState<any[]>([]);
+    const [isSearchingItems, setIsSearchingItems] = useState(false);
+    const debouncedItemSearch = useDebounce(itemSearch, 500);
 
     // New Item State
     const [isNewItem, setIsNewItem] = useState(false);
@@ -201,13 +206,25 @@ export default function PODetailPage() {
         loadData();
     }, [poId]);
 
+    // Live search effect — only fires after user stops typing for 500ms
+    useEffect(() => {
+        if (debouncedItemSearch.length >= 2) {
+            setIsSearchingItems(true);
+            searchItems(debouncedItemSearch).then(res => {
+                if (res.success && res.data) setItemSearchResults(res.data);
+                setIsSearchingItems(false);
+            });
+        } else {
+            setItemSearchResults([]);
+        }
+    }, [debouncedItemSearch]);
+
     async function loadData() {
         setLoading(true);
-        const [poRes, itemsRes, whRes, soRes] = await Promise.all([
+        const [poRes, whRes, soRes] = await Promise.all([
             getPurchaseOrder(poId),
-            getItems(),
             getWarehouses(),
-            getSalesOrders()
+            getDraftSalesOrders()
         ]);
 
         if (poRes.success && poRes.data) {
@@ -217,16 +234,12 @@ export default function PODetailPage() {
             router.push('/purchasing');
         }
 
-        if (itemsRes.success && itemsRes.data) {
-            setItems(itemsRes.data);
-        }
         if (whRes.success && whRes.data) {
             setWarehouses(whRes.data);
             if (whRes.data.length > 0) setSelectedWarehouseId(whRes.data[0].id.toString());
         }
         if (soRes.success && soRes.data) {
-            // Only show Draft (Not Confirmed) sales orders for linking
-            setSalesOrders(soRes.data.filter((so: any) => so.status === 'Draft'));
+            setSalesOrders(soRes.data);
         }
         setLoading(false);
     }
@@ -681,20 +694,56 @@ export default function PODetailPage() {
                         <div className={isNewItem ? "grid-cols-4" : "grid-cols-3"} style={{ alignItems: 'end', gap: '1rem' }}>
 
                             {!isNewItem ? (
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>Item</label>
-                                    <select
-                                        className="input-group"
-                                        value={selectedItemId}
-                                        onChange={e => setSelectedItemId(e.target.value)}
-                                    >
-                                        <option value="">-- Select Item --</option>
-                                        {items.map(item => (
-                                            <option key={item.id} value={item.id}>
-                                                {item.sku} - {item.name} (${item.cost.toFixed(2)})
-                                            </option>
-                                        ))}
-                                    </select>
+                                <div style={{ position: 'relative' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                        Item {selectedItemId ? <span style={{ color: 'var(--success)', marginLeft: '0.5rem' }}>✓ Selected</span> : '(type to search)'}
+                                    </label>
+                                    <div style={{ position: 'relative' }}>
+                                        <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                                        {isSearchingItems && <Loader2 size={16} style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', animation: 'spin 1s linear infinite' }} />}
+                                        <input
+                                            type="text"
+                                            className="input-group"
+                                            placeholder="Search SKU or Name..."
+                                            value={itemSearch}
+                                            onChange={e => {
+                                                setItemSearch(e.target.value);
+                                                if (!e.target.value) setSelectedItemId('');
+                                            }}
+                                            style={{ paddingLeft: '2.25rem' }}
+                                        />
+                                    </div>
+                                    {itemSearchResults.length > 0 && (
+                                        <div style={{
+                                            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                                            background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                                            borderRadius: 'var(--radius-md)', maxHeight: '200px', overflowY: 'auto',
+                                            boxShadow: '0 8px 24px rgba(0,0,0,0.4)', marginTop: '2px'
+                                        }}>
+                                            {itemSearchResults.map(item => (
+                                                <div
+                                                    key={item.id}
+                                                    onClick={() => {
+                                                        setSelectedItemId(item.id.toString());
+                                                        setItemSearch(`${item.sku} — ${item.name}`);
+                                                        setItemSearchResults([]);
+                                                    }}
+                                                    style={{
+                                                        padding: '0.65rem 1rem', cursor: 'pointer',
+                                                        borderBottom: '1px solid var(--border-color)',
+                                                        background: selectedItemId === item.id.toString() ? 'var(--bg-hover)' : 'transparent',
+                                                        transition: 'background 0.15s'
+                                                    }}
+                                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                                                    onMouseLeave={e => (e.currentTarget.style.background = selectedItemId === item.id.toString() ? 'var(--bg-hover)' : 'transparent')}
+                                                >
+                                                    <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{item.sku}</span>
+                                                    <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>— {item.name}</span>
+                                                    <span style={{ float: 'right', color: 'var(--text-muted)' }}>${Number(item.cost).toFixed(2)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <>

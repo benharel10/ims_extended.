@@ -86,6 +86,8 @@ model Item {
   
   @@index([deletedAt])
   @@index([sku])
+  @@index([name])
+  @@index([createdAt])
 }
 
 model BOM {
@@ -149,6 +151,9 @@ model PurchaseOrder {
   
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  
+  @@index([status])
+  @@index([createdAt])
 }
 
 model POLine {
@@ -189,6 +194,9 @@ model SalesOrder {
 
   productionRunId Int?
   productionRun   ProductionRun? @relation(fields: [productionRunId], references: [id])
+  
+  @@index([status])
+  @@index([createdAt])
 }
 
 model SalesLine {
