@@ -4,18 +4,28 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+    const sharonPassword = process.env.SHARON_PASSWORD;
+    const victorPassword = process.env.VICTOR_PASSWORD;
+
+    if (!sharonPassword || !victorPassword) {
+        throw new Error(
+            'Missing required env vars: SHARON_PASSWORD and VICTOR_PASSWORD must be set before running this script.\n' +
+            'Example: $env:SHARON_PASSWORD="<pass>"; $env:VICTOR_PASSWORD="<pass>"; npx ts-node seed_new_users.ts'
+        );
+    }
+
     const users = [
         {
             email: 'sharon.harel@ks-waves.com',
             name: 'Sharon Harel',
             role: 'Admin',
-            password: 'K9#fP2!vLq7*Zt$5nB@x8W&m',
+            password: sharonPassword,
         },
         {
             email: 'victor.hoepfner@ks-waves.com',
             name: 'Victor Hoepfner',
             role: 'Warehouse',
-            password: 'Gb#8v!mZ2*5rX$q9Lp@7W&k4',
+            password: victorPassword,
         },
     ];
 

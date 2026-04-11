@@ -123,7 +123,7 @@ export async function saveSkuMapping(externalSku: string, externalName: string, 
         return { success: true, message: 'Mapping saved and retroactive POs fixed!' };
     } catch (error: any) {
         console.error('Error saving mapping:', error);
-        return { success: false, error: error.message || 'Database error' };
+        return { success: false, error: 'Database error occurred. Please contact support if this persists.' };
     }
 }
 

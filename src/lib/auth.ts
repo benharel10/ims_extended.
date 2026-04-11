@@ -41,7 +41,21 @@ export async function getSession() {
     const session = cookieStore.get('session')?.value;
     if (!session) return null;
     try {
-        return await decrypt(session);
+        const parsed = await decrypt(session);
+        if (!parsed?.user?.id) return null;
+        
+        // Dynamically import prisma so we don't break the Edge runtime when middleware imports this file
+        const { prisma } = await import('@/lib/prisma');
+        const dbUser = await prisma.user.findUnique({
+            where: { id: parsed.user.id },
+            select: { id: true, email: true, name: true, role: true }
+        });
+        
+        if (!dbUser) return null; // User was deleted from the system!
+        
+        // Override session payload with fresh DB source-of-truth for roles
+        parsed.user = dbUser;
+        return parsed;
     } catch (error) {
         return null;
     }

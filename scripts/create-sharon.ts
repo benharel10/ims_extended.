@@ -5,9 +5,16 @@ const prisma = new PrismaClient();
 
 async function main() {
     const EMAIL = 'sharon.harel@ks-waves.com';
-    const PASSWORD = 'K9#fP2!vLq7*Zt$5nB@x8W&m';
+    const PASSWORD = process.env.SHARON_PASSWORD;
     const NAME = 'Sharon Harel';
     const ROLE = 'Admin';
+
+    if (!PASSWORD) {
+        throw new Error(
+            'SHARON_PASSWORD env var is not set.\n' +
+            'Example: $env:SHARON_PASSWORD="<pass>"; npx ts-node scripts/create-sharon.ts'
+        );
+    }
 
     console.log(`Creating user: ${EMAIL}...`);
 

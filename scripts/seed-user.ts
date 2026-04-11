@@ -4,6 +4,10 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('Do not run seed scripts in production!');
+    }
+
     const existing = await prisma.user.findFirst();
     if (existing) {
         console.log('User already exists, skipping seed.');

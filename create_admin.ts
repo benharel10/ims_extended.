@@ -5,7 +5,14 @@ const prisma = new PrismaClient();
 
 async function main() {
     const EMAIL = 'ben.harel@ks-waves.com';
-    const PASSWORD = 'Benharel220';
+    const PASSWORD = process.env.ADMIN_PASSWORD;
+
+    if (!PASSWORD) {
+        throw new Error(
+            'ADMIN_PASSWORD env var is not set.\n' +
+            'Example: $env:ADMIN_PASSWORD="<pass>"; npx ts-node create_admin.ts'
+        );
+    }
 
     console.log('Connecting to database...');
 

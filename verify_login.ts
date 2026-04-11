@@ -6,7 +6,12 @@ const prisma = new PrismaClient();
 
 async function verify() {
     const email = 'ben.harel@ks-waves.com';
-    const password = 'Benharel220';
+    const password = process.env.VERIFY_PASSWORD;
+
+    if (!password) {
+        console.error('❌ VERIFY_PASSWORD env var is not set. Aborting.');
+        process.exit(1);
+    }
 
     console.log(`Verifying login logic locally for: ${email}`);
 

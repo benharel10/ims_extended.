@@ -1,13 +1,20 @@
 // create_admin.mjs -- run with: node create_admin.mjs
+// Requires env var: ADMIN_PASSWORD
+// Example: $env:ADMIN_PASSWORD="<pass>"; node create_admin.mjs
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 const EMAIL = 'ben.harel@ks-waves.com';
-const PASSWORD = 'Benharel220';
+const PASSWORD = process.env.ADMIN_PASSWORD;
 const NAME = 'Ben Harel';
 const ROLE = 'Admin';
+
+if (!PASSWORD) {
+    console.error('❌ ADMIN_PASSWORD env var is not set. Aborting.');
+    process.exit(1);
+}
 
 async function main() {
     const hash = await bcrypt.hash(PASSWORD, 12);

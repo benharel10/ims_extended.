@@ -4,19 +4,19 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-    const EMAIL = 'victor.hoepfner@ks-waves.com';
-    const PASSWORD = process.env.VICTOR_PASSWORD;
-    const NAME = 'Victor Hoepfner';
+    const EMAIL = 'moti.belo@ks-waves.com';
+    const PASSWORD = process.env.MOTI_PASSWORD;
+    const NAME = 'Moti Belo';
     const ROLE = 'Warehouse';
 
     if (!PASSWORD) {
         throw new Error(
-            'VICTOR_PASSWORD env var is not set.\n' +
-            'Example: $env:VICTOR_PASSWORD="<pass>"; npx ts-node scripts/create-victor.ts'
+            'MOTI_PASSWORD env var is not set.\n' +
+            'Example: $env:MOTI_PASSWORD="<pass>"; npx ts-node scripts/create-moti.ts'
         );
     }
 
-    console.log(`Creating user: ${EMAIL}...`);
+    console.log(`Creating/updating user: ${EMAIL}...`);
 
     const hash = await bcrypt.hash(PASSWORD, 12);
 

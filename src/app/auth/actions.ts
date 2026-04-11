@@ -15,7 +15,7 @@ export async function loginAction(formData: FormData) {
         ?? headerStore.get('x-real-ip')
         ?? 'unknown';
 
-    const rateLimitError = checkRateLimit(ip);
+    const rateLimitError = await checkRateLimit(ip);
     if (rateLimitError) {
         return { success: false, error: rateLimitError };
     }
@@ -32,7 +32,7 @@ export async function loginAction(formData: FormData) {
     const { email, password } = parsed.data;
 
     if (!email.endsWith('@ks-waves.com') && email !== 'admin@ksw.com') {
-        recordFailedAttempt(ip);
+        await recordFailedAttempt(ip);
         return { success: false, error: 'Only @ks-waves.com emails are allowed.' };
     }
 
@@ -40,19 +40,19 @@ export async function loginAction(formData: FormData) {
         const user = await prisma.user.findUnique({ where: { email } });
 
         if (!user) {
-            recordFailedAttempt(ip);
+            await recordFailedAttempt(ip);
             return { success: false, error: 'Invalid credentials' };
         }
 
         const isValid = await bcrypt.compare(password, user.password);
 
         if (!isValid) {
-            recordFailedAttempt(ip);
+            await recordFailedAttempt(ip);
             return { success: false, error: 'Invalid credentials' };
         }
 
         // Successful login — clear failed attempt counter
-        clearAttempts(ip);
+        await clearAttempts(ip);
         await setSession({ id: user.id, email: user.email, name: user.name, role: user.role });
     } catch (error) {
         console.error(error);
