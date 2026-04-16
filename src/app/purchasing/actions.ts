@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
@@ -126,7 +126,15 @@ export async function getPurchaseOrder(id: number) {
         const po = await prisma.purchaseOrder.findUnique({
             where: { id },
             include: { 
-                lines: { include: { item: true } }
+                lines: { include: { item: true } },
+                inspectionRecords: {
+                    select: {
+                        id: true,
+                        itemId: true,
+                        status: true,
+                        fileName: true
+                    }
+                }
             }
         });
         return { success: true, data: po };
