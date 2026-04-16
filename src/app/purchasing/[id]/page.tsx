@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePOOrderDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports, searchItems, getDraftSalesOrders } from '../actions';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports, searchItems, getDraftSalesOrders } from '../actions';
 import { createInspectionRecord } from '../../quality/actions';
 import { getSalesOrders } from '@/app/sales/actions';
 import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet, ShieldCheck, ShieldAlert, Upload, Check, X, Search, Loader2 } from 'lucide-react';
@@ -127,7 +127,7 @@ function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleSh
                         </button>
                     )}
                     <button 
-                        className={`btn btn-sm ${record ? 'btn-primary' : 'btn-outline'}`}
+                        className="btn btn-sm"
                         onClick={() => handleShowUploadQC(line)} 
                         title={record ? `QC Passed: ${record.fileName}` : "Upload Inspection Report"}
                         style={{ 
@@ -135,15 +135,26 @@ function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleSh
                             height: '32px', 
                             width: '32px',
                             minWidth: '32px',
-                            background: record?.status === 'Fail' ? '#ef4444' : (record ? 'var(--primary)' : 'transparent'), 
-                            borderColor: record?.status === 'Fail' ? '#ef4444' : (record ? 'var(--primary)' : 'var(--border-color)'),
-                            color: record ? 'white' : 'var(--text-muted)',
+                            background: 'transparent',
+                            border: 'none',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}
                     >
-                        {record?.status === 'Fail' ? <ShieldAlert size={16} /> : <ShieldCheck size={16} />}
+                        {record?.status === 'Fail' ? (
+                            <ShieldAlert size={20} color="#ef4444" fill="rgba(239, 68, 68, 0.1)" />
+                        ) : (
+                            <ShieldCheck 
+                                size={20} 
+                                style={{ 
+                                    color: record ? 'var(--primary)' : 'var(--text-muted)',
+                                    opacity: record ? 1 : 0.2,
+                                    strokeWidth: record ? 2.5 : 1.5
+                                }} 
+                                fill={record ? 'var(--primary-light)' : 'transparent'}
+                            />
+                        )}
                     </button>
                 </div>
             </td>
@@ -556,28 +567,7 @@ export default function PODetailPage() {
                         </div>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Date</label>
-                            {po.status !== 'Completed' && po.status !== 'Partial' ? (
-                                <input 
-                                    type="date"
-                                    className="input-group"
-                                    style={{ padding: '0.4rem 0.75rem', margin: 0, width: '100%', maxWidth: '200px' }}
-                                    defaultValue={po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : ''}
-                                    onBlur={async (e) => {
-                                        const current = po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : '';
-                                        if (e.target.value !== current && e.target.value !== '') {
-                                            const res = await updatePOOrderDate(poId, e.target.value);
-                                            if (res.success) {
-                                                showAlert('Order Date updated', 'success');
-                                                loadData();
-                                            } else {
-                                                showAlert(res.error || 'Failed to update order date', 'error');
-                                            }
-                                        }
-                                    }}
-                                />
-                            ) : (
-                                <span style={{ fontWeight: 500 }}>{po.orderDate ? new Date(po.orderDate).toLocaleDateString() : 'N/A'}</span>
-                            )}
+                            <span style={{ fontWeight: 500 }}>{po.orderDate ? new Date(po.orderDate).toLocaleDateString() : new Date(po.createdAt).toLocaleDateString()}</span>
                         </div>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Due Date</label>

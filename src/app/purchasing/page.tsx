@@ -1,33 +1,14 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2, Link2, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2, Link2 } from 'lucide-react';
 import Link from 'next/link';
-import { getLowStockItems, generatePurchaseOrder, getPurchaseOrders, createEmptyPO, deletePurchaseOrder, deleteMultiplePOs, updatePODueDate, updatePOOrderDate, getBrands } from './actions';
+import { getLowStockItems, generatePurchaseOrder, getPurchaseOrders, createEmptyPO, deletePurchaseOrder, deleteMultiplePOs, updatePODueDate, getBrands } from './actions';
 import { getSalesOrders } from '@/app/sales/actions';
 
 import { useSystem } from '@/components/SystemProvider';
 import { useRouter } from 'next/navigation';
 
-function EditableOrderDateCell({ po, onUpdate }: any) {
-    const [dateVal, setDateVal] = useState(po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : '');
-
-    return (
-        <input 
-            type="date" 
-            className="input-group" 
-            style={{ padding: '0.25rem 0.5rem', width: '130px', margin: 0, fontSize: '0.875rem' }} 
-            value={dateVal} 
-            onChange={e => setDateVal(e.target.value)}
-            onBlur={() => {
-                const current = po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : '';
-                if (dateVal !== current && dateVal !== '') {
-                    onUpdate(po.id, dateVal);
-                }
-            }}
-        />
-    );
-}
 
 function EditableDueCell({ po, onUpdate }: any) {
     const [dateVal, setDateVal] = useState(po.dueDate ? new Date(po.dueDate).toISOString().split('T')[0] : '');
@@ -82,7 +63,6 @@ export default function PurchasingPage() {
     const [showDuePrompt, setShowDuePrompt] = useState(false);
     const [duePromptIndex, setDuePromptIndex] = useState(0);
     const [includeCompleted, setIncludeCompleted] = useState(false);
-    const [poOrderDate, setPoOrderDate] = useState(new Date().toISOString().split('T')[0]);
     const [poDueDate, setPoDueDate] = useState('');
 
     useEffect(() => {
@@ -155,11 +135,6 @@ export default function PurchasingPage() {
         else showAlert(res.error || 'Failed to update due date', 'error');
     }
 
-    async function handleUpdateOrderDate(id: number, dateStr: string) {
-        const res = await updatePOOrderDate(id, dateStr);
-        if (res.success) loadData();
-        else showAlert(res.error || 'Failed to update order date', 'error');
-    }
 
     async function handleDeleteSelectedPOs() {
         showConfirm(`Are you sure you want to delete ${selectedPoIds.size} purchase order(s)?`, async () => {
@@ -207,7 +182,7 @@ export default function PurchasingPage() {
             leadTime ? parseInt(leadTime) : undefined, 
             shippingCost ? parseFloat(shippingCost) : undefined, 
             salesOrderId ? parseInt(salesOrderId) : undefined,
-            poOrderDate,
+            undefined, // orderDate (defaults to now in action)
             poDueDate
         );
         if (res.success) {
@@ -216,7 +191,6 @@ export default function PurchasingPage() {
             setLeadTime('');
             setShippingCost('');
             setSalesOrderId('');
-            setPoOrderDate(new Date().toISOString().split('T')[0]);
             setPoDueDate('');
             loadData();
             showAlert('Purchase Order created successfully', 'success');
@@ -283,25 +257,15 @@ export default function PurchasingPage() {
                                 ))}
                             </select>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                            <div className="form-group">
-                                <label>Order Date</label>
-                                <input
-                                    type="date"
-                                    className="input-group"
-                                    value={poOrderDate}
-                                    onChange={e => setPoOrderDate(e.target.value)}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label>Due Date (Optional)</label>
-                                <input
-                                    type="date"
-                                    className="input-group"
-                                    value={poDueDate}
-                                    onChange={e => setPoDueDate(e.target.value)}
-                                />
-                            </div>
+                        <div className="form-group">
+                            <label>Due Date (Optional)</label>
+                            <input
+                                type="date"
+                                className="input-group"
+                                value={poDueDate}
+                                onChange={e => setPoDueDate(e.target.value)}
+                                style={{ width: '100%' }}
+                            />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div className="form-group">
@@ -427,7 +391,6 @@ export default function PurchasingPage() {
                                     <th style={{ padding: '1rem' }}>PO Number</th>
                                     <th style={{ padding: '1rem' }}>Supplier</th>
                                     <th style={{ padding: '1rem' }}>Linked SO</th>
-                                    <th style={{ padding: '1rem' }}>Status</th>
                                     <th style={{ padding: '1rem' }}>Items</th>
                                     <th style={{ padding: '1rem' }}>Order Date</th>
                                     <th style={{ padding: '1rem' }}>Arrival Status</th>
@@ -447,7 +410,10 @@ export default function PurchasingPage() {
                                         );
                                     })
                                     .map(po => (
-                                    <tr key={po.id} style={{ borderBottom: '1px solid var(--border-color)', background: selectedPoIds.has(po.id) ? 'rgba(7, 89, 133, 0.1)' : 'transparent' }}>
+                                    <tr key={po.id} style={{ 
+                                        borderBottom: '1px solid var(--border-color)', 
+                                        background: selectedPoIds.has(po.id) ? 'rgba(7, 89, 133, 0.1)' : po.status === 'Synced' ? 'rgba(124, 58, 237, 0.08)' : 'transparent' 
+                                    }}>
                                         <td style={{ padding: '1rem' }}>
                                             {((po.status !== 'Completed' && po.status !== 'Partial') && isAdmin) ? (
                                                 <div
@@ -461,20 +427,7 @@ export default function PurchasingPage() {
                                                 <span style={{ display: 'inline-block', width: '18px' }} />
                                             )}
                                         </td>
-                                        <td style={{ padding: '1rem', fontWeight: 600 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                {po.poNumber}
-                                                <ShieldCheck 
-                                                    size={18} 
-                                                    style={{ 
-                                                        color: po.inspectionRecords?.length > 0 ? 'var(--primary)' : 'var(--text-muted)',
-                                                        opacity: po.inspectionRecords?.length > 0 ? 1 : 0.2,
-                                                        strokeWidth: po.inspectionRecords?.length > 0 ? 2.5 : 1.5
-                                                    }} 
-                                                    fill={po.inspectionRecords?.length > 0 ? 'var(--primary-light)' : 'transparent'}
-                                                />
-                                            </div>
-                                        </td>
+                                        <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
                                         <td style={{ padding: '1rem' }}>{po.supplier}</td>
                                         <td style={{ padding: '1rem' }}>
                                             {po.salesOrder ? (
@@ -485,21 +438,9 @@ export default function PurchasingPage() {
                                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>—</span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <span className={`badge badge-${po.status === 'Completed' ? 'success' : po.status === 'Partial' ? 'warning' : po.status === 'Pending SKU Mapping' ? 'error' : po.status === 'Synced' ? 'success' : 'secondary'}`}>
-                                                    {po.status}
-                                                </span>
-                                                {po.pendingManualMapping && (
-                                                    <span title="Contains unidentified SKUs — go to SKU Mapper" style={{ color: '#f59e0b', display: 'flex', cursor: 'help' }}>
-                                                        <AlertTriangle size={14} />
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
                                         <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <EditableOrderDateCell po={po} onUpdate={handleUpdateOrderDate} />
+                                        <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                                            {new Date(po.orderDate || po.createdAt).toLocaleDateString()}
                                         </td>
                                         <td style={{ padding: '1rem' }}>
                                             <span style={{ 
