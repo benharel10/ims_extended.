@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
@@ -22,7 +22,7 @@ async function logAudit(userId: number, action: string, entity: string, entityId
     }
 }
 
-// ─── Read ─────────────────────────────────────────────────────────────────────
+// ג”€ג”€ג”€ Read ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export async function getItems() {
     try {
@@ -132,7 +132,7 @@ export async function getPurchaseOrder(id: number) {
     }
 }
 
-// ─── Create ───────────────────────────────────────────────────────────────────
+// ג”€ג”€ג”€ Create ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export async function searchItems(query: string) {
     try {
@@ -191,7 +191,7 @@ export async function generatePurchaseOrder(
         if (!session?.user) return { success: false, error: 'Unauthorized' };
         if (items.length === 0) return { success: false, error: 'No items selected' };
 
-        // ── Validate every line ──
+        // ג”€ג”€ Validate every line ג”€ג”€
         for (const item of items) {
             if (item.quantity <= 0) return { success: false, error: 'All quantities must be positive' };
             if (!item.itemId && !item.newItemName) return { success: false, error: 'Each line needs an item or a new item name' };
@@ -256,7 +256,7 @@ export async function createEmptyPO(supplier: string, leadTimeDays?: number, shi
     }
 }
 
-// ─── PO Lines ─────────────────────────────────────────────────────────────────
+// ג”€ג”€ג”€ PO Lines ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export async function addPOLine(
     poId: number,
@@ -479,7 +479,7 @@ export async function updatePONumber(id: number, poNumber: string) {
     }
 }
 
-// ─── Status Update ────────────────────────────────────────────────────────────
+// ג”€ג”€ג”€ Status Update ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export async function updatePOStatus(id: number, status: string) {
     try {
@@ -501,7 +501,7 @@ export async function updatePOStatus(id: number, status: string) {
     }
 }
 
-// ─── Receive Items (full transaction + version bump) ─────────────────────────
+// ג”€ג”€ג”€ Receive Items (full transaction + version bump) ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
 
 export async function receivePOItems(
     poId: number,
@@ -764,5 +764,4 @@ export async function generateInspectionReports(poId: number) {
         return { success: false, error: 'Failed to generate inspection reports.' };
     }
 }
-/ /   T r i g g e r   r e d e p l o y  
- 
+/ /   T r i g g e r   r e d e p l o y 
