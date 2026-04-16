@@ -875,29 +875,6 @@ p {
   box-shadow: 0 2px 8px var(--primary-glow);
 }
 
-/* Barcode Input Wrapper */
-.barcode-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.barcode-input-wrapper input {
-  padding-right: 2.5rem !important;
-  /* Space for icon */
-}
-
-.camera-icon {
-  position: absolute;
-  right: 0.5rem;
-  color: var(--text-muted);
-  transition: color 0.2s;
-}
-
-.camera-icon:hover {
-  color: var(--primary);
-}
 
 
 

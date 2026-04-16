@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, Plus, Upload, MoreHorizontal, X, FileSpreadsheet, Edit2, Check, MapPin, Package, History, Barcode } from 'lucide-react';
+import { Search, Filter, Plus, Upload, MoreHorizontal, X, FileSpreadsheet, Edit2, Check, MapPin, Package, History } from 'lucide-react';
 import { getItems, createItem, updateItem, deleteItem, updateStock, importBOM, importItems, updateItemCost, bulkDeleteItems, bulkUpdateStock, createAssemblyFromItems, createSaleFromInventory, getItemHistory } from './actions';
 import { getInspectionRecords } from '../quality/actions';
 import { getWarehouses } from '../shipping/actions';
@@ -781,37 +781,6 @@ export default function InventoryPage() {
                 <div className="card full-width-page" style={{ marginBottom: '2rem', paddingLeft: 0, paddingRight: 0, borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
 
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap', padding: '0 1.5rem' }}>
-                        {/* Barcode Scanner */}
-                        <div style={{ position: 'relative', width: '220px' }}>
-                            <Barcode size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)' }} />
-                            <input
-                                type="text"
-                                placeholder="Scan Barcode..."
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        const scannedSku = e.currentTarget.value.trim();
-                                        if (!scannedSku) return;
-                                        const item = items.find(i => i.sku.toLowerCase() === scannedSku.toLowerCase());
-                                        e.currentTarget.value = ''; // clear
-                                        if (item) {
-                                            openStockModal(item);
-                                        } else {
-                                            showAlert(`SKU not found: ${scannedSku}`, 'error');
-                                        }
-                                    }
-                                }}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.75rem 1rem 0.75rem 3rem',
-                                    background: 'var(--bg-dark)',
-                                    border: '1px solid var(--primary)',
-                                    borderRadius: 'var(--radius-md)',
-                                    color: 'white',
-                                    fontSize: '0.95rem',
-                                    boxShadow: '0 0 0 1px rgba(16, 185, 129, 0.2)'
-                                }}
-                            />
-                        </div>
 
                         {/* Text Search */}
                         <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
