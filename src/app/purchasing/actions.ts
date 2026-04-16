@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
@@ -764,4 +764,3 @@ export async function generateInspectionReports(poId: number) {
         return { success: false, error: 'Failed to generate inspection reports.' };
     }
 }
-/ /   T r i g g e r   r e d e p l o y 
