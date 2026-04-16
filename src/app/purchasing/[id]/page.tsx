@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports, searchItems, getDraftSalesOrders } from '../actions';
+import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePOOrderDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports, searchItems, getDraftSalesOrders } from '../actions';
 import { createInspectionRecord } from '../../quality/actions';
 import { getSalesOrders } from '@/app/sales/actions';
 import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet, ShieldCheck, ShieldAlert, Upload, Check, X, Search, Loader2 } from 'lucide-react';
@@ -395,10 +395,7 @@ export default function PODetailPage() {
     }
 
     async function handleConfirmReceiptPreCheck() {
-        showConfirm(
-            "QUALITY CONTROL CHECK: Have you performed the First Article (FA) inspection for these items and confirmed that the result is PASS? AND DOES THE ORDER HAVE A CERTIFICATE OF CONFORMANCE (CoC)?",
-            () => setShowReceiveModal(true)
-        );
+        setShowReceiveModal(true);
     }
 
     async function handleViewHistory() {
@@ -504,7 +501,7 @@ export default function PODetailPage() {
                 fontWeight: isOverdue ? 700 : 400
             }}>
                 • Due: {dueDate.toISOString().split('T')[0]}
-                ({isOverdue ? `Overdue by ${Math.abs(daysLeft)} days` : `${daysLeft} days left`})
+                {po.status !== 'Completed' && ` (${isOverdue ? `Overdue by ${Math.abs(daysLeft)} days` : `${daysLeft} days left`})`}
             </span>
         );
     }
@@ -558,19 +555,41 @@ export default function PODetailPage() {
                             <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{po.supplier}</span>
                         </div>
                         <div>
-                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Created Date</label>
-                            <span style={{ fontWeight: 500 }}>{poDate.toLocaleDateString()}</span>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimated Due Date</label>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Date</label>
                             {po.status !== 'Completed' && po.status !== 'Partial' ? (
                                 <input 
                                     type="date"
                                     className="input-group"
                                     style={{ padding: '0.4rem 0.75rem', margin: 0, width: '100%', maxWidth: '200px' }}
-                                    defaultValue={initialDate}
-                                    onBlur={(e) => {
-                                        if (e.target.value !== initialDate && e.target.value !== '') {
+                                    defaultValue={po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : ''}
+                                    onBlur={async (e) => {
+                                        const current = po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : '';
+                                        if (e.target.value !== current && e.target.value !== '') {
+                                            const res = await updatePOOrderDate(poId, e.target.value);
+                                            if (res.success) {
+                                                showAlert('Order Date updated', 'success');
+                                                loadData();
+                                            } else {
+                                                showAlert(res.error || 'Failed to update order date', 'error');
+                                            }
+                                        }
+                                    }}
+                                />
+                            ) : (
+                                <span style={{ fontWeight: 500 }}>{po.orderDate ? new Date(po.orderDate).toLocaleDateString() : 'N/A'}</span>
+                            )}
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Due Date</label>
+                            {po.status !== 'Completed' && po.status !== 'Partial' ? (
+                                <input 
+                                    type="date"
+                                    className="input-group"
+                                    style={{ padding: '0.4rem 0.75rem', margin: 0, width: '100%', maxWidth: '200px' }}
+                                    defaultValue={po.dueDate ? new Date(po.dueDate).toISOString().split('T')[0] : ''}
+                                    onBlur={async (e) => {
+                                        const current = po.dueDate ? new Date(po.dueDate).toISOString().split('T')[0] : '';
+                                        if (e.target.value !== current && e.target.value !== '') {
                                             handleUpdateDueDate(e.target.value);
                                         }
                                     }}
@@ -631,9 +650,9 @@ export default function PODetailPage() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button className="btn btn-outline" onClick={handleDownloadReports} disabled={isGeneratingReports} title="Download Inspection Reports">
+                    <button className="btn btn-outline" onClick={handleDownloadReports} disabled={isGeneratingReports} title="Download Inspection Reports (FAI)">
                         {isGeneratingReports ? <span className="animate-spin mr-2">⏳</span> : <FileSpreadsheet size={18} style={{ marginRight: '0.5rem' }} />}
-                        {isGeneratingReports ? 'Generating...' : 'Download Reports'}
+                        {isGeneratingReports ? 'Generating...' : 'Download FAI files'}
                     </button>
                     <button className="btn btn-outline" onClick={handleViewHistory} title="View Audit Logs">
                         <History size={18} />

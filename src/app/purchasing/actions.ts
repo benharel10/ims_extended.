@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
@@ -22,7 +22,7 @@ async function logAudit(userId: number, action: string, entity: string, entityId
     }
 }
 
-// ג”€ג”€ג”€ Read ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
+// ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬ Read ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬
 
 export async function getItems() {
     try {
@@ -103,7 +103,11 @@ export async function getPurchaseOrders(includeCompleted = false) {
 
         const pos = await prisma.purchaseOrder.findMany({
             where,
-            include: { lines: { include: { item: true } }, salesOrder: true },
+            include: { 
+                lines: { include: { item: true } }, 
+                salesOrder: true,
+                inspectionRecords: { select: { id: true } }
+            },
             orderBy: { createdAt: 'desc' },
             take: 500
         });
@@ -132,7 +136,7 @@ export async function getPurchaseOrder(id: number) {
     }
 }
 
-// ג”€ג”€ג”€ Create ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
+// ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬ Create ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬
 
 export async function searchItems(query: string) {
     try {
@@ -191,7 +195,7 @@ export async function generatePurchaseOrder(
         if (!session?.user) return { success: false, error: 'Unauthorized' };
         if (items.length === 0) return { success: false, error: 'No items selected' };
 
-        // ג”€ג”€ Validate every line ג”€ג”€
+        // ׳’ג€ג‚¬׳’ג€ג‚¬ Validate every line ׳’ג€ג‚¬׳’ג€ג‚¬
         for (const item of items) {
             if (item.quantity <= 0) return { success: false, error: 'All quantities must be positive' };
             if (!item.itemId && !item.newItemName) return { success: false, error: 'Each line needs an item or a new item name' };
@@ -226,23 +230,30 @@ export async function generatePurchaseOrder(
     }
 }
 
-export async function createEmptyPO(supplier: string, leadTimeDays?: number, shippingCost?: number, salesOrderId?: number) {
+export async function createEmptyPO(
+    supplier: string, 
+    leadTimeDays?: number, 
+    shippingCost?: number, 
+    salesOrderId?: number,
+    orderDate?: string,
+    dueDate?: string
+) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const p = parseSchema(CreatePOSchema, { supplier, leadTimeDays, shippingCost, salesOrderId });
-        if (!p.success) return { success: false, error: p.error };
-
         const poNumber = `PO-${Date.now()}`;
+
         const po = await prisma.purchaseOrder.create({
             data: {
                 poNumber,
-                supplier: p.data.supplier,
+                supplier,
                 status: 'Draft',
-                leadTimeDays: p.data.leadTimeDays ?? null,
-                shippingCost: p.data.shippingCost ?? 0.0,
-                salesOrderId: p.data.salesOrderId ?? null
+                leadTimeDays: leadTimeDays ?? null,
+                shippingCost: shippingCost ?? 0,
+                salesOrderId: salesOrderId ?? null,
+                orderDate: orderDate ? new Date(orderDate) : null,
+                dueDate: dueDate ? new Date(dueDate) : null
             }
         });
         
@@ -256,7 +267,7 @@ export async function createEmptyPO(supplier: string, leadTimeDays?: number, shi
     }
 }
 
-// ג”€ג”€ג”€ PO Lines ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
+// ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬ PO Lines ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬
 
 export async function addPOLine(
     poId: number,
@@ -405,31 +416,15 @@ export async function deleteMultiplePOs(ids: number[]) {
     }
 }
 
-export async function updatePODueDate(id: number, dueDateStr: string) {
+
+export async function updatePODueDate(id: number, dueDate: string) {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const po = await prisma.purchaseOrder.findUnique({ where: { id } });
-        if (!po) return { success: false, error: 'PO not found' };
-
-        if (po.status !== 'Draft' && po.status !== 'Sent') {
-            return { success: false, error: 'Can only update due date for Draft or Sent POs' };
-        }
-
-        const createdAt = new Date(po.createdAt);
-        const dueDate = new Date(dueDateStr);
-        // Reset times for accurate day diff
-        createdAt.setHours(0,0,0,0);
-        dueDate.setHours(0,0,0,0);
-        
-        const diffTime = dueDate.getTime() - createdAt.getTime();
-        let leadTimeDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (leadTimeDays < 0) leadTimeDays = 0;
-
         await prisma.purchaseOrder.update({
             where: { id },
-            data: { leadTimeDays }
+            data: { dueDate: new Date(dueDate) }
         });
 
         revalidatePath('/purchasing');
@@ -437,6 +432,24 @@ export async function updatePODueDate(id: number, dueDateStr: string) {
     } catch (error) {
         await logError('purchasing.updatePODueDate', error);
         return { success: false, error: 'Failed to update due date' };
+    }
+}
+
+export async function updatePOOrderDate(id: number, orderDate: string) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        await prisma.purchaseOrder.update({
+            where: { id },
+            data: { orderDate: new Date(orderDate) }
+        });
+
+        revalidatePath('/purchasing');
+        return { success: true };
+    } catch (error) {
+        await logError('purchasing.updatePOOrderDate', error);
+        return { success: false, error: 'Failed to update order date' };
     }
 }
 
@@ -479,7 +492,7 @@ export async function updatePONumber(id: number, poNumber: string) {
     }
 }
 
-// ג”€ג”€ג”€ Status Update ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
+// ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬ Status Update ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬
 
 export async function updatePOStatus(id: number, status: string) {
     try {
@@ -501,7 +514,7 @@ export async function updatePOStatus(id: number, status: string) {
     }
 }
 
-// ג”€ג”€ג”€ Receive Items (full transaction + version bump) ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€ג”€
+// ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬ Receive Items (full transaction + version bump) ׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬׳’ג€ג‚¬
 
 export async function receivePOItems(
     poId: number,

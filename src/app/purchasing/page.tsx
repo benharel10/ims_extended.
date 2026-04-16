@@ -1,48 +1,16 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2, Link2 } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, RefreshCw, FileText, CheckSquare, Square, Plus, ExternalLink, Trash2, Link2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { getLowStockItems, generatePurchaseOrder, getPurchaseOrders, createEmptyPO, deletePurchaseOrder, deleteMultiplePOs, updatePODueDate, getBrands } from './actions';
+import { getLowStockItems, generatePurchaseOrder, getPurchaseOrders, createEmptyPO, deletePurchaseOrder, deleteMultiplePOs, updatePODueDate, updatePOOrderDate, getBrands } from './actions';
 import { getSalesOrders } from '@/app/sales/actions';
 
 import { useSystem } from '@/components/SystemProvider';
 import { useRouter } from 'next/navigation';
 
-function EditableDueCell({ po, onUpdate }: any) {
-    let initialDate = '';
-    if (po.leadTimeDays) {
-        const d = new Date(po.createdAt);
-        d.setDate(d.getDate() + po.leadTimeDays);
-        initialDate = d.toISOString().split('T')[0];
-    }
-    const [dateVal, setDateVal] = useState(initialDate);
-
-    useEffect(() => {
-        if (po.leadTimeDays) {
-            const d = new Date(po.createdAt);
-            d.setDate(d.getDate() + po.leadTimeDays);
-            setDateVal(d.toISOString().split('T')[0]);
-        } else {
-            setDateVal('');
-        }
-    }, [po.leadTimeDays, po.createdAt]);
-
-    if (po.status === 'Completed' || po.status === 'Partial') {
-        if (!po.leadTimeDays) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
-        const due = new Date(new Date(po.createdAt).setDate(new Date(po.createdAt).getDate() + po.leadTimeDays));
-        const isOverdue = new Date() > due && po.status !== 'Completed';
-        return (
-            <span style={{
-                color: isOverdue ? 'var(--error)' : 'inherit',
-                fontWeight: isOverdue ? 600 : 400,
-                display: 'flex', alignItems: 'center', gap: '0.5rem'
-            }}>
-                {due.toLocaleDateString()}
-                {isOverdue && <AlertTriangle size={14} />}
-            </span>
-        );
-    }
+function EditableOrderDateCell({ po, onUpdate }: any) {
+    const [dateVal, setDateVal] = useState(po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : '');
 
     return (
         <input 
@@ -50,11 +18,41 @@ function EditableDueCell({ po, onUpdate }: any) {
             className="input-group" 
             style={{ padding: '0.25rem 0.5rem', width: '130px', margin: 0, fontSize: '0.875rem' }} 
             value={dateVal} 
-            onChange={e => {
-                setDateVal(e.target.value);
-            }}
+            onChange={e => setDateVal(e.target.value)}
             onBlur={() => {
-                if (dateVal !== initialDate && dateVal !== '') {
+                const current = po.orderDate ? new Date(po.orderDate).toISOString().split('T')[0] : '';
+                if (dateVal !== current && dateVal !== '') {
+                    onUpdate(po.id, dateVal);
+                }
+            }}
+        />
+    );
+}
+
+function EditableDueCell({ po, onUpdate }: any) {
+    const [dateVal, setDateVal] = useState(po.dueDate ? new Date(po.dueDate).toISOString().split('T')[0] : '');
+
+    useEffect(() => {
+        setDateVal(po.dueDate ? new Date(po.dueDate).toISOString().split('T')[0] : '');
+    }, [po.dueDate]);
+
+    return (
+        <input 
+            type="date" 
+            className="input-group" 
+            style={{ 
+                padding: '0.25rem 0.5rem', 
+                width: '130px', 
+                margin: 0, 
+                fontSize: '0.875rem',
+                border: !dateVal ? '1px dashed #f87171' : '1px solid var(--border-color)',
+                backgroundColor: !dateVal ? 'rgba(248, 113, 113, 0.05)' : 'transparent'
+            }} 
+            value={dateVal} 
+            onChange={e => setDateVal(e.target.value)}
+            onBlur={() => {
+                const current = po.dueDate ? new Date(po.dueDate).toISOString().split('T')[0] : '';
+                if (dateVal !== current && dateVal !== '') {
                     onUpdate(po.id, dateVal);
                 }
             }}
@@ -84,6 +82,8 @@ export default function PurchasingPage() {
     const [showDuePrompt, setShowDuePrompt] = useState(false);
     const [duePromptIndex, setDuePromptIndex] = useState(0);
     const [includeCompleted, setIncludeCompleted] = useState(false);
+    const [poOrderDate, setPoOrderDate] = useState(new Date().toISOString().split('T')[0]);
+    const [poDueDate, setPoDueDate] = useState('');
 
     useEffect(() => {
         loadData();
@@ -100,14 +100,13 @@ export default function PurchasingPage() {
 
         if (itemsRes.success && itemsRes.data) {
             setItems(itemsRes.data);
-            // Initialize quantities with suggested values
             const initialQtys: any = {};
             const initialSelection = new Set<number>();
             itemsRes.data.forEach((item: any) => {
                 const deficit = item.minStock - item.currentStock;
                 const suggested = deficit + Math.ceil(item.minStock * 0.2);
                 initialQtys[item.id] = suggested > 0 ? suggested : 1;
-                initialSelection.add(item.id); // Auto-select all by default
+                initialSelection.add(item.id);
             });
             setQuantities(initialQtys);
             setSelectedIds(initialSelection);
@@ -115,13 +114,11 @@ export default function PurchasingPage() {
 
         if (posRes.success && posRes.data) {
             setPos(posRes.data);
-            // Check for POs due today
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const due = posRes.data.filter((po: any) => {
-                if (!po.leadTimeDays || (po.status !== 'Sent' && po.status !== 'Partial')) return false;
-                const dueDate = new Date(po.createdAt);
-                dueDate.setDate(dueDate.getDate() + po.leadTimeDays);
+                if (!po.dueDate || (po.status !== 'Sent' && po.status !== 'Partial')) return false;
+                const dueDate = new Date(po.dueDate);
                 dueDate.setHours(0, 0, 0, 0);
                 return dueDate <= today;
             });
@@ -131,9 +128,7 @@ export default function PurchasingPage() {
                 setShowDuePrompt(true);
             }
         }
-        if (brandsRes.success && brandsRes.data) {
-            setBrands(brandsRes.data);
-        }
+        if (brandsRes.success && brandsRes.data) setBrands(brandsRes.data);
         if (soRes.success && soRes.data) {
             setSalesOrders(soRes.data.filter((so: any) => so.status !== 'Completed' && so.status !== 'Cancelled'));
         }
@@ -156,11 +151,14 @@ export default function PurchasingPage() {
 
     async function handleUpdateDueDate(id: number, dateStr: string) {
         const res = await updatePODueDate(id, dateStr);
-        if (res.success) {
-            loadData();
-        } else {
-            showAlert(res.error || 'Failed to update due date', 'error');
-        }
+        if (res.success) loadData();
+        else showAlert(res.error || 'Failed to update due date', 'error');
+    }
+
+    async function handleUpdateOrderDate(id: number, dateStr: string) {
+        const res = await updatePOOrderDate(id, dateStr);
+        if (res.success) loadData();
+        else showAlert(res.error || 'Failed to update order date', 'error');
     }
 
     async function handleDeleteSelectedPOs() {
@@ -203,24 +201,25 @@ export default function PurchasingPage() {
     }
 
     async function handleCreateEmptyPO() {
-        if (!newSupplier) {
-            showAlert('Enter supplier name', 'warning');
-            return;
-        }
-
-        const days = leadTime ? parseInt(leadTime) : undefined;
-        const shipping = shippingCost ? parseFloat(shippingCost) : undefined;
-        const soId = salesOrderId ? parseInt(salesOrderId) : undefined;
-
-        const res = await createEmptyPO(newSupplier, days, shipping, soId);
-        if (res.success && res.data) {
-            showAlert('PO created', 'success');
+        if (!newSupplier) return showAlert('Please select a supplier', 'error');
+        const res = await createEmptyPO(
+            newSupplier, 
+            leadTime ? parseInt(leadTime) : undefined, 
+            shippingCost ? parseFloat(shippingCost) : undefined, 
+            salesOrderId ? parseInt(salesOrderId) : undefined,
+            poOrderDate,
+            poDueDate
+        );
+        if (res.success) {
             setShowCreatePO(false);
             setNewSupplier('');
             setLeadTime('');
             setShippingCost('');
             setSalesOrderId('');
-            router.push(`/purchasing/${res.data.id}`);
+            setPoOrderDate(new Date().toISOString().split('T')[0]);
+            setPoDueDate('');
+            loadData();
+            showAlert('Purchase Order created successfully', 'success');
         } else {
             showAlert(res.error || 'Failed to create PO', 'error');
         }
@@ -286,6 +285,26 @@ export default function PurchasingPage() {
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div className="form-group">
+                                <label>Order Date</label>
+                                <input
+                                    type="date"
+                                    className="input-group"
+                                    value={poOrderDate}
+                                    onChange={e => setPoOrderDate(e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Due Date (Optional)</label>
+                                <input
+                                    type="date"
+                                    className="input-group"
+                                    value={poDueDate}
+                                    onChange={e => setPoDueDate(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="form-group">
                                 <label>Expected Lead Time (Days)</label>
                                 <input
                                     type="number"
@@ -339,8 +358,8 @@ export default function PurchasingPage() {
                             }}>Not Yet</button>
                             <button className="btn btn-primary" onClick={() => {
                                 setShowDuePrompt(false);
-                                router.push('/purchasing/receive');
-                            }}>Yes — Receive Items</button>
+                                router.push(`/purchasing/${dueTodayPOs[duePromptIndex].id}`);
+                            }}>Yes — View Details</button>
                         </div>
                         {dueTodayPOs.length > 1 && (
                             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
@@ -405,12 +424,12 @@ export default function PurchasingPage() {
                                             </div>
                                         )}
                                     </th>
-                            <th style={{ padding: '1rem' }}>PO Number</th>
+                                    <th style={{ padding: '1rem' }}>PO Number</th>
                                     <th style={{ padding: '1rem' }}>Supplier</th>
                                     <th style={{ padding: '1rem' }}>Linked SO</th>
                                     <th style={{ padding: '1rem' }}>Status</th>
                                     <th style={{ padding: '1rem' }}>Items</th>
-                                    <th style={{ padding: '1rem' }}>Created</th>
+                                    <th style={{ padding: '1rem' }}>Order Date</th>
                                     <th style={{ padding: '1rem' }}>Arrival Status</th>
                                     <th style={{ padding: '1rem' }}>Due Date</th>
                                     <th style={{ padding: '1rem' }}>Actions</th>
@@ -442,7 +461,20 @@ export default function PurchasingPage() {
                                                 <span style={{ display: 'inline-block', width: '18px' }} />
                                             )}
                                         </td>
-                                        <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
+                                        <td style={{ padding: '1rem', fontWeight: 600 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                {po.poNumber}
+                                                <ShieldCheck 
+                                                    size={18} 
+                                                    style={{ 
+                                                        color: po.inspectionRecords?.length > 0 ? 'var(--primary)' : 'var(--text-muted)',
+                                                        opacity: po.inspectionRecords?.length > 0 ? 1 : 0.2,
+                                                        strokeWidth: po.inspectionRecords?.length > 0 ? 2.5 : 1.5
+                                                    }} 
+                                                    fill={po.inspectionRecords?.length > 0 ? 'var(--primary-light)' : 'transparent'}
+                                                />
+                                            </div>
+                                        </td>
                                         <td style={{ padding: '1rem' }}>{po.supplier}</td>
                                         <td style={{ padding: '1rem' }}>
                                             {po.salesOrder ? (
@@ -466,49 +498,20 @@ export default function PurchasingPage() {
                                             </div>
                                         </td>
                                         <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
-                                        <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
-                                            {new Date(po.createdAt).toLocaleDateString()}
+                                        <td style={{ padding: '1rem' }}>
+                                            <EditableOrderDateCell po={po} onUpdate={handleUpdateOrderDate} />
                                         </td>
                                         <td style={{ padding: '1rem' }}>
-                                            {po.status === 'Completed' ? (
-                                                (() => {
-                                                    const due = new Date(po.createdAt);
-                                                    due.setDate(due.getDate() + (po.leadTimeDays || 0));
-                                                    const delivered = new Date(po.deliveredAt || po.updatedAt);
-                                                    const isOnTime = delivered <= due;
-                                                    return (
-                                                        <div style={{ 
-                                                            display: 'inline-flex',
-                                                            flexDirection: 'column',
-                                                            gap: '2px',
-                                                            padding: '0.4rem 0.6rem', 
-                                                            borderRadius: '6px', 
-                                                            fontSize: '0.75rem',
-                                                            background: isOnTime ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                                            color: isOnTime ? '#22c55e' : '#ef4444',
-                                                            border: `1px solid ${isOnTime ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
-                                                            minWidth: '90px',
-                                                            textAlign: 'center',
-                                                            alignItems: 'center'
-                                                        }}>
-                                                            <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                                                                {isOnTime ? 'On Time' : 'Late Arrival'}
-                                                            </span>
-                                                            <div style={{ fontSize: '0.7rem', opacity: 0.9, borderTop: `1px solid ${isOnTime ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, width: '100%', paddingTop: '2px', marginTop: '1px' }}>
-                                                                {delivered.toLocaleDateString()}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()
-                                            ) : po.status === 'Partial' ? (
-                                                <span style={{ color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 500 }}>
-                                                    Partial delivery
-                                                </span>
-                                            ) : (
-                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                                                    Awaiting...
-                                                </span>
-                                            )}
+                                            <span style={{ 
+                                                display: 'inline-flex', 
+                                                padding: '0.25rem 0.75rem', 
+                                                borderRadius: '999px', 
+                                                fontSize: '0.75rem', 
+                                                background: po.status === 'Completed' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                                                color: po.status === 'Completed' ? '#16a34a' : '#d97706'
+                                            }}>
+                                                {po.status === 'Completed' ? 'Arrived' : 'In Transit'}
+                                            </span>
                                         </td>
                                         <td style={{ padding: '1rem' }}>
                                             <EditableDueCell po={po} onUpdate={handleUpdateDueDate} />

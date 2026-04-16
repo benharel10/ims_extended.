@@ -55,11 +55,14 @@ export async function POST(req: Request) {
         const vendor_name = payload.client_name;
         const total_cost = Number(payload.total_amount) || 0;
         
+        const docDate = payload.doc_date ? new Date(payload.doc_date) : null;
         let lead_time_days = 0;
+        let dueDate: Date | null = null;
         const rawDeliveryDate = payload.delivery_date || payload.delivery_time;
         if (rawDeliveryDate) {
             const dt = new Date(rawDeliveryDate);
             if (!isNaN(dt.getTime())) {
+                dueDate = dt;
                 const diffTime = dt.getTime() - new Date().getTime();
                 lead_time_days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             } else {
@@ -161,6 +164,8 @@ export async function POST(req: Request) {
                          supplier: vendor_name,
                          totalCost: total_cost,
                          leadTimeDays: updatedLeadTime,
+                         orderDate: docDate,
+                         dueDate: dueDate,
                          status: finalStatus,
                          pendingManualMapping: hasUnidentifiedSku,
                          lines: {
@@ -177,8 +182,10 @@ export async function POST(req: Request) {
                           supplier: vendor_name,
                           totalCost: total_cost,
                           leadTimeDays: lead_time_days,
+                          orderDate: docDate,
+                          dueDate: dueDate,
                           status: finalStatus,
-                         pendingManualMapping: hasUnidentifiedSku,
+                          pendingManualMapping: hasUnidentifiedSku,
                          lines: {
                              create: lineData
                          }

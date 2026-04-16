@@ -81,6 +81,8 @@ export const CreatePOSchema = z.object({
     leadTimeDays: z.number().int().min(0).optional(),
     shippingCost: z.number().min(0).optional(),
     salesOrderId: z.number().int().positive().optional(),
+    orderDate: z.string().optional(),
+    dueDate: z.string().optional(),
 });
 
 export const AddPOLineSchema = z.object({

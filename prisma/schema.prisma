@@ -146,6 +146,9 @@ model PurchaseOrder {
   shippingCost Float?    @default(0.0)
   totalCost    Float?    @default(0.0)
 
+  orderDate    DateTime?
+  dueDate      DateTime?
+
   deliveredAt  DateTime?
   inspectionRecords InspectionRecord[]
   
