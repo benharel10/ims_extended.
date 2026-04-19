@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft } from 'lucide-react';
+import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft, Search, Loader2 } from 'lucide-react';
 import { getShipments, createShipment, createPackage, addItemToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival } from './actions';
 import { getItems } from '../inventory/actions'; // Reuse getItems
 import { useSystem } from '@/components/SystemProvider';
+import { useDebounce } from '@/hooks/useDebounce';
 
 export default function ShippingPage() {
     const { user, showAlert, showConfirm } = useSystem();
@@ -31,8 +32,14 @@ export default function ShippingPage() {
 
     // Add Item State (Transient)
     const [addingItemToPkg, setAddingItemToPkg] = useState<number | null>(null); // Package ID
-    const [selectedItemToAdd, setSelectedItemToAdd] = useState('');
+    const [selectedItemToAdd, setSelectedItemToAdd] = useState<any | null>(null);
     const [itemSearch, setItemSearch] = useState(''); // Search filter for item dropdown
+    const [searchingItems, setSearchingItems] = useState(false);
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [showResults, setShowResults] = useState(false);
+    const debouncedItemSearch = useDebounce(itemSearch, 500);
+    const searchRef = useRef<HTMLDivElement>(null);
+
     const [qtyToAdd, setQtyToAdd] = useState(1);
     const [availableSerials, setAvailableSerials] = useState<any[]>([]);
     const [selectedSerialId, setSelectedSerialId] = useState('');
@@ -94,6 +101,34 @@ export default function ShippingPage() {
         setSelectedSerialId('');
         setIsSerializedSelection(false);
     }
+
+    // Handle clicking outside search results
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+                setShowResults(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    // Effect to search items when itemSearch changes
+    useEffect(() => {
+        if (debouncedItemSearch.trim().length > 0) {
+            setSearchingItems(true);
+            getItems(1, 10, debouncedItemSearch).then(res => {
+                if (res.success) {
+                    setSearchResults(res.data || []);
+                    setShowResults(true);
+                }
+                setSearchingItems(false);
+            });
+        } else {
+            setSearchResults([]);
+            setShowResults(false);
+        }
+    }, [debouncedItemSearch]);
 
     useEffect(() => {
         loadData();
@@ -226,14 +261,15 @@ export default function ShippingPage() {
         try {
             const res = await addItemToPackage(
                 packageId,
-                parseInt(selectedItemToAdd),
+                selectedItemToAdd.id,
                 qty,
                 selectedSerialId ? parseInt(selectedSerialId) : undefined
             );
 
             if (res.success) {
                 setAddingItemToPkg(null);
-                setSelectedItemToAdd('');
+                setSelectedItemToAdd(null);
+                setItemSearch('');
                 setQtyToAdd(1);
                 setAvailableSerials([]);
                 setSelectedSerialId('');
@@ -251,11 +287,10 @@ export default function ShippingPage() {
     // Watch for item selection to check serialization
     useEffect(() => {
         if (selectedItemToAdd) {
-            const item = items.find(i => String(i.id) === selectedItemToAdd);
-            if (item?.isSerialized) {
+            if (selectedItemToAdd.isSerialized) {
                 setIsSerializedSelection(true);
                 setQtyToAdd(1); // Force 1
-                getAvailableSerialNumbers(item.id).then(res => {
+                getAvailableSerialNumbers(selectedItemToAdd.id).then(res => {
                     if (res.success) setAvailableSerials(res.data || []);
                 });
             } else {
@@ -264,7 +299,7 @@ export default function ShippingPage() {
                 setSelectedSerialId('');
             }
         }
-    }, [selectedItemToAdd, items]);
+    }, [selectedItemToAdd]);
 
     function handlePrint(shipment: any) {
         setPrintingShipment(shipment);
@@ -500,40 +535,100 @@ export default function ShippingPage() {
                                                                         <tr>
                                                                             <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
                                                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
-                                                                                        <input
-                                                                                            type="text"
-                                                                                            placeholder="Search SKU or name..."
-                                                                                            value={itemSearch}
-                                                                                            onChange={e => setItemSearch(e.target.value)}
-                                                                                            className="input-group"
-                                                                                            style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
-                                                                                            autoFocus
-                                                                                        />
-                                                                                        <select
-                                                                                            value={selectedItemToAdd}
-                                                                                            onChange={e => setSelectedItemToAdd(e.target.value)}
-                                                                                            className="input-group"
-                                                                                            style={{ padding: '0.25rem' }}
-                                                                                        >
-                                                                                            <option value="">Select Item...</option>
-                                                                                            {items
-                                                                                                .filter(i => !itemSearch || i.sku.toLowerCase().includes(itemSearch.toLowerCase()) || i.name.toLowerCase().includes(itemSearch.toLowerCase()))
-                                                                                                .map(i => {
-                                                                                                    let stockLabel = `Total: ${i.currentStock}`;
-
-                                                                                                    if (sourceWarehouseId && i.stocks) {
-                                                                                                        const whStock = i.stocks.find((s: any) => s.warehouseId === sourceWarehouseId)?.quantity || 0;
-                                                                                                        stockLabel = `WH Stock: ${whStock} (Total: ${i.currentStock})`;
-                                                                                                    }
-
-                                                                                                    return (
-                                                                                                        <option key={i.id} value={i.id}>
-                                                                                                            {i.sku} - {i.name} ({stockLabel})
-                                                                                                        </option>
-                                                                                                    );
-                                                                                                })}
-                                                                                        </select>
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1, position: 'relative' }} ref={searchRef}>
+                                                                                        {selectedItemToAdd ? (
+                                                                                            <div 
+                                                                                                className="input-group"
+                                                                                                style={{ 
+                                                                                                    padding: '0.35rem 0.5rem', 
+                                                                                                    fontSize: '0.85rem', 
+                                                                                                    background: 'var(--bg-dark)',
+                                                                                                    display: 'flex',
+                                                                                                    justifyContent: 'space-between',
+                                                                                                    alignItems: 'center',
+                                                                                                    border: '1px solid var(--primary)'
+                                                                                                }}
+                                                                                            >
+                                                                                                <span><strong>{selectedItemToAdd.sku}</strong> - {selectedItemToAdd.name}</span>
+                                                                                                <button 
+                                                                                                    onClick={() => { setSelectedItemToAdd(null); setItemSearch(''); }}
+                                                                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}
+                                                                                                >
+                                                                                                    ×
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <>
+                                                                                                <div style={{ position: 'relative' }}>
+                                                                                                    <input
+                                                                                                        type="text"
+                                                                                                        placeholder="Search SKU or name..."
+                                                                                                        value={itemSearch}
+                                                                                                        onChange={e => { setItemSearch(e.target.value); setShowResults(true); }}
+                                                                                                        onFocus={() => { if (itemSearch) setShowResults(true); }}
+                                                                                                        className="input-group"
+                                                                                                        style={{ padding: '0.35rem 0.5rem 0.35rem 2rem', fontSize: '0.85rem' }}
+                                                                                                        autoFocus
+                                                                                                    />
+                                                                                                    <Search size={14} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                                                                                                    {searchingItems && (
+                                                                                                        <Loader2 size={14} className="animate-spin" style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)' }} />
+                                                                                                    )}
+                                                                                                </div>
+                                                                                                
+                                                                                                {showResults && (itemSearch.trim().length > 0 || searchResults.length > 0) && (
+                                                                                                    <div style={{ 
+                                                                                                        position: 'absolute', 
+                                                                                                        top: '100%', 
+                                                                                                        left: 0, 
+                                                                                                        right: 0, 
+                                                                                                        zIndex: 50, 
+                                                                                                        background: '#1e293b', 
+                                                                                                        border: '1px solid var(--border-color)', 
+                                                                                                        borderRadius: '0.4rem',
+                                                                                                        marginTop: '0.2rem',
+                                                                                                        maxHeight: '200px',
+                                                                                                        overflowY: 'auto',
+                                                                                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
+                                                                                                    }}>
+                                                                                                        {searchResults.length > 0 ? (
+                                                                                                            searchResults.map(i => {
+                                                                                                                let stockLabel = `Total: ${i.currentStock}`;
+                                                                                                                if (sourceWarehouseId && i.stocks) {
+                                                                                                                    const whStock = i.stocks.find((s: any) => s.warehouseId === sourceWarehouseId)?.quantity || 0;
+                                                                                                                    stockLabel = `WH Stock: ${whStock}`;
+                                                                                                                }
+                                                                                                                return (
+                                                                                                                    <div 
+                                                                                                                        key={i.id}
+                                                                                                                        onClick={() => { setSelectedItemToAdd(i); setShowResults(false); }}
+                                                                                                                        style={{ 
+                                                                                                                            padding: '0.5rem 0.75rem', 
+                                                                                                                            cursor: 'pointer', 
+                                                                                                                            borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                                                                                                            fontSize: '0.8rem',
+                                                                                                                            display: 'flex',
+                                                                                                                            flexDirection: 'column'
+                                                                                                                        }}
+                                                                                                                        className="hover-bg"
+                                                                                                                    >
+                                                                                                                        <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{i.sku}</span>
+                                                                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                                                                            <span style={{ color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{i.name}</span>
+                                                                                                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{stockLabel}</span>
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                );
+                                                                                                            })
+                                                                                                        ) : (
+                                                                                                            <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                                                                                {searchingItems ? 'Searching...' : 'No items found'}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </>
+                                                                                        )}
                                                                                     </div>
 
                                                                                     {isSerializedSelection ? (
