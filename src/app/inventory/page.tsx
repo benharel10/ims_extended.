@@ -18,6 +18,7 @@ export default function InventoryPage() {
     const [filterType, setFilterType] = useState('');
     const [filterBrand, setFilterBrand] = useState('');
     const [filterLowStock, setFilterLowStock] = useState(false);
+    const [selectedWarehouse, setSelectedWarehouse] = useState<string>('');
     const [items, setItems] = useState<any[]>([]);
     const [warehouses, setWarehouses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -547,7 +548,6 @@ export default function InventoryPage() {
 
     // Selection State
     const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
-    const [selectedWarehouse, setSelectedWarehouse] = useState<string>('');
     const [visibleCount, setVisibleCount] = useState<number>(20);
 
     // Derived State
