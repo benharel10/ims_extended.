@@ -130,12 +130,12 @@ export default function InventoryPage() {
 
     useEffect(() => {
         loadItems();
-    }, [page, debouncedSearch]);
+    }, [page, debouncedSearch, selectedWarehouse, filterType, filterBrand, filterLowStock]);
 
-    // Reset to page 1 when search changes
+    // Reset to page 1 when search or filters change
     useEffect(() => {
         setPage(1);
-    }, [debouncedSearch]);
+    }, [debouncedSearch, selectedWarehouse, filterType, filterBrand, filterLowStock]);
 
     // Close actions dropdown when clicking elsewhere
     useEffect(() => {
@@ -179,7 +179,12 @@ export default function InventoryPage() {
     async function loadItems() {
         setLoading(true);
         const [itemsRes, whRes] = await Promise.all([
-            getItems(page, pageSize, debouncedSearch),
+            getItems(page, pageSize, debouncedSearch, {
+                warehouseId: selectedWarehouse ? parseInt(selectedWarehouse) : undefined,
+                type: filterType || undefined,
+                brand: filterBrand || undefined,
+                lowStock: filterLowStock
+            }),
             getWarehouses()
         ]);
 
@@ -546,32 +551,7 @@ export default function InventoryPage() {
     const [visibleCount, setVisibleCount] = useState<number>(20);
 
     // Derived State
-    const filteredItems = items.filter(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()));
-
-        let matchesWarehouse = true;
-        if (selectedWarehouse) {
-            // Check legacy string OR new relation
-            // Look up warehouse name from ID
-            const selectedWhName = warehouses.find(w => String(w.id) === selectedWarehouse)?.name;
-            const matchesLegacy = item.warehouse === selectedWarehouse || (selectedWhName && item.warehouse === selectedWhName);
-
-            // Check stock relation
-            // Note: selectedWarehouse is ID string from select
-            const whId = parseInt(selectedWarehouse);
-            const matchesRelation = !isNaN(whId) && item.stocks?.some((s: any) => s.warehouseId === whId && s.quantity > 0);
-
-            matchesWarehouse = matchesLegacy || matchesRelation;
-        }
-
-        const matchesType = !filterType || item.type === filterType;
-        const matchesBrand = !filterBrand || item.brand === filterBrand;
-        const matchesLowStock = !filterLowStock || (Number(item.currentStock) < Number(item.minStock));
-
-        return matchesSearch && matchesWarehouse && matchesType && matchesBrand && matchesLowStock;
-    }).sort((a, b) => {
+    const filteredItems = items.sort((a, b) => {
         if (!sortConfig) return 0;
         const { key, direction } = sortConfig;
 
