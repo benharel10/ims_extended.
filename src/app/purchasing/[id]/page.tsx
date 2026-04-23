@@ -148,9 +148,9 @@ function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleSh
                             <ShieldCheck 
                                 size={20} 
                                 style={{ 
-                                    color: record ? 'var(--primary)' : 'var(--text-muted)',
-                                    opacity: record ? 1 : 0.2,
-                                    strokeWidth: record ? 2.5 : 1.5
+                                    color: record ? 'var(--primary)' : 'var(--text-main)',
+                                    opacity: record ? 1 : 0.45,
+                                    strokeWidth: record ? 2.5 : 2.0
                                 }} 
                                 fill={record ? 'var(--primary-light)' : 'transparent'}
                             />
