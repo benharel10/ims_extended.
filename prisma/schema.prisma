@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,79 +8,66 @@ datasource db {
 }
 
 model Warehouse {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
-  location    String?
-  type        String    @default("Standard") // "Standard", "Virtual", "Retail"
-  
-  // Relations
-  stocks      ItemStock[]
-  
-  originShipments      Shipment[] @relation("Origin")
-  destinationShipments Shipment[] @relation("Destination")
-  
+  id                   Int             @id @default(autoincrement())
+  name                 String          @unique
+  location             String?
+  type                 String          @default("Standard")
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  stocks               ItemStock[]
   productionFrom       ProductionRun[] @relation("ProductionFrom")
   productionTo         ProductionRun[] @relation("ProductionTo")
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  originShipments      Shipment[]      @relation("Origin")
+  destinationShipments Shipment[]      @relation("Destination")
 }
 
 model ItemStock {
-  id          Int @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   itemId      Int
   warehouseId Int
-  quantity    Decimal @default(0) @db.Decimal(10, 3)
-  location    String? // e.g. "Shelf A3", "Bin B-12", "Row 4 Rack 2"
-  
+  quantity    Decimal   @default(0) @db.Decimal(10, 3)
+  location    String?
   item        Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  
+
   @@unique([itemId, warehouseId])
 }
 
 model Item {
-  id           Int      @id @default(autoincrement())
-  sku          String   @unique
-  icountId     Int?     @unique // Foreign key to iCount system
-  name         String
-  description  String?
-  type         String   @default("Raw") // "Raw", "Assembly", "Product", "Raw Material"
-  minStock       Decimal  @default(0) @db.Decimal(10, 3)
-  currentStock   Decimal  @default(0) @db.Decimal(10, 3)
-  allocatedStock Decimal  @default(0) @db.Decimal(10, 3)
-  uom            String   @default("Units")
-  cost         Float    @default(0.0)
-  price        Float    @default(0.0)
-  isSerialized Boolean  @default(false)
-  revision     String?
-  warehouse    String?  // Legacy string location
-  brand        String?
-
-  // Reliability fields
-  version      Int      @default(0)  // Optimistic concurrency control — increment on every stock/cost write
-  deletedAt    DateTime?             // Soft delete: null = active, set = logically deleted
-
-  // Relations
-  parentBOMs   BOM[]    @relation("Parent")
-  childBOMs    BOM[]    @relation("Child")
-  
-  serialized   SerializedItem[]
-  poLines      POLine[]
-  salesLines   SalesLine[]
-  packageItems PackageItem[]
-  productionRuns ProductionRun[]
-  stocks       ItemStock[]
-  salesOrders  SalesOrder[]
-  externalMappings ExternalMapping[]
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  inspectionTemplateUrl  String?
+  id                     Int                @id @default(autoincrement())
+  sku                    String             @unique
+  icountId               Int?               @unique
+  name                   String
+  description            String?
+  type                   String             @default("Raw")
+  minStock               Decimal            @default(0) @db.Decimal(10, 3)
+  currentStock           Decimal            @default(0) @db.Decimal(10, 3)
+  cost                   Float              @default(0.0)
+  price                  Float              @default(0.0)
+  isSerialized           Boolean            @default(false)
+  revision               String?
+  warehouse              String?
+  brand                  String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  uom                    String             @default("Units")
+  deletedAt              DateTime?
+  version                Int                @default(0)
+  allocatedStock         Decimal            @default(0) @db.Decimal(10, 3)
   inspectionTemplateName String?
+  inspectionTemplateUrl  String?
+  childBOMs              BOM[]              @relation("Child")
+  parentBOMs             BOM[]              @relation("Parent")
+  externalMappings       ExternalMapping[]
   inspectionRecords      InspectionRecord[]
-  
+  stocks                 ItemStock[]
+  poLines                POLine[]
+  packageItems           PackageItem[]
+  productionRuns         ProductionRun[]
+  salesLines             SalesLine[]
+  salesOrders            SalesOrder[]
+  serialized             SerializedItem[]
+
   @@index([deletedAt])
   @@index([sku])
   @@index([name])
@@ -91,127 +75,105 @@ model Item {
 }
 
 model BOM {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   parentId  Int
   childId   Int
-  quantity  Decimal  @default(1.0) @db.Decimal(10, 3)
-  
-  deletedAt DateTime? // Soft delete for BOM lines
-
-  parent    Item @relation("Parent", fields: [parentId], references: [id], onDelete: Cascade)
-  child     Item @relation("Child", fields: [childId], references: [id], onDelete: Cascade)
+  quantity  Decimal   @default(1.0) @db.Decimal(10, 3)
+  deletedAt DateTime?
+  child     Item      @relation("Child", fields: [childId], references: [id], onDelete: Cascade)
+  parent    Item      @relation("Parent", fields: [parentId], references: [id], onDelete: Cascade)
 
   @@unique([parentId, childId])
   @@index([deletedAt])
 }
 
 model SerializedItem {
-  id            Int       @id @default(autoincrement())
-  sn            String    @unique
-  itemId        Int
-  item          Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  
-  status        String    @default("InStock")
-  
-  parentSnId    Int?      
-  parent        SerializedItem? @relation("Genealogy", fields: [parentSnId], references: [id])
-  children      SerializedItem[] @relation("Genealogy")
-
+  id              Int              @id @default(autoincrement())
+  sn              String           @unique
+  itemId          Int
+  status          String           @default("InStock")
+  parentSnId      Int?
   productionRunId Int?
-  productionRun   ProductionRun? @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
-  
-  assembledAt   DateTime?
-  soldAt        DateTime?
-  
-  packageItems  PackageItem[]
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  assembledAt     DateTime?
+  soldAt          DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  packageItems    PackageItem[]
+  item            Item             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  parent          SerializedItem?  @relation("Genealogy", fields: [parentSnId], references: [id])
+  children        SerializedItem[] @relation("Genealogy")
+  productionRun   ProductionRun?   @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
 }
 
 model PurchaseOrder {
-  id           Int       @id @default(autoincrement())
-  poNumber     String    @unique
-  supplier     String
-  status       String    @default("Draft")
-  leadTimeDays Int?
-  pendingManualMapping Boolean @default(false)
+  id                   Int                @id @default(autoincrement())
+  poNumber             String             @unique
+  supplier             String
+  status               String             @default("Draft")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  leadTimeDays         Int?
+  salesOrderId         Int?
+  shippingCost         Float?             @default(0.0)
+  pendingManualMapping Boolean            @default(false)
+  totalCost            Float?             @default(0.0)
+  deliveredAt          DateTime?
+  dueDate              DateTime?
+  orderDate            DateTime?
+  inspectionRecords    InspectionRecord[]
+  lines                POLine[]
+  salesOrder           SalesOrder?        @relation(fields: [salesOrderId], references: [id])
 
-  lines        POLine[]
-  
-
-  salesOrderId Int?
-  salesOrder   SalesOrder? @relation(fields: [salesOrderId], references: [id])
-
-  shippingCost Float?    @default(0.0)
-  totalCost    Float?    @default(0.0)
-
-  orderDate    DateTime?
-  dueDate      DateTime?
-
-  deliveredAt  DateTime?
-  inspectionRecords InspectionRecord[]
-  
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  
   @@index([status])
   @@index([createdAt])
 }
 
 model POLine {
-  id          Int  @id @default(autoincrement())
-  poId        Int
-  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  itemId      Int?
-  item        Item?     @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  
-  newItemName String?
-  newItemSku  String?
-  isAutoMapped Boolean @default(false)
-
-  quantity    Int
-  received    Int   @default(0)
-  unitCost    Float
+  id           Int           @id @default(autoincrement())
+  poId         Int
+  itemId       Int?
+  quantity     Int
+  received     Int           @default(0)
+  unitCost     Float
+  newItemName  String?
+  newItemSku   String?
+  isAutoMapped Boolean       @default(false)
+  item         Item?         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  po           PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
 }
 
 model SalesOrder {
-  id        Int       @id @default(autoincrement())
-  soNumber    String    @unique
-  customer    String
-  customerOrderNumber String?   // Customer's own PO/order reference
-  status      String    @default("Draft")
-  isAllocated Boolean   @default(false)
-  
-  lines       SalesLine[]
-  shipments Shipment[]
-  purchaseOrders PurchaseOrder[]
-  productionRuns ProductionRun[] @relation("SalesOrderProduction")
-  
-  itemId    Int?
-  item      Item?      @relation(fields: [itemId], references: [id])
-  quantity  Int?
+  id                  Int             @id @default(autoincrement())
+  soNumber            String          @unique
+  customer            String
+  status              String          @default("Draft")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  productionRunId     Int?
+  itemId              Int?
+  quantity            Int?
+  isAllocated         Boolean         @default(false)
+  customerOrderNumber String?
+  productionRuns      ProductionRun[] @relation("SalesOrderProduction")
+  purchaseOrders      PurchaseOrder[]
+  lines               SalesLine[]
+  item                Item?           @relation(fields: [itemId], references: [id])
+  productionRun       ProductionRun?  @relation(fields: [productionRunId], references: [id])
+  shipments           Shipment[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  productionRunId Int?
-  productionRun   ProductionRun? @relation(fields: [productionRunId], references: [id])
-  
   @@index([status])
   @@index([createdAt])
 }
 
 model SalesLine {
-  id        Int  @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   soId      Int
-  so        SalesOrder @relation(fields: [soId], references: [id], onDelete: Cascade)
   itemId    Int
-  item        Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  
   quantity  Int
-  shipped   Int   @default(0)
+  shipped   Int        @default(0)
   unitPrice Float
+  item      Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  so        SalesOrder @relation(fields: [soId], references: [id], onDelete: Cascade)
 }
 
 model ICountSyncLog {
@@ -225,117 +187,101 @@ model ICountSyncLog {
 }
 
 model Shipment {
-  id              Int       @id @default(autoincrement())
-  shipmentNo      String    @unique
-  soId            Int?      
-  salesOrder      SalesOrder? @relation(fields: [soId], references: [id])
-  
-  type            String    @default("Outbound")
-  
+  id              Int         @id @default(autoincrement())
+  shipmentNo      String      @unique
+  soId            Int?
+  type            String      @default("Outbound")
   fromWarehouseId Int?
   toWarehouseId   Int?
-  
-  fromWarehouse   Warehouse? @relation("Origin", fields: [fromWarehouseId], references: [id])
-  toWarehouse     Warehouse? @relation("Destination", fields: [toWarehouseId], references: [id])
-  
   carrier         String?
   trackingNo      String?
-  destination     String?
-  status          String    @default("Draft")
+  status          String      @default("Draft")
   shipDate        DateTime?
   receiveDate     DateTime?
-
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  destination     String?
   packages        Package[]
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  fromWarehouse   Warehouse?  @relation("Origin", fields: [fromWarehouseId], references: [id])
+  salesOrder      SalesOrder? @relation(fields: [soId], references: [id])
+  toWarehouse     Warehouse?  @relation("Destination", fields: [toWarehouseId], references: [id])
 }
 
 model Package {
-  id         Int       @id @default(autoincrement())
+  id         Int           @id @default(autoincrement())
   shipmentId Int
-  shipment   Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  
-  type       String    @default("Box")
-  weight     Float?    
-  dimensions String?   
+  type       String        @default("Box")
+  weight     Float?
+  dimensions String?
   trackingNo String?
-
+  shipment   Shipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   items      PackageItem[]
 }
 
 model PackageItem {
-  id               Int      @id @default(autoincrement())
+  id               Int             @id @default(autoincrement())
   packageId        Int
-  package          Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  
   itemId           Int
-  item             Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  
   quantity         Int
-
   serializedItemId Int?
+  item             Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  package          Package         @relation(fields: [packageId], references: [id], onDelete: Cascade)
   serializedItem   SerializedItem? @relation(fields: [serializedItemId], references: [id])
 }
 
 model ProductionRun {
-  id        Int      @id @default(autoincrement())
-  itemId    Int
-  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  
-  quantity  Decimal  @db.Decimal(10, 3)
-  serializedItems SerializedItem[]
-  status    String   @default("Completed")
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  id              Int              @id @default(autoincrement())
+  itemId          Int
+  quantity        Decimal          @db.Decimal(10, 3)
+  status          String           @default("Completed")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   fromWarehouseId Int?
   toWarehouseId   Int?
-  fromWarehouse   Warehouse? @relation("ProductionFrom", fields: [fromWarehouseId], references: [id])
-  toWarehouse     Warehouse? @relation("ProductionTo", fields: [toWarehouseId], references: [id])
-  
   salesOrderId    Int?
-  salesOrder      SalesOrder? @relation("SalesOrderProduction", fields: [salesOrderId], references: [id])
-
-  salesOrders SalesOrder[]
+  fromWarehouse   Warehouse?       @relation("ProductionFrom", fields: [fromWarehouseId], references: [id])
+  item            Item             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  salesOrder      SalesOrder?      @relation("SalesOrderProduction", fields: [salesOrderId], references: [id])
+  toWarehouse     Warehouse?       @relation("ProductionTo", fields: [toWarehouseId], references: [id])
+  salesOrders     SalesOrder[]
+  serializedItems SerializedItem[]
 }
 
 model User {
-  id         Int      @id @default(autoincrement())
-  email      String   @unique
-  password   String
-  name       String?
-  role       String   @default("Warehouse")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                Int                @id @default(autoincrement())
+  email             String             @unique
+  password          String
+  name              String?
+  role              String             @default("Warehouse")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   inspectionRecords InspectionRecord[]
-  
-  systemLogs SystemLog[]
+  systemLogs        SystemLog[]
 
   @@index([email])
 }
 
 model SystemLog {
-  id       Int      @id @default(autoincrement())
-  userId   Int
-  user     User     @relation(fields: [userId], references: [id])
-  action   String
-  entity   String
-  entityId Int?
-  details  String?
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  entity    String
+  entityId  Int?
+  details   String?
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 /// Stores technical error details for debugging — errors shown to users are always friendly messages
 model SystemError {
   id        Int      @id @default(autoincrement())
-  context   String   // e.g. "runProduction", "importItems", "deleteItem"
-  message   String   // The raw error message
-  stack     String?  // Full stack trace for debugging
-  userId    Int?     // Which user triggered the failing action (nullable)
+  context   String
+  message   String
+  stack     String?
+  userId    Int?
   createdAt DateTime @default(now())
 }
+
 model Customer {
   id        Int      @id @default(autoincrement())
   name      String   @unique
@@ -346,8 +292,8 @@ model Customer {
 model WebhookError {
   id        Int      @id @default(autoincrement())
   source    String   @default("iCount")
-  payload   String   // The raw payload string
-  error     String   // The error message
+  payload   String
+  error     String
   createdAt DateTime @default(now())
 }
 
@@ -357,28 +303,27 @@ model ExternalMapping {
   externalSku    String
   source         String   @default("iCount")
   internalItemId Int
-  item           Item     @relation(fields: [internalItemId], references: [id], onDelete: Cascade)
-  
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  item           Item     @relation(fields: [internalItemId], references: [id], onDelete: Cascade)
 
-  @@unique([externalSku, source]) // An external SKU from a specific source maps to ONE internal ID
+  @@unique([externalSku, source])
 }
 
 model InspectionRecord {
-  id          Int      @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   itemId      Int
-  item        Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
   poId        Int?
-  po          PurchaseOrder? @relation(fields: [poId], references: [id])
   fileName    String
-  fileData    String   @db.Text // Store base64 Data URL
-  status      String   @default("Pass") // Pass, Fail
+  fileData    String
+  status      String         @default("Pass")
   notes       String?
   inspectorId Int
-  inspector   User     @relation(fields: [inspectorId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  inspector   User           @relation(fields: [inspectorId], references: [id])
+  item        Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  po          PurchaseOrder? @relation(fields: [poId], references: [id])
 
   @@index([itemId])
   @@index([poId])

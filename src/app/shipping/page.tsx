@@ -515,7 +515,7 @@ export default function ShippingPage() {
                                                                 <thead>
                                                                     <tr style={{ color: 'var(--text-muted)', textAlign: 'left' }}>
                                                                         <th>Item</th>
-                                                                        <th style={{ width: '60px' }}>Qty</th>
+                                                                        <th style={{ width: '100px' }}>Qty</th>
                                                                         <th style={{ width: '40px' }}></th>
                                                                     </tr>
                                                                 </thead>
@@ -646,7 +646,7 @@ export default function ShippingPage() {
                                                                                             type="number"
                                                                                             value={qtyToAdd}
                                                                                             onChange={e => setQtyToAdd(parseInt(e.target.value))}
-                                                                                            style={{ width: '60px' }}
+                                                                                            style={{ width: '100px' }}
                                                                                             className="input-group"
                                                                                         />
                                                                                     )}
