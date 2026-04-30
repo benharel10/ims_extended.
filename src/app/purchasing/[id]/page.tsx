@@ -666,14 +666,10 @@ export default function PODetailPage() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid-cols-3" style={{ marginBottom: '2rem' }}>
+            <div className="grid-cols-2" style={{ marginBottom: '2rem' }}>
                 <div className="card">
                     <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Items</div>
                     <div style={{ fontSize: '2rem', fontWeight: 700 }}>{po.lines?.length || 0}</div>
-                </div>
-                <div className="card">
-                    <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Ordered / Received</div>
-                    <div style={{ fontSize: '2rem', fontWeight: 700 }}>{totalOrdered} / {totalReceived}</div>
                 </div>
                 <div className="card">
                     <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Cost</div>
