@@ -1392,7 +1392,8 @@ export default function InventoryPage() {
                                         <input
                                             type="number"
                                             value={formData.minStock}
-                                            onChange={e => setFormData({ ...formData, minStock: parseInt(e.target.value) })}
+                                            onChange={e => setFormData({ ...formData, minStock: parseFloat(e.target.value) || 0 })}
+                                            step="any"
                                             className="input-group"
                                             style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '0.375rem', color: 'white' }}
                                         />
@@ -1539,7 +1540,7 @@ export default function InventoryPage() {
                                         type="number"
                                         className="input-group"
                                         value={sellFormData.quantity}
-                                        onChange={e => setSellFormData({ ...sellFormData, quantity: parseInt(e.target.value) })}
+                                        onChange={e => setSellFormData({ ...sellFormData, quantity: parseFloat(e.target.value) || 0 })}
                                     />
                                 </div>
                                 <div className="form-group">
@@ -1714,7 +1715,7 @@ export default function InventoryPage() {
                                                 onChange={e => setStockModalData(prev => ({ ...prev, quantity: parseFloat(e.target.value) || 0 }))}
                                                 autoFocus
                                                 min="0"
-                                                step="0.01"
+                                                step="any"
                                             />
                                             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'right' }}>
                                                 Resulting Stock: <strong style={{ color: 'var(--primary)' }}>
@@ -1803,8 +1804,9 @@ export default function InventoryPage() {
                                                 <input
                                                     type="number"
                                                     min="0"
+                                                    step="any"
                                                     value={bulkStockQuantities[id] || 0}
-                                                    onChange={e => setBulkStockQuantities({ ...bulkStockQuantities, [id]: parseInt(e.target.value) || 0 })}
+                                                    onChange={e => setBulkStockQuantities({ ...bulkStockQuantities, [id]: parseFloat(e.target.value) || 0 })}
                                                     style={{
                                                         width: '100px',
                                                         padding: '0.5rem',

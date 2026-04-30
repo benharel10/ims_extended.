@@ -645,9 +645,10 @@ export default function ShippingPage() {
                                                                                         <input
                                                                                             type="number"
                                                                                             value={qtyToAdd}
-                                                                                            onChange={e => setQtyToAdd(parseInt(e.target.value))}
+                                                                                            onChange={e => setQtyToAdd(parseFloat(e.target.value) || 0)}
                                                                                             style={{ width: '100px' }}
                                                                                             className="input-group"
+                                                                                            step="any"
                                                                                         />
                                                                                     )}
                                                                                     <button onClick={() => handleAddItem(pkg.id)} className="btn btn-sm btn-primary">Save</button>

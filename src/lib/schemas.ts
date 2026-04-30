@@ -50,13 +50,13 @@ export const CreateSalesOrderSchema = z.object({
     soNumber: z.string().trim().min(1, 'SO number is required').max(100),
     productionRunId: z.number().int().positive().optional(),
     itemId: z.number().int().positive().optional(),
-    quantity: z.number().int().positive().optional(),
+    quantity: z.number().positive().optional(),
 });
 
 export const LinkSalesOrderSchema = z.object({
     id: z.number().int().positive(),
     itemId: z.number().int().positive().nullable().optional(),
-    quantity: z.number().int().positive().nullable().optional(),
+    quantity: z.number().positive().nullable().optional(),
     productionRunId: z.number().int().positive().nullable().optional(),
 });
 

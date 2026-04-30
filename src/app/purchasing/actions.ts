@@ -31,6 +31,17 @@ export async function getItems() {
 
         const items = await prisma.item.findMany({
             where: ACTIVE,
+            select: {
+                id: true,
+                name: true,
+                sku: true,
+                cost: true,
+                minStock: true,
+                currentStock: true,
+                type: true,
+                brand: true,
+                isSerialized: true
+            },
             orderBy: { name: 'asc' }
         });
         return { success: true, data: items };
@@ -104,7 +115,7 @@ export async function getPurchaseOrders(includeCompleted = false) {
         const pos = await prisma.purchaseOrder.findMany({
             where,
             include: { 
-                lines: { include: { item: true } }, 
+                lines: { include: { item: { select: { id: true, name: true, sku: true, isSerialized: true, cost: true } } } }, 
                 salesOrder: true,
                 inspectionRecords: { select: { id: true } }
             },
@@ -592,7 +603,7 @@ export async function receivePOItems(
 
                 if (!targetItemId) continue;
 
-                const newReceived = line.received + rec.qty;
+                const newReceived = Number(line.received) + rec.qty;
 
                 // Update received quantity on the PO line
                 await tx.pOLine.update({

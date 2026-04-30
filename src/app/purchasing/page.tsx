@@ -572,8 +572,9 @@ export default function PurchasingPage() {
                                                     className="input-group"
                                                     style={{ width: '80px', padding: '0.25rem' }}
                                                     value={quantities[item.id] || 0}
-                                                    onChange={(e) => updateQuantity(item.id, parseInt(e.target.value))}
-                                                    min="1"
+                                                    onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 0)}
+                                                    step="any"
+                                                    min="0.00000001"
                                                 />
                                             </td>
                                             <td style={{ padding: '1rem' }}>${((quantities[item.id] || 0) * item.cost).toFixed(2)}</td>

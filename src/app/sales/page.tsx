@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
-import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer } from 'lucide-react';
+import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer, Calendar } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer } from './actions';
+import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer, updateSalesOrderDate } from './actions';
 import { createEmptyPO, getBrands, getWarehouses, getPurchaseOrders, updatePOLinkedSO } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
@@ -18,7 +18,7 @@ type SalesOrder = {
     createdAt: Date;
     lines: any[];
     item?: any | null;
-    quantity?: number | null;
+    quantity?: any | null;
     productionRuns?: any[];
     shipments?: any[];
     purchaseOrders?: any[];
@@ -70,6 +70,21 @@ export default function SalesPage() {
 
     // Selection State
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+    const [editingDateId, setEditingDateId] = useState<number | null>(null);
+    const [newDate, setNewDate] = useState<string>('');
+
+    async function handleUpdateDate(id: number) {
+        if (!newDate) return;
+        const res = await updateSalesOrderDate(id, new Date(newDate));
+        if (res.success) {
+            setEditingDateId(null);
+            loadOrders();
+            showAlert('Date updated', 'success');
+        } else {
+            showAlert(res.error || 'Failed to update date', 'error');
+        }
+    }
 
 
     function toggleSelect(id: number) {
@@ -362,7 +377,36 @@ export default function SalesPage() {
                                                             color: order.status === 'Confirmed' ? '#3b82f6' : 'var(--text-muted)'
                                                         }}>{order.status}</span>
                                                     </td>
-                                                    <td style={{ padding: '1rem' }}>{new Date(order.createdAt).toLocaleDateString()}</td>
+                                                    <td style={{ padding: '1rem' }}>
+                                                        {editingDateId === order.id ? (
+                                                            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                                                <input 
+                                                                    type="date" 
+                                                                    value={newDate} 
+                                                                    onChange={e => setNewDate(e.target.value)}
+                                                                    style={{ padding: '0.2rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '4px' }}
+                                                                />
+                                                                <button onClick={() => handleUpdateDate(order.id)} className="btn btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', minHeight: 'auto' }}>Save</button>
+                                                                <button onClick={() => setEditingDateId(null)} className="btn btn-outline" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', minHeight: 'auto' }}>✕</button>
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                {new Date(order.createdAt).toLocaleDateString()}
+                                                                {isAdmin && (
+                                                                    <button 
+                                                                        onClick={() => {
+                                                                            setEditingDateId(order.id);
+                                                                            setNewDate(new Date(order.createdAt).toISOString().split('T')[0]);
+                                                                        }}
+                                                                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                                                                        title="Edit Date"
+                                                                    >
+                                                                        <Calendar size={14} style={{ opacity: 0.7 }} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         ${order.lines.reduce((sum, line) => sum + (line.quantity * line.unitPrice), 0).toFixed(2)}
                                                     </td>
@@ -1143,7 +1187,8 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                         type="number"
                                         min="1"
                                         value={qty}
-                                        onChange={e => setQty(parseInt(e.target.value))}
+                                        onChange={e => setQty(parseFloat(e.target.value) || 0)}
+                                        step="any"
                                         className="input-group"
                                         style={{ width: '80px', padding: '0.5rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'white' }}
                                     />

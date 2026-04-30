@@ -94,7 +94,8 @@ export async function getInspectionRecords(filters?: {
                 po: { select: { poNumber: true } },
                 inspector: { select: { name: true } },
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            take: 50
         });
 
         return { success: true, data: JSON.parse(JSON.stringify(records)) };

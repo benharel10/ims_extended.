@@ -80,7 +80,7 @@ function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleSh
                             onBlur={handleBlur}
                             className="input-group"
                             style={{ width: '80px', margin: 0, padding: '0.25rem 0.5rem' }}
-                            step="0.01"
+                            step="any"
                             min="0"
                         />
                     </div>
@@ -93,11 +93,12 @@ function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleSh
                     <input 
                         type="number" 
                         value={quantity} 
-                        onChange={e => setQuantity(e.target.value === '' ? 1 : parseInt(e.target.value))} 
+                        onChange={e => setQuantity(e.target.value === '' ? 1 : parseFloat(e.target.value))} 
                         onBlur={handleBlur}
                         className="input-group"
                         style={{ width: '80px', margin: 0, padding: '0.25rem 0.5rem' }}
-                        min="1"
+                        min="0.00000001"
+                        step="any"
                     />
                 ) : (
                     line.quantity
@@ -803,8 +804,9 @@ export default function PODetailPage() {
                                     type="number"
                                     className="input-group"
                                     value={quantity}
-                                    onChange={e => setQuantity(parseInt(e.target.value))}
-                                    min="1"
+                                    onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
+                                    min="0.00000001"
+                                    step="any"
                                 />
                             </div>
 

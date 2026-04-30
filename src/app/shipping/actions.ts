@@ -197,7 +197,7 @@ export async function confirmArrival(id: number) {
             if (shipment.type === 'Outbound') {
                 for (const pkg of shipment.packages) {
                     for (const pItem of pkg.items) {
-                        let remaining = pItem.quantity;
+                        let remaining = Number(pItem.quantity);
 
                         if (shipment.fromWarehouseId) {
                             // Deduct from specific source warehouse
@@ -205,7 +205,7 @@ export async function confirmArrival(id: number) {
                                 where: { itemId_warehouseId: { itemId: pItem.itemId, warehouseId: shipment.fromWarehouseId } }
                             });
                             const available = Number(stock?.quantity ?? 0);
-                            if (available < pItem.quantity) {
+                            if (available < Number(pItem.quantity)) {
                                 throw new Error(`Insufficient stock for "${pItem.item.sku}" in the selected warehouse.`);
                             }
                             await tx.itemStock.update({
@@ -304,7 +304,7 @@ export async function updateShipmentStatus(id: number, status: string) {
                                 where: { itemId_warehouseId: { itemId: pItem.itemId, warehouseId: shipment.fromWarehouseId } }
                             });
                             const available = Number(stock?.quantity ?? 0);
-                            if (available < pItem.quantity) {
+                            if (available < Number(pItem.quantity)) {
                                 throw new Error(`Insufficient stock for "${pItem.item.sku}" in the selected warehouse.`);
                             }
                             await tx.itemStock.update({
@@ -402,7 +402,7 @@ export async function completeTransfer(shipmentId: number) {
                     });
 
                     const available = Number(stock?.quantity ?? 0);
-                    if (available < pItem.quantity) {
+                    if (available < Number(pItem.quantity)) {
                         const sku = pItem.item?.sku ?? `Item #${pItem.itemId}`;
                         throw new Error(
                             `Insufficient stock for "${sku}" in source warehouse. Available: ${available}, Required: ${pItem.quantity}`

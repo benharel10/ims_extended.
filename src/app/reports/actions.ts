@@ -6,7 +6,9 @@ export async function getInventoryValuation() {
     try {
         const items = await prisma.item.findMany({
             where: { currentStock: { gt: 0 }, deletedAt: null },
-            orderBy: { currentStock: 'desc' } // Or value
+            select: { id: true, sku: true, name: true, type: true, currentStock: true, cost: true },
+            orderBy: { currentStock: 'desc' }, // Or value
+            take: 500
         });
 
         const report = items.map(item => ({
@@ -31,10 +33,11 @@ export async function getSalesPerformance() {
             where: { status: { not: 'Draft' } },
             include: {
                 lines: {
-                    include: { item: true }
+                    include: { item: { select: { cost: true } } }
                 }
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            take: 500
         });
 
         // Compute totals
@@ -93,11 +96,10 @@ export async function getPurchaseOrderReport() {
     try {
         const pos = await prisma.purchaseOrder.findMany({
             include: {
-                lines: {
-                    include: { item: true }
-                }
+                lines: { include: { item: { select: { cost: true } } } }
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            take: 500
         });
 
         const report = pos.map(po => {
@@ -106,9 +108,9 @@ export async function getPurchaseOrderReport() {
             let totalValue = 0;
 
             po.lines.forEach(line => {
-                totalOrdered += line.quantity;
-                totalReceived += line.received;
-                totalValue += line.quantity * (line.item?.cost || 0);
+                totalOrdered += Number(line.quantity);
+                totalReceived += Number(line.received);
+                totalValue += Number(line.quantity) * Number(line.item?.cost || 0);
             });
 
             const completionPercent = totalOrdered > 0 ? (totalReceived / totalOrdered) * 100 : 0;
@@ -143,7 +145,9 @@ export async function getLowStockReport() {
                 },
                 deletedAt: null
             },
-            orderBy: { currentStock: 'asc' }
+            select: { id: true, sku: true, name: true, type: true, currentStock: true, minStock: true, cost: true },
+            orderBy: { currentStock: 'asc' },
+            take: 500
         });
 
         const report = items.map(item => {
@@ -229,7 +233,7 @@ export async function getReportSummary() {
         let totalRevenue = 0;
         sales.forEach(so => {
             so.lines.forEach(line => {
-                totalRevenue += line.quantity * line.unitPrice;
+                totalRevenue += Number(line.quantity) * line.unitPrice;
             });
         });
 
@@ -339,7 +343,7 @@ export async function getProfitLossReport(year?: number, month?: number) {
         purchaseOrders.forEach(po => {
             po.lines.forEach(line => {
                 // Only count received items
-                totalPurchaseCost += line.received * line.unitCost;
+                totalPurchaseCost += Number(line.received) * line.unitCost;
             });
         });
 

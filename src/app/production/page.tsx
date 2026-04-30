@@ -498,7 +498,7 @@ export default function ProductionPage() {
                                                                 <input
                                                                     type="number"
                                                                     placeholder="Qty"
-                                                                    min="0.0001"
+                                                                    min="0"
                                                                     step="any"
                                                                     style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
                                                                     value={line.quantity}
@@ -694,8 +694,8 @@ export default function ProductionPage() {
                                         style={{ width: '100%', padding: '0.75rem', background: 'var(--bg-dark)', color: 'white', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}
                                         value={runQuantity}
                                         onChange={(e) => setRunQuantity(parseFloat(e.target.value) || 0)}
-                                        min="0.001"
-                                        step="0.001"
+                                        min="0"
+                                        step="any"
                                     />
                                 </div>
 

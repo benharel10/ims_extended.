@@ -17,8 +17,8 @@ export async function getSalesOrders() {
         const orders = await prisma.salesOrder.findMany({
             include: {
                 lines: true,
-                productionRun: { include: { item: true } },
-                item: true,
+                productionRun: { include: { item: { select: { id: true, name: true, sku: true, isSerialized: true, cost: true } } } },
+                item: { select: { id: true, name: true, sku: true, isSerialized: true, cost: true } },
                 shipments: true,
                 purchaseOrders: true,
                 productionRuns: true
@@ -30,6 +30,24 @@ export async function getSalesOrders() {
     } catch (error) {
         await logError('sales.getSalesOrders', error);
         return { success: false, error: 'Failed to fetch sales orders. Please try again.' };
+    }
+}
+
+export async function updateSalesOrderDate(id: number, newDate: Date) {
+    try {
+        const session = await getSession();
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
+
+        await prisma.salesOrder.update({
+            where: { id },
+            data: { createdAt: newDate }
+        });
+        
+        revalidatePath('/sales');
+        return { success: true };
+    } catch (error) {
+        await logError('sales.updateSalesOrderDate', error);
+        return { success: false, error: 'Failed to update order date. Please try again.' };
     }
 }
 
@@ -288,7 +306,7 @@ export async function updateSalesOrderStatus(id: number, status: string) {
             if (status === 'Cancelled' && currentOrder.isAllocated) {
                 // If moving to Cancelled, drop the reservations.
                 for (const line of currentOrder.lines) {
-                    const remainingAllocated = line.quantity - line.shipped;
+                    const remainingAllocated = Number(line.quantity) - Number(line.shipped);
                     if (remainingAllocated > 0) {
                         await tx.item.update({
                             where: { id: line.itemId },
@@ -302,7 +320,7 @@ export async function updateSalesOrderStatus(id: number, status: string) {
             // If the user manually marks the SO as Completed, deduct whatever hasn't been shipped yet
             if (status === 'Completed' && currentOrder.status !== 'Completed') {
                 for (const line of currentOrder.lines) {
-                    const remainingToDeduct = line.quantity - line.shipped;
+                    const remainingToDeduct = Number(line.quantity) - Number(line.shipped);
 
                     if (remainingToDeduct > 0) {
                         // 1. Deduct overall stock
@@ -491,7 +509,7 @@ export async function explodeOrderBOM(orderId: number) {
         // If the item itself has no BOM, it just becomes the sole requirement.
         for (const line of order.lines) {
             if (line.itemId) {
-                await traverse(line.itemId, line.quantity);
+                await traverse(line.itemId, Number(line.quantity));
             }
         }
 
