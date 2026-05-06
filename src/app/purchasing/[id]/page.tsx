@@ -191,6 +191,7 @@ export default function PODetailPage() {
     const [warehouses, setWarehouses] = useState<any[]>([]);
     const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
     const [isReceiving, setIsReceiving] = useState(false);
+    const [receiveQuantities, setReceiveQuantities] = useState<Record<number, number>>({});
     const [isGeneratingReports, setIsGeneratingReports] = useState(false);
 
     const [showQUploadModal, setShowQUploadModal] = useState(false);
@@ -382,14 +383,17 @@ export default function PODetailPage() {
 
         const itemsToReceive = po.lines
             .filter((l: any) => l.quantity > l.received)
-            .map((l: any) => ({
-                lineId: l.id,
-                qty: l.quantity - l.received
-            }));
+            .map((l: any) => {
+                const qtyToReceive = receiveQuantities[l.id] !== undefined ? receiveQuantities[l.id] : (l.quantity - l.received);
+                return {
+                    lineId: l.id,
+                    qty: qtyToReceive
+                };
+            })
+            .filter((l: any) => l.qty > 0);
 
         if (itemsToReceive.length === 0) {
-            showAlert('No pending items to receive', 'info');
-            setShowReceiveModal(false);
+            showAlert('No positive quantities to receive', 'info');
             return;
         }
 
@@ -407,6 +411,14 @@ export default function PODetailPage() {
     }
 
     async function handleConfirmReceiptPreCheck() {
+        const initialQuantities: Record<number, number> = {};
+        po.lines.forEach((l: any) => {
+            const pending = l.quantity - l.received;
+            if (pending > 0) {
+                initialQuantities[l.id] = pending; // default to full pending
+            }
+        });
+        setReceiveQuantities(initialQuantities);
         setShowReceiveModal(true);
     }
 
@@ -906,15 +918,57 @@ export default function PODetailPage() {
             {/* Quick Receipt Modal */}
             {showReceiveModal && (
                 <div className="modal-overlay" onClick={() => !isReceiving && setShowReceiveModal(false)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
                         <h2 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Package size={24} color="var(--primary)" />
-                            Confirm Delivery
+                            Receive Delivery
                         </h2>
                         <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-                            Choose the destination warehouse to receive all {totalOrdered - totalReceived} pending items.
+                            Enter the quantities received for each item and choose the destination warehouse.
                         </p>
                         
+                        <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '1.5rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 10 }}>
+                                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                                        <th style={{ padding: '0.75rem' }}>Item</th>
+                                        <th style={{ padding: '0.75rem' }}>Pending</th>
+                                        <th style={{ padding: '0.75rem' }}>Receiving Now</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {po.lines.filter((l: any) => l.quantity > l.received).map((line: any) => {
+                                        const pending = line.quantity - line.received;
+                                        return (
+                                            <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <div style={{ fontWeight: 500 }}>{line.item?.sku || line.newItemSku}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{line.item?.name || line.newItemName}</div>
+                                                </td>
+                                                <td style={{ padding: '0.75rem', color: 'var(--warning)' }}>{pending}</td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    <input 
+                                                        type="number"
+                                                        className="input-group"
+                                                        style={{ width: '100px', margin: 0, padding: '0.25rem 0.5rem' }}
+                                                        min="0"
+                                                        max={pending}
+                                                        step="any"
+                                                        value={receiveQuantities[line.id] !== undefined ? receiveQuantities[line.id] : ''}
+                                                        onChange={e => {
+                                                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                                            setReceiveQuantities(prev => ({ ...prev, [line.id]: val }));
+                                                        }}
+                                                        disabled={isReceiving}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
                         <div className="form-group">
                             <label>Destination Warehouse</label>
                             <select 

@@ -657,6 +657,9 @@ export async function receivePOItems(
                     details: JSON.stringify({ itemsReceived: items.length, status: allCompleted ? 'Completed' : 'Partial' })
                 }
             });
+        }, {
+            maxWait: 15000,
+            timeout: 30000
         });
 
         revalidatePath('/purchasing');
