@@ -382,9 +382,9 @@ export default function PODetailPage() {
         }
 
         const itemsToReceive = po.lines
-            .filter((l: any) => l.quantity > l.received)
+            .filter((l: any) => Number(l.quantity) > Number(l.received))
             .map((l: any) => {
-                const qtyToReceive = receiveQuantities[l.id] !== undefined ? receiveQuantities[l.id] : (l.quantity - l.received);
+                const qtyToReceive = receiveQuantities[l.id] !== undefined ? receiveQuantities[l.id] : (Number(l.quantity) - Number(l.received));
                 return {
                     lineId: l.id,
                     qty: qtyToReceive
@@ -413,7 +413,7 @@ export default function PODetailPage() {
     async function handleConfirmReceiptPreCheck() {
         const initialQuantities: Record<number, number> = {};
         po.lines.forEach((l: any) => {
-            const pending = l.quantity - l.received;
+            const pending = Number(l.quantity) - Number(l.received);
             if (pending > 0) {
                 initialQuantities[l.id] = pending; // default to full pending
             }
@@ -937,8 +937,8 @@ export default function PODetailPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {po.lines.filter((l: any) => l.quantity > l.received).map((line: any) => {
-                                        const pending = line.quantity - line.received;
+                                    {po.lines.filter((l: any) => Number(l.quantity) > Number(l.received)).map((line: any) => {
+                                        const pending = Number(line.quantity) - Number(line.received);
                                         return (
                                             <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                                                 <td style={{ padding: '0.75rem' }}>

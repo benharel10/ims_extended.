@@ -574,6 +574,37 @@ export async function addItemToPackage(
     }
 }
 
+export async function addItemsToPackage(
+    packageId: number,
+    items: { itemId: number, quantity: number, serializedItemId?: number }[]
+) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        await prisma.packageItem.createMany({
+            data: items.map(i => ({
+                packageId,
+                itemId: i.itemId,
+                quantity: i.quantity,
+                serializedItemId: i.serializedItemId ?? null
+            }))
+        });
+
+        revalidatePath('/shipping');
+        
+        const pkg = await prisma.package.findUnique({
+            where: { id: packageId },
+            include: { items: { include: { item: true } } }
+        });
+        
+        return { success: true, data: pkg };
+    } catch (error) {
+        await logError('shipping.addItemsToPackage', error);
+        return { success: false, error: 'Failed to add items to package. Please try again.' };
+    }
+}
+
 export async function removeItemFromPackage(id: number) {
     try {
         const session = await getSession();

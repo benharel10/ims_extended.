@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft, Search, Loader2 } from 'lucide-react';
-import { getShipments, createShipment, createPackage, addItemToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival } from './actions';
+import { getShipments, createShipment, createPackage, addItemToPackage, addItemsToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival } from './actions';
 import { getItems } from '../inventory/actions'; // Reuse getItems
 import { useSystem } from '@/components/SystemProvider';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -44,6 +44,7 @@ export default function ShippingPage() {
     const [availableSerials, setAvailableSerials] = useState<any[]>([]);
     const [selectedSerialId, setSelectedSerialId] = useState('');
     const [isSerializedSelection, setIsSerializedSelection] = useState(false);
+    const [pendingPackageItems, setPendingPackageItems] = useState<{ [pkgId: number]: any[] }>({});
 
     // Selection State
     const [selectedShipmentIds, setSelectedShipmentIds] = useState<Set<number>>(new Set());
@@ -241,7 +242,7 @@ export default function ShippingPage() {
         loadData();
     }
 
-    async function handleAddItem(packageId: number) {
+    function handleAddPendingItem(packageId: number) {
         if (!selectedItemToAdd) {
             showAlert('Please select an item', 'warning');
             return;
@@ -258,29 +259,53 @@ export default function ShippingPage() {
             return;
         }
 
-        try {
-            const res = await addItemToPackage(
-                packageId,
-                selectedItemToAdd.id,
-                qty,
-                selectedSerialId ? parseInt(selectedSerialId) : undefined
-            );
+        const selectedSerial = availableSerials.find(s => s.id.toString() === selectedSerialId);
 
-            if (res.success) {
-                setAddingItemToPkg(null);
-                setSelectedItemToAdd(null);
-                setItemSearch('');
-                setQtyToAdd(1);
-                setAvailableSerials([]);
-                setSelectedSerialId('');
-                setIsSerializedSelection(false);
-                loadData();
-                showAlert('Item added to package', 'success');
-            } else {
-                showAlert('Server Error: ' + (res.error || 'Unknown error'), 'error');
-            }
-        } catch (err: any) {
-            showAlert('Client Error: ' + err.message, 'error');
+        const newItem = {
+            id: 'temp-' + Date.now(),
+            itemId: selectedItemToAdd.id,
+            quantity: qty,
+            serializedItemId: selectedSerialId ? parseInt(selectedSerialId) : undefined,
+            item: selectedItemToAdd,
+            serialText: selectedSerial ? selectedSerial.sn : null
+        };
+
+        setPendingPackageItems(prev => ({
+            ...prev,
+            [packageId]: [...(prev[packageId] || []), newItem]
+        }));
+
+        setSelectedItemToAdd(null);
+        setItemSearch('');
+        setQtyToAdd(1);
+        setAvailableSerials([]);
+        setSelectedSerialId('');
+        setIsSerializedSelection(false);
+    }
+
+    async function handleSavePendingItems(packageId: number) {
+        const items = pendingPackageItems[packageId];
+        if (!items || items.length === 0) return;
+
+        setLoading(true);
+        const res = await addItemsToPackage(packageId, items.map((i: any) => ({
+            itemId: i.itemId,
+            quantity: i.quantity,
+            serializedItemId: i.serializedItemId
+        })));
+
+        if (res.success) {
+            setPendingPackageItems(prev => {
+                const next = { ...prev };
+                delete next[packageId];
+                return next;
+            });
+            setAddingItemToPkg(null);
+            loadData();
+            showAlert('Items saved to package', 'success');
+        } else {
+            showAlert('Server Error: ' + (res.error || 'Unknown error'), 'error');
+            setLoading(false);
         }
     }
 
@@ -531,6 +556,24 @@ export default function ShippingPage() {
                                                                             </td>
                                                                         </tr>
                                                                     ))}
+                                                                    {pendingPackageItems[pkg.id]?.map((pItem: any) => (
+                                                                        <tr key={pItem.id} style={{ background: 'rgba(59, 130, 246, 0.1)' }}>
+                                                                            <td style={{ padding: '0.25rem 0', color: 'var(--text-main)' }}>
+                                                                                <span className="badge badge-warning" style={{ marginRight: '0.5rem', fontSize: '0.65rem' }}>DRAFT</span>
+                                                                                {pItem.item.sku} - {pItem.item.name}
+                                                                                {pItem.serialText && <span className="text-muted" style={{ marginLeft: '0.5rem', fontSize: '0.8rem' }}>(SN: {pItem.serialText})</span>}
+                                                                            </td>
+                                                                            <td style={{ color: 'var(--text-main)' }}>{pItem.quantity}</td>
+                                                                            <td>
+                                                                                <button onClick={() => {
+                                                                                    setPendingPackageItems(prev => ({
+                                                                                        ...prev,
+                                                                                        [pkg.id]: prev[pkg.id].filter((i: any) => i.id !== pItem.id)
+                                                                                    }));
+                                                                                }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
                                                                     {addingItemToPkg === pkg.id ? (
                                                                         <tr>
                                                                             <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
@@ -651,24 +694,37 @@ export default function ShippingPage() {
                                                                                             step="any"
                                                                                         />
                                                                                     )}
-                                                                                    <button onClick={() => handleAddItem(pkg.id)} className="btn btn-sm btn-primary">Save</button>
-                                                                                    <button onClick={() => setAddingItemToPkg(null)} className="btn btn-sm">Cancel</button>
+                                                                                    <button onClick={() => handleAddPendingItem(pkg.id)} className="btn btn-sm btn-primary">Add Local</button>
+                                                                                    <button onClick={() => setAddingItemToPkg(null)} className="btn btn-sm">Close</button>
                                                                                 </div>
                                                                             </td>
                                                                         </tr>
-                                                                    ) : (
-                                                                        <tr>
-                                                                            <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
-                                                                                <button
-                                                                                    className="btn btn-sm btn-link"
-                                                                                    style={{ padding: 0, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                                                                                    onClick={() => openAddItem(pkg.id)}
-                                                                                >
-                                                                                    <Plus size={14} /> Add Item
-                                                                                </button>
-                                                                            </td>
-                                                                        </tr>
-                                                                    )}
+                                                                    ) : null}
+                                                                    <tr>
+                                                                        <td colSpan={3} style={{ paddingTop: '0.5rem' }}>
+                                                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                                                {addingItemToPkg !== pkg.id && (
+                                                                                    <button
+                                                                                        className="btn btn-sm btn-link"
+                                                                                        style={{ padding: 0, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                                                        onClick={() => openAddItem(pkg.id)}
+                                                                                    >
+                                                                                        <Plus size={14} /> Add Item
+                                                                                    </button>
+                                                                                )}
+                                                                                {pendingPackageItems[pkg.id]?.length > 0 && (
+                                                                                    <button
+                                                                                        className="btn btn-sm btn-success"
+                                                                                        onClick={() => handleSavePendingItems(pkg.id)}
+                                                                                        style={{ background: '#10b981', color: 'white', border: 'none' }}
+                                                                                    >
+                                                                                        <Save size={14} style={{ marginRight: '0.5rem' }} />
+                                                                                        Save {pendingPackageItems[pkg.id].length} Items to DB
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
                                                                 </tbody>
                                                             </table>
                                                         </div>
@@ -770,16 +826,18 @@ export default function ShippingPage() {
                                 />
                             </div>
 
-                            <div className="form-group">
-                                <label>Destination (Customer / Address)</label>
-                                <input
-                                    type="text"
-                                    className="input-group"
-                                    value={newShipmentData.destination}
-                                    placeholder="e.g. Acme Corp, Tel Aviv"
-                                    onChange={e => setNewShipmentData({ ...newShipmentData, destination: e.target.value })}
-                                />
-                            </div>
+                            {shipmentType !== 'transfer' && (
+                                <div className="form-group">
+                                    <label>Destination (Customer / Address)</label>
+                                    <input
+                                        type="text"
+                                        className="input-group"
+                                        value={newShipmentData.destination}
+                                        placeholder="e.g. Acme Corp, Tel Aviv"
+                                        onChange={e => setNewShipmentData({ ...newShipmentData, destination: e.target.value })}
+                                    />
+                                </div>
+                            )}
 
                             {shipmentType === 'carrier' && (
                                 <>
