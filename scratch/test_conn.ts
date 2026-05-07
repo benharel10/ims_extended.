@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient({
     datasources: {
         db: {
-            url: "postgresql://neondb_owner:npg_ndIuzHe3pfi6@ep-curly-river-ai2v9888.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require"
+            url: process.env.DATABASE_URL
         }
     }
 });

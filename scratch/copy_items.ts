@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prodPrisma = new PrismaClient({
     datasources: {
         db: {
-            url: "postgresql://neondb_owner:npg_ndIuzHe3pfi6@ep-young-brook-ai7uc4we-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+            url: process.env.PROD_DATABASE_URL
         }
     }
 });
@@ -11,7 +11,7 @@ const prodPrisma = new PrismaClient({
 const localPrisma = new PrismaClient({
     datasources: {
         db: {
-            url: "postgresql://neondb_owner:npg_ndIuzHe3pfi6@ep-curly-river-ai2v9888-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+            url: process.env.DATABASE_URL
         }
     }
 });
