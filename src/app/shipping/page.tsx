@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft, Search, Loader2 } from 'lucide-react';
-import { getShipments, createShipment, createPackage, addItemToPackage, addItemsToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival } from './actions';
+import { getShipments, createShipment, createPackage, addItemToPackage, addItemsToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival, importExcelToShipment, validateExcelTransferRows } from './actions';
 import { getItems } from '../inventory/actions'; // Reuse getItems
 import { useSystem } from '@/components/SystemProvider';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -45,6 +45,11 @@ export default function ShippingPage() {
     const [selectedSerialId, setSelectedSerialId] = useState('');
     const [isSerializedSelection, setIsSerializedSelection] = useState(false);
     const [pendingPackageItems, setPendingPackageItems] = useState<{ [pkgId: number]: any[] }>({});
+
+    // Excel Preview State
+    const [showExcelPreviewModal, setShowExcelPreviewModal] = useState(false);
+    const [excelPreviewRows, setExcelPreviewRows] = useState<any[]>([]);
+    const [excelShipmentId, setExcelShipmentId] = useState<number | null>(null);
 
     // Selection State
     const [selectedShipmentIds, setSelectedShipmentIds] = useState<Set<number>>(new Set());
@@ -240,6 +245,85 @@ export default function ShippingPage() {
     async function handleAddPackage(shipmentId: number) {
         await createPackage(shipmentId);
         loadData();
+    }
+
+    async function handleExcelUpload(e: any, shipmentId: number) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true);
+        try {
+            const XLSX = await import('xlsx');
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer);
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+            // Extract box, sku, quantity
+            const rows = data.map(r => {
+                const keys = Object.keys(r);
+                const boxKey = keys.find(k => /box|package/i.test(k));
+                const skuKey = keys.find(k => /sku|item/i.test(k));
+                const qtyKey = keys.find(k => /qty|quantity/i.test(k));
+
+                return {
+                    box: boxKey ? String(r[boxKey]) : 'Default Box',
+                    sku: skuKey ? String(r[skuKey]) : null,
+                    quantity: qtyKey ? Number(r[qtyKey]) : 0
+                };
+            }).filter(r => r.sku && r.quantity > 0) as { box: string, sku: string, quantity: number }[];
+
+            if (rows.length === 0) {
+                showAlert('No valid rows found in Excel. Expected columns for Box, SKU and Quantity.', 'error');
+                setLoading(false);
+                e.target.value = '';
+                return;
+            }
+
+            const res = await validateExcelTransferRows(shipmentId, rows);
+            if (res.success) {
+                setExcelPreviewRows(res.data || []);
+                setExcelShipmentId(shipmentId);
+                setShowExcelPreviewModal(true);
+            } else {
+                showAlert(res.error || 'Failed to validate Excel', 'error');
+            }
+
+        } catch (error) {
+            console.error(error);
+            showAlert('Error parsing Excel file', 'error');
+        }
+        setLoading(false);
+        e.target.value = '';
+    }
+
+    async function handleConfirmExcelImport() {
+        if (!excelShipmentId) return;
+
+        const validRows = excelPreviewRows.filter(r => r.valid).map(r => ({
+            box: r.box,
+            sku: r.sku,
+            quantity: r.quantity
+        }));
+
+        if (validRows.length === 0) {
+            showAlert('No valid rows to import', 'warning');
+            return;
+        }
+
+        setLoading(true);
+        const res = await importExcelToShipment(excelShipmentId, validRows);
+        setLoading(false);
+
+        if (res.success) {
+            showAlert(res.message || 'Excel imported successfully', 'success');
+            setShowExcelPreviewModal(false);
+            setExcelPreviewRows([]);
+            setExcelShipmentId(null);
+            loadData();
+        } else {
+            showAlert(res.error || 'Failed to import Excel', 'error');
+        }
     }
 
     function handleAddPendingItem(packageId: number) {
@@ -510,6 +594,23 @@ export default function ShippingPage() {
                                                 <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); handlePrint(shipment); }}>
                                                     <Printer size={14} style={{ marginRight: '0.5rem' }} /> Print Packing List
                                                 </button>
+                                                {shipment.type === 'Transfer' && shipment.status !== 'Completed' && (
+                                                    <>
+                                                        <input 
+                                                            type="file" 
+                                                            id={`excel-upload-${shipment.id}`} 
+                                                            style={{ display: 'none' }} 
+                                                            accept=".xlsx, .xls, .csv" 
+                                                            onChange={(e) => handleExcelUpload(e, shipment.id)} 
+                                                        />
+                                                        <button 
+                                                            className="btn btn-sm btn-outline" 
+                                                            onClick={(e) => { e.stopPropagation(); document.getElementById(`excel-upload-${shipment.id}`)?.click(); }}
+                                                        >
+                                                            <Plus size={14} style={{ marginRight: '0.5rem' }} /> Upload Excel
+                                                        </button>
+                                                    </>
+                                                )}
                                                 <button className="btn btn-sm btn-primary" onClick={(e) => { e.stopPropagation(); handleAddPackage(shipment.id); }}>
                                                     <Plus size={14} style={{ marginRight: '0.5rem' }} /> Add Box
                                                 </button>
@@ -783,6 +884,67 @@ export default function ShippingPage() {
                                 </table>
                             </div>
                         ))}
+                    </div>
+                )
+            }
+
+            {/* Excel Preview Modal */}
+            {
+                showExcelPreviewModal && (
+                    <div className="modal-overlay">
+                        <div className="modal-content" style={{ maxWidth: '800px', width: '90%' }}>
+                            <h2 style={{ marginBottom: '1.5rem' }}>Excel Import Preview</h2>
+
+                            <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '1.5rem', border: '1px solid var(--border-color)', borderRadius: '0.5rem' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                    <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-dark)', zIndex: 10 }}>
+                                        <tr>
+                                            <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Row</th>
+                                            <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Box</th>
+                                            <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>SKU</th>
+                                            <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Item Name</th>
+                                            <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Qty</th>
+                                            <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {excelPreviewRows.map((row, idx) => (
+                                            <tr key={idx} style={{ background: row.valid ? 'transparent' : 'rgba(239, 68, 68, 0.1)', borderBottom: '1px solid var(--border-color)' }}>
+                                                <td style={{ padding: '0.75rem' }}>{row.originalRow}</td>
+                                                <td style={{ padding: '0.75rem' }}>{row.box}</td>
+                                                <td style={{ padding: '0.75rem', fontWeight: 600 }}>{row.sku}</td>
+                                                <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>{row.itemName || '-'}</td>
+                                                <td style={{ padding: '0.75rem' }}>{row.quantity}</td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                    {row.valid ? (
+                                                        <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>✓ Valid</span>
+                                                    ) : (
+                                                        <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>✕ {row.error}</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button
+                                    className="btn btn-outline"
+                                    onClick={() => { setShowExcelPreviewModal(false); setExcelPreviewRows([]); setExcelShipmentId(null); }}
+                                    disabled={loading}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={handleConfirmExcelImport}
+                                    disabled={loading || !excelPreviewRows.some(r => r.valid)}
+                                >
+                                    {loading ? 'Importing...' : `Confirm & Import (${excelPreviewRows.filter(r => r.valid).length} valid)`}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )
             }

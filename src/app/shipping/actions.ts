@@ -618,3 +618,160 @@ export async function removeItemFromPackage(id: number) {
         return { success: false, error: 'Failed to remove item. Please try again.' };
     }
 }
+
+// ─── Import from Excel ────────────────────────────────────────────────────────
+export async function validateExcelTransferRows(shipmentId: number, rows: { box: string, sku: string, quantity: number }[]) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const shipment = await prisma.shipment.findUnique({ where: { id: shipmentId } });
+        if (!shipment) return { success: false, error: 'Shipment not found' };
+
+        // Get unique SKUs
+        const skus = Array.from(new Set(rows.map(r => (r.sku || '').toString().trim()))).filter(Boolean);
+
+        // Fetch all matching items and their stock in the fromWarehouse
+        const items = await prisma.item.findMany({
+            where: { sku: { in: skus } },
+            include: {
+                stocks: shipment.fromWarehouseId ? {
+                    where: { warehouseId: shipment.fromWarehouseId }
+                } : false
+            }
+        });
+
+        const itemMap = new Map(items.map(i => [i.sku.toLowerCase(), i]));
+
+        const validatedRows = rows.map((row, idx) => {
+            const sku = (row.sku || '').toString().trim().toLowerCase();
+            const box = (row.box || 'Box 1').toString().trim();
+            const qty = Number(row.quantity);
+
+            const result = {
+                originalRow: idx + 1,
+                box,
+                sku: row.sku,
+                quantity: qty,
+                valid: true,
+                itemName: '',
+                error: ''
+            };
+
+            if (!sku) {
+                result.valid = false;
+                result.error = 'Missing SKU';
+                return result;
+            }
+
+            if (isNaN(qty) || qty <= 0) {
+                result.valid = false;
+                result.error = 'Invalid quantity';
+                return result;
+            }
+
+            const item = itemMap.get(sku);
+            if (!item) {
+                result.valid = false;
+                result.error = 'SKU not found in system';
+                return result;
+            }
+
+            result.itemName = item.name;
+
+            // Check stock if it's a transfer
+            if (shipment.type === 'Transfer' && shipment.fromWarehouseId) {
+                const stock = item.stocks?.[0]?.quantity ? Number(item.stocks[0].quantity) : 0;
+                if (stock < qty) {
+                    result.valid = false;
+                    result.error = `Insufficient stock (Available: ${stock})`;
+                }
+            }
+
+            return result;
+        });
+
+        return { success: true, data: validatedRows };
+    } catch (error) {
+        await logError('shipping.validateExcelTransferRows', error);
+        return { success: false, error: 'Failed to validate Excel. Please try again.' };
+    }
+}
+
+export async function importExcelToShipment(shipmentId: number, rows: { box: string, sku: string, quantity: number }[]) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        if (!rows || rows.length === 0) return { success: false, error: 'No data to import' };
+
+        const shipment = await prisma.shipment.findUnique({ where: { id: shipmentId } });
+        if (!shipment) return { success: false, error: 'Shipment not found' };
+
+        // Get unique SKUs
+        const skus = Array.from(new Set(rows.map(r => r.sku.trim())));
+
+        // Fetch all matching items
+        const items = await prisma.item.findMany({
+            where: { sku: { in: skus } }
+        });
+
+        const skuToItemId = new Map(items.map(i => [i.sku.toLowerCase(), i.id]));
+
+        // Group rows by box
+        const boxMap = new Map<string, typeof rows>();
+        for (const row of rows) {
+            const b = (row.box || 'Default Box').toString().trim();
+            if (!boxMap.has(b)) boxMap.set(b, []);
+            boxMap.get(b)!.push(row);
+        }
+
+        const errors: string[] = [];
+
+        await prisma.$transaction(async (tx) => {
+            for (const [boxName, boxRows] of boxMap.entries()) {
+                // Create package for this box
+                const pkg = await tx.package.create({
+                    data: {
+                        shipmentId,
+                        type: 'Box',
+                        // You could add a reference field to package if we had one, 
+                        // but here we just create a package.
+                    }
+                });
+
+                for (const row of boxRows) {
+                    const sku = row.sku.trim().toLowerCase();
+                    const itemId = skuToItemId.get(sku);
+
+                    if (!itemId) {
+                        errors.push(`SKU not found: ${row.sku}`);
+                        continue;
+                    }
+
+                    if (row.quantity <= 0) {
+                        errors.push(`Invalid quantity for SKU ${row.sku}`);
+                        continue;
+                    }
+
+                    await tx.packageItem.create({
+                        data: {
+                            packageId: pkg.id,
+                            itemId: itemId,
+                            quantity: row.quantity
+                        }
+                    });
+                }
+            }
+        });
+
+        revalidatePath('/shipping');
+        if (errors.length > 0) {
+            return { success: true, message: `Imported with some errors: ${errors.join(', ')}` };
+        }
+        return { success: true };
+    } catch (error) {
+        await logError('shipping.importExcelToShipment', error);
+        return { success: false, error: 'Failed to import Excel. Please try again.' };
+    }
+}
