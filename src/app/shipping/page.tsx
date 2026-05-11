@@ -257,33 +257,54 @@ export default function ShippingPage() {
             const buffer = await file.arrayBuffer();
             const workbook = XLSX.read(buffer);
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            const data = XLSX.utils.sheet_to_json(worksheet) as any[];
+            const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-            // Extract box, sku, quantity
-            const rows = data.map(r => {
-                const keys = Object.keys(r);
-                let boxKey = keys.find(k => /box|package|carton|קופסא|ארגז|מארז|pallet/i.test(k));
-                let skuKey = keys.find(k => /sku|item|part|pn|number|מקט|מק"ט|פריט/i.test(k));
-                let qtyKey = keys.find(k => /qty|quantity|count|amount|כמות/i.test(k));
+            let boxIdx = -1, skuIdx = -1, qtyIdx = -1;
+            let startRow = 0;
 
-                // Fallback by index if headers don't match
-                if (!skuKey && !qtyKey) {
-                    if (keys.length === 2) {
-                        skuKey = keys[0];
-                        qtyKey = keys[1];
-                    } else if (keys.length >= 3) {
-                        boxKey = boxKey || keys[0];
-                        skuKey = keys[1];
-                        qtyKey = keys[2];
-                    }
+            // Search for headers in the first few rows
+            for (let i = 0; i < Math.min(5, data.length); i++) {
+                const row = data[i];
+                if (!Array.isArray(row)) continue;
+
+                let tempBox = -1, tempSku = -1, tempQty = -1;
+                row.forEach((cell, idx) => {
+                    if (typeof cell !== 'string') return;
+                    if (/box|package|carton|קופסא|ארגז|מארז|pallet/i.test(cell)) tempBox = idx;
+                    if (/sku|item|part|pn|number|מקט|מק"ט|פריט/i.test(cell)) tempSku = idx;
+                    if (/qty|quantity|count|amount|כמות/i.test(cell)) tempQty = idx;
+                });
+
+                if (tempSku !== -1 && tempQty !== -1) {
+                    boxIdx = tempBox;
+                    skuIdx = tempSku;
+                    qtyIdx = tempQty;
+                    startRow = i + 1;
+                    break;
                 }
+            }
 
+            // If no headers found, guess by types in the first valid row
+            if (skuIdx === -1 || qtyIdx === -1) {
+                const firstValidRowIdx = data.findIndex(r => Array.isArray(r) && r.filter(c => c !== undefined && c !== '').length >= 2);
+                if (firstValidRowIdx !== -1) {
+                    const row = data[firstValidRowIdx];
+                    // Qty is the first numeric column
+                    qtyIdx = row.findIndex(cell => typeof cell === 'number' || (typeof cell === 'string' && cell.trim() !== '' && !isNaN(Number(cell))));
+                    // SKU is the first non-empty column that isn't Qty
+                    skuIdx = row.findIndex((cell, i) => i !== qtyIdx && cell !== undefined && cell !== '');
+                    startRow = firstValidRowIdx; // Don't skip it, it's data!
+                }
+            }
+
+            const rows = data.slice(startRow).map(r => {
+                if (!Array.isArray(r) || r.length === 0) return null;
                 return {
-                    box: boxKey ? String(r[boxKey]) : 'Default Box',
-                    sku: skuKey ? String(r[skuKey]) : null,
-                    quantity: qtyKey ? Number(r[qtyKey]) : 0
+                    box: boxIdx !== -1 && r[boxIdx] !== undefined ? String(r[boxIdx]) : 'Default Box',
+                    sku: skuIdx !== -1 && r[skuIdx] !== undefined ? String(r[skuIdx]) : null,
+                    quantity: qtyIdx !== -1 && r[qtyIdx] !== undefined ? Number(r[qtyIdx]) : 0
                 };
-            }).filter(r => r.sku && r.quantity > 0) as { box: string, sku: string, quantity: number }[];
+            }).filter(r => r && r.sku && r.quantity > 0) as { box: string, sku: string, quantity: number }[];
 
             if (rows.length === 0) {
                 showAlert('No valid rows found in Excel. Expected columns for Box, SKU and Quantity.', 'error');
