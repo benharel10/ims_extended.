@@ -701,9 +701,9 @@ export async function validateExcelTransferRows(shipmentId: number, rows: { box:
                 
                 if (stock < qty) {
                     result.valid = false;
-                    const totalStock = item.currentStock ? Number(item.currentStock) : 0;
+                    const calculatedTotalStock = item.stocks?.reduce((sum: number, s: any) => sum + (Number(s.quantity) || 0), 0) || 0;
                     
-                    if (totalStock >= qty) {
+                    if (calculatedTotalStock >= qty) {
                         const otherLocations = item.stocks
                             ?.filter((s: any) => Number(s.quantity) > 0 && s.warehouseId !== shipment.fromWarehouseId)
                             .map((s: any) => `${s.warehouse?.name}: ${Number(s.quantity)}`)
@@ -712,7 +712,7 @@ export async function validateExcelTransferRows(shipmentId: number, rows: { box:
                         if (otherLocations) {
                             result.error = `Stock is in a different warehouse! (Available here: ${stock}, but found ${otherLocations})`;
                         } else {
-                            result.error = `Insufficient stock in this warehouse (Available: ${stock}, Global Total: ${totalStock})`;
+                            result.error = `Insufficient stock in this warehouse (Available: ${stock}, Global Total: ${calculatedTotalStock})`;
                         }
                     } else {
                         result.error = `Insufficient stock (Available: ${stock})`;
