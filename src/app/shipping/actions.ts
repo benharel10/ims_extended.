@@ -641,7 +641,22 @@ export async function validateExcelTransferRows(shipmentId: number, rows: { box:
             }
         });
 
-        const itemMap = new Map(items.map(i => [i.sku.toLowerCase(), i]));
+        const itemMap = new Map();
+        for (const i of items) {
+            const lowerSku = i.sku.toLowerCase();
+            if (!itemMap.has(lowerSku)) {
+                itemMap.set(lowerSku, i);
+            } else {
+                // If duplicate SKUs exist, prioritize the one that actually has stock in the source warehouse
+                const existing = itemMap.get(lowerSku);
+                const existingStock = existing.stocks?.find((s: any) => s.warehouseId === shipment.fromWarehouseId)?.quantity || 0;
+                const newStock = i.stocks?.find((s: any) => s.warehouseId === shipment.fromWarehouseId)?.quantity || 0;
+                
+                if (Number(newStock) > Number(existingStock)) {
+                    itemMap.set(lowerSku, i);
+                }
+            }
+        }
 
         const validatedRows = rows.map((row, idx) => {
             const sku = (row.sku || '').toString().trim().toLowerCase();
@@ -728,12 +743,31 @@ export async function importExcelToShipment(shipmentId: number, rows: { box: str
         // Get unique SKUs
         const skus = Array.from(new Set(rows.map(r => r.sku.trim())));
 
-        // Fetch all matching items
+        // Fetch all matching items and their stocks
         const items = await prisma.item.findMany({
-            where: { sku: { in: skus } }
+            where: { sku: { in: skus } },
+            include: {
+                stocks: {
+                    include: { warehouse: true }
+                }
+            }
         });
 
-        const skuToItemId = new Map(items.map(i => [i.sku.toLowerCase(), i.id]));
+        const skuToItemId = new Map();
+        for (const i of items) {
+            const lowerSku = i.sku.toLowerCase();
+            if (!skuToItemId.has(lowerSku)) {
+                skuToItemId.set(lowerSku, i.id);
+            } else {
+                // If duplicate SKUs exist, prioritize the one that actually has stock in the source warehouse
+                const existingStockQty = items.find(x => x.id === skuToItemId.get(lowerSku))?.stocks?.find((s: any) => s.warehouseId === shipment.fromWarehouseId)?.quantity || 0;
+                const newStockQty = i.stocks?.find((s: any) => s.warehouseId === shipment.fromWarehouseId)?.quantity || 0;
+                
+                if (Number(newStockQty) > Number(existingStockQty)) {
+                    skuToItemId.set(lowerSku, i.id);
+                }
+            }
+        }
 
         // Group rows by box
         const boxMap = new Map<string, typeof rows>();
