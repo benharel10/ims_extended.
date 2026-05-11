@@ -262,9 +262,21 @@ export default function ShippingPage() {
             // Extract box, sku, quantity
             const rows = data.map(r => {
                 const keys = Object.keys(r);
-                const boxKey = keys.find(k => /box|package/i.test(k));
-                const skuKey = keys.find(k => /sku|item/i.test(k));
-                const qtyKey = keys.find(k => /qty|quantity/i.test(k));
+                let boxKey = keys.find(k => /box|package|carton|קופסא|ארגז|מארז|pallet/i.test(k));
+                let skuKey = keys.find(k => /sku|item|part|pn|number|מקט|מק"ט|פריט/i.test(k));
+                let qtyKey = keys.find(k => /qty|quantity|count|amount|כמות/i.test(k));
+
+                // Fallback by index if headers don't match
+                if (!skuKey && !qtyKey) {
+                    if (keys.length === 2) {
+                        skuKey = keys[0];
+                        qtyKey = keys[1];
+                    } else if (keys.length >= 3) {
+                        boxKey = boxKey || keys[0];
+                        skuKey = keys[1];
+                        qtyKey = keys[2];
+                    }
+                }
 
                 return {
                     box: boxKey ? String(r[boxKey]) : 'Default Box',
