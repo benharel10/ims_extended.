@@ -631,13 +631,13 @@ export async function validateExcelTransferRows(shipmentId: number, rows: { box:
         // Get unique SKUs
         const skus = Array.from(new Set(rows.map(r => (r.sku || '').toString().trim()))).filter(Boolean);
 
-        // Fetch all matching items and their stock in the fromWarehouse
+        // Fetch all matching items and all their stocks to provide better errors
         const items = await prisma.item.findMany({
             where: { sku: { in: skus } },
             include: {
-                stocks: shipment.fromWarehouseId ? {
-                    where: { warehouseId: shipment.fromWarehouseId }
-                } : false
+                stocks: {
+                    include: { warehouse: true }
+                }
             }
         });
 
@@ -681,10 +681,27 @@ export async function validateExcelTransferRows(shipmentId: number, rows: { box:
 
             // Check stock if it's a transfer
             if (shipment.type === 'Transfer' && shipment.fromWarehouseId) {
-                const stock = item.stocks?.[0]?.quantity ? Number(item.stocks[0].quantity) : 0;
+                const sourceStockRecord = item.stocks?.find((s: any) => s.warehouseId === shipment.fromWarehouseId);
+                const stock = sourceStockRecord?.quantity ? Number(sourceStockRecord.quantity) : 0;
+                
                 if (stock < qty) {
                     result.valid = false;
-                    result.error = `Insufficient stock (Available: ${stock})`;
+                    const totalStock = item.currentStock ? Number(item.currentStock) : 0;
+                    
+                    if (totalStock >= qty) {
+                        const otherLocations = item.stocks
+                            ?.filter((s: any) => Number(s.quantity) > 0 && s.warehouseId !== shipment.fromWarehouseId)
+                            .map((s: any) => `${s.warehouse?.name}: ${Number(s.quantity)}`)
+                            .join(', ');
+                            
+                        if (otherLocations) {
+                            result.error = `Stock is in a different warehouse! (Available here: ${stock}, but found ${otherLocations})`;
+                        } else {
+                            result.error = `Insufficient stock in this warehouse (Available: ${stock}, Global Total: ${totalStock})`;
+                        }
+                    } else {
+                        result.error = `Insufficient stock (Available: ${stock})`;
+                    }
                 }
             }
 
