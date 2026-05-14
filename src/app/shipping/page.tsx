@@ -470,15 +470,15 @@ export default function ShippingPage() {
 
         <>
             <div className="animate-fade-in">
-                <div className="hide-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div className="flex-header hide-print">
                     <div>
                         <h1>Shipping Management</h1>
                         <p>Manage shipments, packages, and packing lists.</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                         <button className="btn btn-outline" onClick={() => setShowWarehouseModal(true)}>
                             <Building size={18} style={{ marginRight: '0.5rem' }} />
-                            Manage Warehouses
+                            Warehouses
                         </button>
                         <button className="btn btn-primary" onClick={() => {
                             setNewShipmentData(prev => ({ ...prev, shipmentNo: generateShipmentNo() }));
@@ -490,8 +490,8 @@ export default function ShippingPage() {
                     </div>
                 </div>
 
-                <div className="hide-print" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
+                <div className="hide-print" style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="tab-bar-scroll">
                         {['all', 'carrier', 'local', 'transfer'].map(tab => (
                             <button
                                 key={tab}
@@ -501,10 +501,12 @@ export default function ShippingPage() {
                                     color: activeTab === tab ? 'var(--primary)' : 'var(--text-muted)',
                                     borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
                                     fontWeight: activeTab === tab ? 600 : 400,
-                                    textTransform: 'capitalize'
+                                    textTransform: 'capitalize',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
                                 }}
                             >
-                                {tab === 'local' ? 'Local / Car Delivery' : tab === 'carrier' ? 'Carrier (FedEx/DHL)' : tab === 'transfer' ? 'Inter-Warehouse Transfers' : 'All Shipments'}
+                                {tab === 'local' ? 'Local / Car' : tab === 'carrier' ? 'Carrier (FedEx/DHL)' : tab === 'transfer' ? 'Transfers' : 'All'}
                             </button>
                         ))}
                     </div>
@@ -512,7 +514,7 @@ export default function ShippingPage() {
                         <button
                             className="btn btn-sm btn-outline"
                             onClick={handleBulkDeleteShipments}
-                            style={{ color: '#ef4444', borderColor: '#ef4444', padding: '0.25rem 0.5rem' }}
+                            style={{ color: '#ef4444', borderColor: '#ef4444', padding: '0.25rem 0.5rem', flexShrink: 0 }}
                         >
                             <Trash2 size={14} style={{ marginRight: '0.5rem' }} /> Delete ({selectedShipmentIds.size})
                         </button>

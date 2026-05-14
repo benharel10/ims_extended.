@@ -13,8 +13,6 @@ import {
     Settings,
     Truck,
     LogOut,
-    Menu,
-    X,
     ShieldCheck
 } from 'lucide-react';
 import { logoutAction } from '../app/auth/actions';
@@ -51,110 +49,98 @@ export function Sidebar() {
         return true;
     });
 
-    const [isOpen, setIsOpen] = React.useState(false);
-
-    // Close sidebar on route change
-    React.useEffect(() => {
-        setIsOpen(false);
-    }, [pathname]);
-
     return (
-        <>
-            {/* Mobile Toggle Button */}
-            <button className="mobile-toggle" onClick={() => setIsOpen(!isOpen)}>
-                {isOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
+        <div className="sidebar">
+            {/* Logo — hidden on iPad (icon-only mode via .sidebar-logo CSS class) */}
+            <div className="sidebar-logo" style={{ marginBottom: '2rem', padding: '0 0.5rem' }}>
+                <img src="/logo-dark-mode.svg" alt="KSW Inventory" style={{ width: '180px', height: 'auto' }} />
+            </div>
 
-            {/* Overlay */}
-            <div className={`sidebar-overlay ${isOpen ? 'open' : ''}`} onClick={() => setIsOpen(false)} />
-
-            {/* Sidebar */}
-            <div className={`sidebar ${isOpen ? 'open' : ''}`}>
-                <div style={{ marginBottom: '2rem', padding: '0 0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <img src="/logo-dark-mode.svg" alt="KSW Inventory" style={{ width: '180px', height: 'auto' }} />
-                    <button className="md:hidden" style={{ display: 'none' }} onClick={() => setIsOpen(false)}>
-                        <X size={20} />
-                    </button>
-                </div>
-
-                <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {filteredItems.map((item) => {
-                        const isActive = pathname === item.href;
-                        const Icon = item.icon;
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={isActive ? 'text-primary bg-primary/10' : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.75rem',
-                                    padding: '0.75rem 1rem',
-                                    borderRadius: '0.5rem',
-                                    background: isActive ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                                    color: isActive ? 'var(--primary)' : 'var(--text-muted)',
-                                    fontWeight: isActive ? 600 : 400,
-                                    borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                <Icon size={20} />
-                                {item.name}
-                            </Link>
-                        );
-                    })}
-
-                    {isAdmin && (
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+                {filteredItems.map((item) => {
+                    const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                    const Icon = item.icon;
+                    return (
                         <Link
-                            href="/settings/users"
-                            className={pathname === '/settings/users' ? 'text-primary bg-primary/10' : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'}
+                            key={item.href}
+                            href={item.href}
+                            className="sidebar-nav-link"
+                            title={item.name}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.75rem',
                                 padding: '0.75rem 1rem',
                                 borderRadius: '0.5rem',
-                                marginTop: '1rem',
-                                background: pathname === '/settings/users' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                                color: pathname === '/settings/users' ? 'var(--primary)' : 'var(--text-muted)',
-                                fontWeight: pathname === '/settings/users' ? 600 : 400,
-                                borderLeft: pathname === '/settings/users' ? '3px solid var(--primary)' : '3px solid transparent',
-                                transition: 'all 0.2s'
+                                background: isActive ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                color: isActive ? 'var(--primary)' : 'var(--text-muted)',
+                                fontWeight: isActive ? 600 : 400,
+                                borderLeft: isActive ? '3px solid var(--primary)' : '3px solid transparent',
+                                transition: 'all 0.2s',
+                                textDecoration: 'none',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
                             }}
                         >
-                            <Settings size={20} />
-                            Users & Settings
+                            <Icon size={20} style={{ flexShrink: 0 }} />
+                            <span className="sidebar-label">{item.name}</span>
                         </Link>
-                    )}
-                </nav>
+                    );
+                })}
 
-                <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white' }}>
-                                {user?.name?.[0] || 'U'}
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{user?.name || 'Guest'}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user?.role || 'Viewer'}</div>
-                            </div>
+                {isAdmin && (
+                    <Link
+                        href="/settings/users"
+                        className="sidebar-nav-link"
+                        title="Users & Settings"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '0.5rem',
+                            marginTop: '1rem',
+                            background: pathname === '/settings/users' ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                            color: pathname === '/settings/users' ? 'var(--primary)' : 'var(--text-muted)',
+                            fontWeight: pathname === '/settings/users' ? 600 : 400,
+                            borderLeft: pathname === '/settings/users' ? '3px solid var(--primary)' : '3px solid transparent',
+                            transition: 'all 0.2s',
+                            textDecoration: 'none',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                        }}
+                    >
+                        <Settings size={20} style={{ flexShrink: 0 }} />
+                        <span className="sidebar-label">Users &amp; Settings</span>
+                    </Link>
+                )}
+            </nav>
+
+            <div className="sidebar-footer" style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem' }}>
+                    <div className="sidebar-user-details" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'white', flexShrink: 0 }}>
+                            {user?.name?.[0] || 'U'}
                         </div>
-                        <button
-                            onClick={() => {
-                                showConfirm('Are you sure you want to log out?', () => {
-                                    logoutAction();
-                                });
-                            }}
-                            className="btn btn-sm"
-                            style={{ padding: '0.5rem', color: 'var(--text-muted)', border: 'none', background: 'transparent' }}
-                            title="Sign Out"
-                        >
-                            <LogOut size={18} />
-                        </button>
+                        <div>
+                            <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{user?.name || 'Guest'}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{user?.role || 'Viewer'}</div>
+                        </div>
                     </div>
+                    <button
+                        onClick={() => {
+                            showConfirm('Are you sure you want to log out?', () => {
+                                logoutAction();
+                            });
+                        }}
+                        className="btn btn-sm"
+                        style={{ padding: '0.5rem', color: 'var(--text-muted)', border: 'none', background: 'transparent', minWidth: 'unset' }}
+                        title="Sign Out"
+                    >
+                        <LogOut size={18} />
+                    </button>
                 </div>
             </div>
-        </>
+        </div>
     );
 }

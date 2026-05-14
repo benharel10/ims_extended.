@@ -20,7 +20,7 @@ export default async function Home() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div className="flex-header">
         <div>
           <h1>Dashboard</h1>
           <p>Overview of inventory, production, and purchasing.</p>

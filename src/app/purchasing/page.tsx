@@ -201,12 +201,12 @@ export default function PurchasingPage() {
 
     return (
         <div className="animate-fade-in">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <div className="flex-header">
                 <div>
                     <h1>Purchasing & Reordering</h1>
                     <p>Manage purchase orders and track low stock items.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <Link href="/purchasing/mapper" className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Link2 size={16} /> SKU Mapper
                     </Link>
@@ -219,7 +219,7 @@ export default function PurchasingPage() {
                     </button>
                     <button className="btn btn-primary" onClick={() => setShowCreatePO(true)}>
                         <Plus size={18} />
-                        New Purchase Order
+                        New PO
                     </button>
                 </div>
             </div>
@@ -267,7 +267,7 @@ export default function PurchasingPage() {
                                 style={{ width: '100%' }}
                             />
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div className="grid-responsive-2">
                             <div className="form-group">
                                 <label>Expected Lead Time (Days)</label>
                                 <input
