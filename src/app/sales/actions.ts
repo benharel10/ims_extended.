@@ -414,6 +414,122 @@ export async function updateSalesOrderStatus(id: number, status: string) {
     }
 }
 
+// ─── Supply/Ship Items (Partial Fulfillment) ───────────────────────────────────
+
+export async function supplySOItems(
+    soId: number,
+    items: { lineId: number; qty: number }[]
+) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+        if (items.every(i => i.qty <= 0)) return { success: false, error: 'At least one item with a positive quantity is required' };
+
+        await prisma.$transaction(async (tx) => {
+            const order = await tx.salesOrder.findUnique({
+                where: { id: soId },
+                include: { lines: true }
+            });
+            if (!order) throw new Error('Sales order not found');
+            if (order.status === 'Cancelled') throw new Error('Cannot supply a cancelled order');
+            if (order.status === 'Draft') throw new Error('Order must be Confirmed before supplying');
+
+            let allCompleted = true;
+
+            for (const req of items) {
+                if (req.qty <= 0) continue;
+
+                const line = order.lines.find(l => l.id === req.lineId);
+                if (!line) continue;
+
+                const pending = Number(line.quantity) - Number(line.shipped);
+                if (req.qty > pending) throw new Error(`Cannot supply more than pending quantity for line ${line.id}`);
+
+                // 1. Deduct overall stock
+                const currentItem = await tx.item.findUnique({ where: { id: line.itemId }, select: { version: true } });
+                if (!currentItem) throw new Error(`Item not found for concurrency check`);
+                
+                const occResult = await tx.item.updateMany({
+                    where: { id: line.itemId, version: currentItem.version },
+                    data: { 
+                        currentStock: { decrement: req.qty }, 
+                        ...(order.isAllocated && { allocatedStock: { decrement: req.qty } }),
+                        version: { increment: 1 } 
+                    }
+                });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: item was updated simultaneously. Please try again.');
+
+                // 2. Deduct from whichever warehouses have it (largest quantity first)
+                let remainingWhDeduct = req.qty;
+                const stocks = await tx.itemStock.findMany({
+                    where: { itemId: line.itemId, quantity: { gt: 0 } },
+                    orderBy: { quantity: 'desc' },
+                });
+                for (const stock of stocks) {
+                    if (remainingWhDeduct <= 0) break;
+                    const qtyInStock = Number(stock.quantity);
+                    const ded = Math.min(qtyInStock, remainingWhDeduct);
+                    await tx.itemStock.update({
+                        where: { id: stock.id },
+                        data: { quantity: { decrement: ded } }
+                    });
+                    remainingWhDeduct -= ded;
+                }
+
+                // 3. Update shipped quantity on the line
+                await tx.salesLine.update({
+                    where: { id: line.id },
+                    data: { shipped: { increment: req.qty } }
+                });
+            }
+
+            // Determine new SO status
+            const updatedLines = await tx.salesLine.findMany({ where: { soId } });
+            for (const line of updatedLines) {
+                if (Number(line.shipped) < Number(line.quantity)) {
+                    allCompleted = false;
+                    break;
+                }
+            }
+
+            // If it was Confirmed and we supplied part, it becomes Shipped (Partial).
+            // Actually, we use 'Completed' for fully shipped? Let's use 'Completed' for full, 'Shipped' for partial, or keep what they have.
+            // Wait, their VALID_STATUSES are ['Draft', 'Confirmed', 'Shipped', 'Completed', 'Cancelled']
+            // Let's set it to 'Shipped' if partial, or 'Completed' if fully completed?
+            // "Shipped" might mean fully shipped. Let's look at the UI options. 
+            // We'll set to "Shipped" if partially or fully shipped? No, if allCompleted -> 'Completed'. If not -> 'Shipped' or 'Confirmed'.
+            // For now, if allCompleted, set to Completed. Else Shipped.
+            const newStatus = allCompleted ? 'Completed' : 'Shipped';
+            
+            await tx.salesOrder.update({
+                where: { id: soId },
+                data: { status: newStatus }
+            });
+
+            await tx.systemLog.create({
+                data: {
+                    userId: session.user.id,
+                    action: 'SUPPLY_SO_ITEMS',
+                    entity: 'SalesOrder',
+                    entityId: soId,
+                    details: JSON.stringify({ itemsSupplied: items.length, status: newStatus })
+                }
+            });
+        }, {
+            maxWait: 15000,
+            timeout: 30000
+        });
+
+        revalidatePath('/sales');
+        revalidatePath('/inventory');
+        return { success: true };
+    } catch (error: unknown) {
+        await logError('sales.supplySOItems', error);
+        const msg = error instanceof Error ? error.message : 'Failed to supply items';
+        return { success: false, error: msg };
+    }
+}
+
 // ─── Delete (hard delete is acceptable for Sales Orders — no soft-delete model) ──
 // NOTE: Items (SKUs) and BOMs use soft delete. SalesOrders use hard delete because
 // they don't have a deletedAt column and are referenced via foreign keys that cascade.

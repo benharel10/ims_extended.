@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 
 import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer, Calendar } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer, updateSalesOrderDate } from './actions';
+import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer, updateSalesOrderDate, supplySOItems } from './actions';
 import { createEmptyPO, getBrands, getWarehouses, getPurchaseOrders, updatePOLinkedSO } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
@@ -584,6 +584,11 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
     const [warehouses, setWarehouses] = useState<any[]>([]);
     const [producing, setProducing] = useState(false);
 
+    // Supply modal state
+    const [showSupplyModal, setShowSupplyModal] = useState(false);
+    const [supplyQuantities, setSupplyQuantities] = useState<Record<number, number>>({});
+    const [supplying, setSupplying] = useState(false);
+
     // Filter items
     const filteredItems = items.filter((i: Item) => {
         const matchSearch = i.name.toLowerCase().includes(itemSearch.toLowerCase()) || i.sku.toLowerCase().includes(itemSearch.toLowerCase());
@@ -622,6 +627,39 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
             const res = await removeSalesLine(lineId);
             if (res.success) onUpdate();
         });
+    }
+
+    async function handleOpenSupply() {
+        const initialQs: Record<number, number> = {};
+        order.lines.forEach((l: any) => {
+            const pending = Number(l.quantity) - Number(l.shipped);
+            if (pending > 0) initialQs[l.id] = pending;
+        });
+        setSupplyQuantities(initialQs);
+        setShowSupplyModal(true);
+    }
+
+    async function handleConfirmSupply() {
+        const itemsToSupply = order.lines
+            .map((l: any) => ({ lineId: l.id, qty: supplyQuantities[l.id] || 0 }))
+            .filter((x: any) => x.qty > 0);
+            
+        if (itemsToSupply.length === 0) {
+            showAlert('No quantities to supply', 'info');
+            return;
+        }
+
+        setSupplying(true);
+        const res = await supplySOItems(order.id, itemsToSupply);
+        setSupplying(false);
+
+        if (res.success) {
+            setShowSupplyModal(false);
+            showAlert('Items supplied successfully', 'success');
+            onUpdate();
+        } else {
+            showAlert(res.error || 'Failed to supply items', 'error');
+        }
     }
 
     async function handleProduce(item: any, soldQty: number) {
@@ -905,6 +943,11 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         {order.lines && order.lines.length > 0 && (
                             <>
+                                {order.status !== 'Completed' && order.status !== 'Draft' && (
+                                    <button className="btn btn-primary" onClick={handleOpenSupply}>
+                                        <Package size={16} style={{ marginRight: '0.4rem' }} /> Supply Items
+                                    </button>
+                                )}
                                 <button className="btn btn-outline" style={{ color: '#10b981', borderColor: '#10b981' }} onClick={handleExportBOM} disabled={exploding}>
                                     {exploding ? 'Exporting...' : 'Export BOM'}
                                 </button>
@@ -975,7 +1018,8 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                     <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
                                         <th style={{ padding: '0.5rem' }}>Item</th>
                                         <th style={{ padding: '0.5rem' }}>Qty</th>
-                                        <th style={{ padding: '0.5rem' }}>Unit Price</th>
+                                        <th style={{ padding: '0.5rem' }}>Shipped</th>
+                                        <th style={{ padding: '0.5rem' }}>Pending</th>
                                         <th style={{ padding: '0.5rem' }}>Total</th>
                                         <th></th>
                                     </tr>
@@ -989,15 +1033,19 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                             // Wait, getSalesOrders included lines: true, but line doesn't include item relation in findMany by default unless specific.
                                             // Ideally we should include item in getSalesOrders. But for now we can lookup in 'items' list passed in.
                                             const product = items.find((i: Item) => i.id === line.itemId);
+                                            const qty = Number(line.quantity);
+                                            const shipped = Number(line.shipped || 0);
+                                            const pending = qty - shipped;
                                             return (
-                                                <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: pending <= 0 ? 0.6 : 1 }}>
                                                     <td style={{ padding: '0.5rem' }}>
                                                         <div style={{ fontWeight: 500 }}>{product?.name || 'Unknown Item'}</div>
                                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{product?.sku}</div>
                                                     </td>
-                                                    <td style={{ padding: '0.5rem' }}>{line.quantity}</td>
-                                                    <td style={{ padding: '0.5rem' }}>${line.unitPrice.toFixed(2)}</td>
-                                                    <td style={{ padding: '0.5rem' }}>${(line.quantity * line.unitPrice).toFixed(2)}</td>
+                                                    <td style={{ padding: '0.5rem' }}>{qty}</td>
+                                                    <td style={{ padding: '0.5rem', color: shipped > 0 ? '#10b981' : 'inherit' }}>{shipped}</td>
+                                                    <td style={{ padding: '0.5rem', color: pending > 0 ? '#f59e0b' : '#10b981' }}>{pending > 0 ? pending : '✓'}</td>
+                                                    <td style={{ padding: '0.5rem' }}>${(qty * line.unitPrice).toFixed(2)}</td>
                                                     <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                                                         {(product?.type === 'Product' || product?.type === 'Assembly') && (
                                                             <button
@@ -1414,6 +1462,66 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                             <button className="btn btn-outline" onClick={() => setProduceModal(null)} disabled={producing}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleConfirmProduce} disabled={producing}>
                                 {producing ? 'Producing...' : `Produce ${produceQty}`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Supply Modal */}
+            {showSupplyModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
+                    <div className="card" style={{ width: '600px', maxWidth: '90%' }} onClick={(e) => e.stopPropagation()}>
+                        <h3 style={{ marginBottom: '1.5rem' }}>Supply Order {order.soNumber}</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                            Enter the quantities you are shipping for each line. Stock will be deducted automatically from whichever warehouse has it.
+                        </p>
+                        
+                        <div style={{ maxHeight: '40vh', overflowY: 'auto', marginBottom: '1.5rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                <thead style={{ background: 'var(--bg-dark)' }}>
+                                    <tr>
+                                        <th style={{ padding: '0.5rem', textAlign: 'left' }}>Item</th>
+                                        <th style={{ padding: '0.5rem', textAlign: 'right' }}>Pending</th>
+                                        <th style={{ padding: '0.5rem', textAlign: 'right' }}>Supply Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {order.lines.filter((l: any) => Number(l.quantity) - Number(l.shipped) > 0).map((line: any) => {
+                                        const product = items.find((i: Item) => i.id === line.itemId);
+                                        const pending = Number(line.quantity) - Number(line.shipped);
+                                        return (
+                                            <tr key={line.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                <td style={{ padding: '0.75rem 0.5rem' }}>
+                                                    <div style={{ fontWeight: 500 }}>{product?.name || 'Unknown Item'}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{product?.sku}</div>
+                                                </td>
+                                                <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>{pending}</td>
+                                                <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                                                    <input
+                                                        type="number"
+                                                        className="input-group"
+                                                        style={{ width: '80px', display: 'inline-block', margin: 0, padding: '0.3rem', textAlign: 'right' }}
+                                                        min="0"
+                                                        max={pending}
+                                                        step="any"
+                                                        value={supplyQuantities[line.id] === undefined ? '' : supplyQuantities[line.id]}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                                            setSupplyQuantities({ ...supplyQuantities, [line.id]: val });
+                                                        }}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                            <button className="btn btn-outline" onClick={() => setShowSupplyModal(false)} disabled={supplying}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleConfirmSupply} disabled={supplying}>
+                                {supplying ? 'Supplying...' : 'Confirm Supply'}
                             </button>
                         </div>
                     </div>
