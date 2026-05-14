@@ -717,15 +717,15 @@ export default function InventoryPage() {
                         <h1>Inventory Management</h1>
                         <p>Track items, BOMs, and stock levels.</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
 
-                        {/* Export Button */}
-                        <button className="btn btn-outline" onClick={handleExportToExcel} disabled={filteredItems.length === 0}>
+                        {/* Export — hidden on mobile (secondary action) */}
+                        <button className="btn btn-outline mobile-hidden-btn" onClick={handleExportToExcel} disabled={filteredItems.length === 0}>
                             <FileSpreadsheet size={18} />
                             Export to Excel
                         </button>
 
-                        {/* Items Import */}
+                        {/* Items Import — hidden on mobile */}
                         <input
                             type="file"
                             accept=".xlsx,.xls,.csv"
@@ -733,12 +733,12 @@ export default function InventoryPage() {
                             ref={itemInputRef}
                             onChange={handleItemImport}
                         />
-                        <button className="btn btn-outline" onClick={() => itemInputRef.current?.click()}>
+                        <button className="btn btn-outline mobile-hidden-btn" onClick={() => itemInputRef.current?.click()}>
                             <Upload size={18} />
                             Import Items
                         </button>
 
-                        {/* BOM Import */}
+                        {/* BOM Import — hidden on mobile */}
                         <input
                             type="file"
                             accept=".xlsx,.xls,.csv"
@@ -746,10 +746,45 @@ export default function InventoryPage() {
                             ref={bomInputRef}
                             onChange={handleBOMImport}
                         />
-                        <button className="btn btn-outline" onClick={() => bomInputRef.current?.click()}>
+                        <button className="btn btn-outline mobile-hidden-btn" onClick={() => bomInputRef.current?.click()}>
                             <Upload size={18} />
                             Import BOM
                         </button>
+
+                        {/* Mobile-only ⋯ menu for secondary actions */}
+                        <div className="mobile-actions-btn" style={{ position: 'relative' }}>
+                            <button className="btn btn-outline" onClick={() => setActiveActionId(activeActionId === -999 ? null : -999)}>
+                                <MoreHorizontal size={18} />
+                                More
+                            </button>
+                            {activeActionId === -999 && (
+                                <div style={{
+                                    position: 'absolute', right: 0, top: '100%', marginTop: '0.25rem',
+                                    background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                                    borderRadius: 'var(--radius-md)', zIndex: 100, minWidth: '180px',
+                                    boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)'
+                                }}>
+                                    <button
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
+                                        onClick={() => { handleExportToExcel(); setActiveActionId(null); }}
+                                    >
+                                        <FileSpreadsheet size={16} /> Export Excel
+                                    </button>
+                                    <button
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', borderTop: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
+                                        onClick={() => { itemInputRef.current?.click(); setActiveActionId(null); }}
+                                    >
+                                        <Upload size={16} /> Import Items
+                                    </button>
+                                    <button
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', borderTop: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.875rem' }}
+                                        onClick={() => { bomInputRef.current?.click(); setActiveActionId(null); }}
+                                    >
+                                        <Upload size={16} /> Import BOM
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
                         <button className="btn btn-primary" onClick={openCreateModal}>
                             <Plus size={18} />
@@ -760,10 +795,10 @@ export default function InventoryPage() {
 
                 <div className="card full-width-page" style={{ marginBottom: '2rem', paddingLeft: 0, paddingRight: 0, borderLeft: 'none', borderRight: 'none', borderRadius: 0 }}>
 
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap', padding: '0 1.5rem' }}>
+                    <div className="filter-bar-mobile" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap', padding: '0 1.5rem' }}>
 
-                        {/* Text Search */}
-                        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+                        {/* Text Search — full width on mobile */}
+                        <div className="filter-search-full" style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                             <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                             <input
                                 type="text"
@@ -793,7 +828,6 @@ export default function InventoryPage() {
                                 color: 'var(--text-main)',
                                 fontSize: '0.95rem',
                                 cursor: 'pointer',
-                                minWidth: '150px'
                             }}
                         >
                             <option value="">All Warehouses</option>
@@ -811,7 +845,6 @@ export default function InventoryPage() {
                                 color: 'var(--text-main)',
                                 fontSize: '0.95rem',
                                 cursor: 'pointer',
-                                minWidth: '130px'
                             }}
                         >
                             <option value="">All Types</option>
@@ -831,7 +864,6 @@ export default function InventoryPage() {
                                 color: 'var(--text-main)',
                                 fontSize: '0.95rem',
                                 cursor: 'pointer',
-                                minWidth: '130px'
                             }}
                         >
                             <option value="">All Brands</option>
@@ -840,7 +872,7 @@ export default function InventoryPage() {
                             ))}
                         </select>
 
-                        <label style={{
+                        <label className="filter-full-row" style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: '0.5rem',
@@ -862,7 +894,7 @@ export default function InventoryPage() {
                         </label>
 
                         {selectedItemIds.length > 0 && (
-                            <div className="animate-in fade-in slide-in-from-right-4" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div className="filter-full-row animate-in fade-in slide-in-from-right-4" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                 <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{selectedItemIds.length} selected</span>
                                 <button
                                     onClick={openBulkStockModal}
@@ -880,7 +912,6 @@ export default function InventoryPage() {
                                     }}
                                 >
                                     <Package size={16} />
-                                    Adjust Stock
                                     Adjust Stock
                                 </button>
                                 {isAdmin && (
@@ -1099,7 +1130,6 @@ export default function InventoryPage() {
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                 <button
                                                                     className="mobile-expand-btn btn btn-sm btn-outline"
-                                                                    style={{ display: 'none' }}
                                                                     onClick={(e) => { e.stopPropagation(); toggleRow(item.id); }}
                                                                 >
                                                                     {isExpanded ? 'Show Less' : 'Show More'}

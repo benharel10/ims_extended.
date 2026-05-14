@@ -338,26 +338,26 @@ export default function PurchasingPage() {
             <div className="card" style={{ marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <h3 style={{ margin: 0 }}>Active Purchase Orders</h3>
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <div className="po-card-header" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                         <input
                             type="text"
                             className="input-group"
-                            placeholder="Search by PO#, Supplier or SO#..."
+                            placeholder="Search PO#, Supplier, SO#..."
                             value={poSearch}
                             onChange={e => setPoSearch(e.target.value)}
                             style={{ width: '260px', margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}
                         />
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                             <input 
                                 type="checkbox" 
                                 checked={includeCompleted} 
                                 onChange={e => setIncludeCompleted(e.target.checked)} 
                             />
-                            Search Arrived/All
+                            Include Completed
                         </label>
                         {selectedPoIds.size > 0 && isAdmin && (
                             <button className="btn btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }} onClick={handleDeleteSelectedPOs}>
-                                <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete Selected ({selectedPoIds.size})
+                                <Trash2 size={16} style={{ marginRight: '0.5rem' }} /> Delete ({selectedPoIds.size})
                             </button>
                         )}
                     </div>
@@ -369,7 +369,7 @@ export default function PurchasingPage() {
                         No active purchase orders. Create one to get started.
                     </div>
                 ) : (
-                    <div className="table-responsive">
+                    <div className="table-responsive mobile-card-view">
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
@@ -427,9 +427,9 @@ export default function PurchasingPage() {
                                                 <span style={{ display: 'inline-block', width: '18px' }} />
                                             )}
                                         </td>
-                                        <td style={{ padding: '1rem', fontWeight: 600 }}>{po.poNumber}</td>
+                                        <td style={{ padding: '1rem', fontWeight: 600 }} data-label="PO #">{po.poNumber}</td>
                                         <td style={{ padding: '1rem' }}>{po.supplier}</td>
-                                        <td style={{ padding: '1rem' }}>
+                                        <td style={{ padding: '1rem' }} data-label="Linked SO">
                                             {po.salesOrder ? (
                                                 <Link href={`/sales?id=${po.salesOrderId}`} style={{ fontSize: '0.85rem', color: 'var(--primary)', textDecoration: 'underline' }}>
                                                     {po.salesOrder.soNumber}
@@ -438,11 +438,11 @@ export default function PurchasingPage() {
                                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>—</span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '1rem' }}>{po.lines?.length || 0}</td>
-                                        <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                                        <td style={{ padding: '1rem' }} data-label="Items">{po.lines?.length || 0}</td>
+                                        <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }} data-label="Order Date">
                                             {new Date(po.orderDate || po.createdAt).toLocaleDateString()}
                                         </td>
-                                        <td style={{ padding: '1rem' }}>
+                                        <td style={{ padding: '1rem' }} data-label="Status">
                                             <span style={{ 
                                                 display: 'inline-flex', 
                                                 padding: '0.25rem 0.75rem', 
@@ -454,10 +454,10 @@ export default function PurchasingPage() {
                                                 {po.status === 'Completed' ? 'Arrived' : 'In Transit'}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '1rem' }}>
+                                        <td style={{ padding: '1rem' }} data-label="Due Date">
                                             <EditableDueCell po={po} onUpdate={handleUpdateDueDate} />
                                         </td>
-                                        <td style={{ padding: '1rem' }}>
+                                        <td style={{ padding: '1rem' }} data-label="Actions">
                                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                 <Link href={`/purchasing/${po.id}`} className="btn btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
                                                     <ExternalLink size={14} style={{ marginRight: '0.5rem' }} />

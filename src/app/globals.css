@@ -1105,3 +1105,151 @@ a,
     display: none;
   }
 }
+
+/* ============================================
+   PHONE-SPECIFIC IMPROVEMENTS (max-width:768px)
+   PC (>1024px) and iPad (769-1024px) are 100%
+   unaffected — all rules below are mobile-only.
+   ============================================ */
+
+/* Filter bar: 2-column grid on phone so selects don't overflow */
+@media (max-width: 768px) {
+  .filter-bar-mobile {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0 0.75rem !important;
+  }
+
+  .filter-bar-mobile > * {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Search bar always spans full width */
+  .filter-bar-mobile > .filter-search-full {
+    grid-column: 1 / -1;
+  }
+
+  /* Low stock + selection actions span full width too */
+  .filter-bar-mobile > .filter-full-row {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Inline edit icons (pencil/edit) hidden via opacity on desktop
+   but should always be visible on touch devices */
+@media (hover: none) {
+  button[title="Adjust Stock"],
+  button[title="Edit Cost"],
+  button[title="Edit Date"] {
+    opacity: 0.8 !important;
+  }
+}
+
+/* Form grids: 2-col on desktop → 1-col on phone */
+@media (max-width: 768px) {
+  .form-grid-2 {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1rem;
+  }
+}
+
+/* Actions dropdown: prevent off-screen clipping on phone */
+@media (max-width: 768px) {
+  .actions-menu-container {
+    position: static !important;
+  }
+
+  .actions-menu-container > div:last-child {
+    position: fixed !important;
+    bottom: 80px !important;
+    left: 1rem !important;
+    right: 1rem !important;
+    top: auto !important;
+    max-width: none !important;
+    border-radius: var(--radius-lg) !important;
+    z-index: 500 !important;
+    box-shadow: 0 -4px 32px rgba(0,0,0,0.5) !important;
+  }
+}
+
+/* PO card view: better mobile cards */
+@media (max-width: 768px) {
+  /* Make mobile card header row stand out more */
+  .mobile-card-view tr {
+    position: relative;
+    padding: 1rem !important;
+  }
+
+  .mobile-card-view td {
+    padding-left: 45% !important;
+    font-size: 0.9rem;
+  }
+
+  .mobile-card-view td::before {
+    width: 43%;
+    font-size: 0.75rem;
+    position: absolute;
+    left: 1rem;
+  }
+
+  /* Tighten the card row padding on phone */
+  .mobile-card-view tr {
+    margin-bottom: 0.75rem !important;
+    padding: 0.75rem !important;
+  }
+}
+
+/* Page header: hide secondary actions on phone, show only primary */
+@media (max-width: 768px) {
+  /* Import/Export buttons collapse into .mobile-hidden-btn */
+  .mobile-hidden-btn {
+    display: none !important;
+  }
+
+  /* Mobile actions overflow menu button */
+  .mobile-actions-btn {
+    display: flex !important;
+  }
+
+  /* Stack purchasing PO search */
+  .po-card-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .po-card-header input {
+    width: 100% !important;
+  }
+
+  /* Make sales SO table cards look better */
+  .mobile-card-view td[data-label="Customer Order #"],
+  .mobile-card-view td[data-label="Total"] {
+    display: none !important;
+  }
+
+  /* Production tab buttons scroll */
+  .production-tabs {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap !important;
+  }
+
+  .production-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .production-tabs button {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* Mobile actions overflow button: hidden on desktop */
+.mobile-actions-btn {
+  display: none;
+}

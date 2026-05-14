@@ -263,7 +263,7 @@ export default function SalesPage() {
     return (
         <>
             <div className="animate-fade-in">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div className="flex-header">
                     <div>
                         <h1>Sales Orders</h1>
                         <p>Manage customer orders and shipments.</p>
@@ -323,7 +323,7 @@ export default function SalesPage() {
                     {loading ? (
                         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading orders...</div>
                     ) : (
-                        <div className="table-responsive">
+                        <div className="table-responsive mobile-card-view">
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
@@ -363,12 +363,12 @@ export default function SalesPage() {
                                                             style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                                                         />
                                                     </td>
-                                                    <td style={{ padding: '1rem', fontWeight: 500 }}>{order.soNumber}</td>
-                                                    <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                                                    <td style={{ padding: '1rem', fontWeight: 500 }} data-label="SO Number">{order.soNumber}</td>
+                                                    <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }} data-label="Customer Order #">
                                                         {order.customerOrderNumber || <span style={{ opacity: 0.4 }}>—</span>}
                                                     </td>
-                                                    <td style={{ padding: '1rem' }}>{order.customer}</td>
-                                                    <td style={{ padding: '1rem' }}>
+                                                    <td style={{ padding: '1rem' }} data-label="Customer">{order.customer}</td>
+                                                    <td style={{ padding: '1rem' }} data-label="Status">
                                                         <span style={{
                                                             padding: '0.25rem 0.75rem',
                                                             borderRadius: '1rem',
