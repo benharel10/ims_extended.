@@ -373,8 +373,19 @@ export default function SalesPage() {
                                                             padding: '0.25rem 0.75rem',
                                                             borderRadius: '1rem',
                                                             fontSize: '0.875rem',
-                                                            background: order.status === 'Confirmed' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(100, 116, 139, 0.1)',
-                                                            color: order.status === 'Confirmed' ? '#3b82f6' : 'var(--text-muted)'
+                                                            fontWeight: 600,
+                                                            background: 
+                                                                order.status === 'Confirmed' ? 'rgba(59, 130, 246, 0.15)' :
+                                                                order.status === 'Completed' ? 'rgba(16, 185, 129, 0.15)' :
+                                                                order.status === 'Shipped' ? 'rgba(245, 158, 11, 0.15)' :
+                                                                order.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' :
+                                                                order.status === 'Draft' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                                                            color: 
+                                                                order.status === 'Confirmed' ? '#3b82f6' :
+                                                                order.status === 'Completed' ? '#10b981' :
+                                                                order.status === 'Shipped' ? '#f59e0b' :
+                                                                order.status === 'Cancelled' ? '#ef4444' :
+                                                                order.status === 'Draft' ? '#a855f7' : '#94a3b8'
                                                         }}>{order.status}</span>
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
@@ -910,7 +921,27 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
             <div className="card" style={{ width: '1000px', maxWidth: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-dark)' }}>
                     <div>
-                        <h2 style={{ fontSize: '1.25rem', marginBottom: '0.25rem' }}>Order {order.soNumber}</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                            <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Order {order.soNumber}</h2>
+                            <span style={{
+                                padding: '0.2rem 0.6rem',
+                                borderRadius: '1rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                background: 
+                                    order.status === 'Confirmed' ? 'rgba(59, 130, 246, 0.15)' :
+                                    order.status === 'Completed' ? 'rgba(16, 185, 129, 0.15)' :
+                                    order.status === 'Shipped' ? 'rgba(245, 158, 11, 0.15)' :
+                                    order.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' :
+                                    order.status === 'Draft' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                                color: 
+                                    order.status === 'Confirmed' ? '#3b82f6' :
+                                    order.status === 'Completed' ? '#10b981' :
+                                    order.status === 'Shipped' ? '#f59e0b' :
+                                    order.status === 'Cancelled' ? '#ef4444' :
+                                    order.status === 'Draft' ? '#a855f7' : '#94a3b8'
+                            }}>{order.status}</span>
+                        </div>
                         <div style={{ color: 'var(--text-muted)' }}>Customer: {order.customer}</div>
                     </div>
                     {editLink ? (
