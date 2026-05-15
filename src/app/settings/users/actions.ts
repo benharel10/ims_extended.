@@ -114,3 +114,75 @@ export async function deleteUser(id: number) {
         return { success: false, error: msg };
     }
 }
+
+// ─── System Maintenance (Logs & Database Optimization) ──────────────────────
+
+export async function getSystemLogStats() {
+    try {
+        await checkAdmin();
+        const [systemLogCount, icountLogCount] = await Promise.all([
+            prisma.systemLog.count(),
+            prisma.iCountSyncLog.count()
+        ]);
+        return { 
+            success: true, 
+            data: { systemLogCount, icountLogCount } 
+        };
+    } catch (error) {
+        const msg = error instanceof Error && error.message.startsWith('Unauthorized')
+            ? error.message
+            : 'Failed to load database statistics.';
+        return { success: false, error: msg };
+    }
+}
+
+export async function purgeSystemLogs(days: number | 'all') {
+    try {
+        await checkAdmin();
+        
+        let deletedSystemLogs = 0;
+        let deletedICountLogs = 0;
+
+        if (days === 'all') {
+            const [r1, r2] = await Promise.all([
+                prisma.systemLog.deleteMany(),
+                prisma.iCountSyncLog.deleteMany()
+            ]);
+            deletedSystemLogs = r1.count;
+            deletedICountLogs = r2.count;
+        } else {
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - days);
+
+            const [r1, r2] = await Promise.all([
+                prisma.systemLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
+                prisma.iCountSyncLog.deleteMany({ where: { createdAt: { lt: cutoff } } })
+            ]);
+            deletedSystemLogs = r1.count;
+            deletedICountLogs = r2.count;
+        }
+
+        // Log this maintenance action so admins can see that audit cleanup happened
+        const adminSession = await getSession();
+        if (adminSession?.user) {
+            await prisma.systemLog.create({
+                data: {
+                    userId: adminSession.user.id,
+                    action: 'SYSTEM_MAINTENANCE_PURGE',
+                    entity: 'Database',
+                    entityId: 0,
+                    details: `Purged logs older than: ${days} days. Cleaned: ${deletedSystemLogs} system, ${deletedICountLogs} sync records.`
+                }
+            });
+        }
+
+        revalidatePath('/settings/users');
+        return { 
+            success: true, 
+            message: `Optimization complete! Purged ${deletedSystemLogs + deletedICountLogs} outdated log entries.` 
+        };
+    } catch (error) {
+        await logError('users.purgeSystemLogs', error);
+        return { success: false, error: 'Failed to run database optimization routine.' };
+    }
+}
