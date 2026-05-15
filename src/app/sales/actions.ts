@@ -596,27 +596,31 @@ export async function explodeOrderBOM(orderId: number) {
         const requirements = new Map<number, { item: any; baseQuantity: number }>();
 
         async function traverse(currentId: number, multiplier: number) {
+            // Bugfix: Verify the component itself is active and not soft-deleted
+            const currentItem = await prisma.item.findUnique({ where: { id: currentId } });
+            if (!currentItem || currentItem.deletedAt !== null) return;
+
             const boms = await prisma.bOM.findMany({
                 where: { parentId: currentId, deletedAt: null },
                 include: { child: true }
             });
 
-            if (boms.length === 0) {
+            // Filter out any BOM links referencing inactive/deleted child items
+            const activeBoms = boms.filter(bom => bom.child && bom.child.deletedAt === null);
+
+            if (activeBoms.length === 0) {
                 // It's a leaf node -> raw material / base component
                 const existing = requirements.get(currentId);
                 if (existing) {
                     existing.baseQuantity += multiplier;
                 } else {
-                    const currentItem = await prisma.item.findUnique({ where: { id: currentId } });
-                    if (currentItem) {
-                        requirements.set(currentId, { item: currentItem, baseQuantity: multiplier });
-                    }
+                    requirements.set(currentId, { item: currentItem, baseQuantity: multiplier });
                 }
                 return;
             }
 
             // It has children, traverse them
-            for (const bom of boms) {
+            for (const bom of activeBoms) {
                 await traverse(bom.childId, multiplier * Number(bom.quantity));
             }
         }

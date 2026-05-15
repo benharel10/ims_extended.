@@ -15,8 +15,8 @@ export async function createInvoiceInICount(orderData: any): Promise<ICountRespo
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Simulate randomness
-    const success = Math.random() > 0.1; // 90% success rate
+    // Simulate randomness - DISABLED false alarms
+    const success = true; // 100% success for mock service until production integration
 
     if (success) {
         const icountId = Math.floor(Math.random() * 10000) + 1000;
