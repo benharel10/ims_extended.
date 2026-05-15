@@ -29,17 +29,19 @@ export async function getFinancialSummary() {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        // Only count active (non-soft-deleted) items
-        const items = await prisma.item.findMany({
-            where: { deletedAt: null },
-            select: { type: true, cost: true, currentStock: true }
-        });
+        // Calculate aggregations directly in the database to avoid transferring all item rows
+        const rows = await prisma.$queryRaw<[{ type: string, value: number }]>`
+            SELECT type, COALESCE(SUM(CAST(cost AS DOUBLE PRECISION) * CAST("currentStock" AS DOUBLE PRECISION)), 0) as value 
+            FROM "Item" 
+            WHERE "deletedAt" IS NULL 
+            GROUP BY type
+        `;
 
-        const summary = items.reduce(
-            (acc, item) => {
-                const value = Number(item.cost) * Number(item.currentStock);
-                if (item.type === 'Raw') acc.rawMaterialValue += value;
-                else if (item.type === 'Product' || item.type === 'Assembly') acc.finishedGoodsValue += value;
+        const summary = rows.reduce(
+            (acc, row) => {
+                const value = Number(row.value);
+                if (row.type === 'Raw') acc.rawMaterialValue += value;
+                else if (row.type === 'Product' || row.type === 'Assembly') acc.finishedGoodsValue += value;
                 acc.totalInventoryValue += value;
                 return acc;
             },
@@ -68,42 +70,32 @@ export async function getFinancialDataForChart() {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-        const salesLines = await prisma.salesLine.findMany({
-            where: { so: { status: { not: 'Draft' } } },
-            include: {
-                item: { select: { cost: true } },
-                so: { select: { createdAt: true } }
-            },
-            orderBy: { so: { createdAt: 'asc' } }
+        // Use raw SQL to aggregate monthly financial metrics directly in the database,
+        // transmitting only ~12-24 aggregate rows instead of thousands of SalesLine items.
+        const rows = await prisma.$queryRaw<[{ monthKey: string, monthLabel: string, revenue: number, cost: number }]>`
+            SELECT 
+                TO_CHAR(o."createdAt", 'YYYY-MM') as "monthKey",
+                TO_CHAR(o."createdAt", 'Mon YY') as "monthLabel",
+                COALESCE(SUM(CAST(l.quantity AS DOUBLE PRECISION) * CAST(l."unitPrice" AS DOUBLE PRECISION)), 0) as "revenue",
+                COALESCE(SUM(CAST(l.quantity AS DOUBLE PRECISION) * CAST(i.cost AS DOUBLE PRECISION)), 0) as "cost"
+            FROM "SalesLine" l
+            JOIN "SalesOrder" o ON l."soId" = o.id
+            JOIN "Item" i ON l."itemId" = i.id
+            WHERE o.status != 'Draft'
+            GROUP BY "monthKey", "monthLabel"
+            ORDER BY "monthKey" ASC
+        `;
+
+        const chartData = rows.map(row => {
+            const revenue = Number(row.revenue);
+            const cost = Number(row.cost);
+            return {
+                name: row.monthLabel,
+                Revenue: parseFloat(revenue.toFixed(2)),
+                Costs: parseFloat(cost.toFixed(2)),
+                Profit: parseFloat((revenue - cost).toFixed(2))
+            };
         });
-
-        const grouped = salesLines.reduce<Record<string, MonthBucket>>((acc, line) => {
-            const date = new Date(line.so.createdAt);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            const monthLabel = date.toLocaleString('default', { month: 'short', year: '2-digit' });
-
-            if (!acc[monthKey]) {
-                acc[monthKey] = { name: monthLabel, revenue: 0, cost: 0, profit: 0, originalDate: date.getTime() };
-            }
-
-            const revenue = Number(line.quantity) * Number(line.unitPrice);
-            const cost = Number(line.quantity) * Number(line.item.cost || 0);
-
-            acc[monthKey].revenue += revenue;
-            acc[monthKey].cost += cost;
-            acc[monthKey].profit += revenue - cost;
-
-            return acc;
-        }, {});
-
-        const chartData = Object.values(grouped)
-            .sort((a, b) => a.originalDate - b.originalDate)
-            .map(item => ({
-                name: item.name,
-                Revenue: parseFloat(item.revenue.toFixed(2)),
-                Costs: parseFloat(item.cost.toFixed(2)),
-                Profit: parseFloat(item.profit.toFixed(2))
-            }));
 
         return { success: true, data: chartData };
     } catch (error) {

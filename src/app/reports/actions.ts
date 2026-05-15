@@ -216,41 +216,40 @@ export async function getWarehouseComparison() {
 
 export async function getReportSummary() {
     try {
-        const [items, pos, sales, production, warehouses] = await Promise.all([
-            prisma.item.findMany({ where: { deletedAt: null }, select: { currentStock: true, cost: true, minStock: true } }),
+        const [
+            inventoryValueRes,
+            lowStockRes,
+            revenueRes,
+            productionRes,
+            totalItemsRes,
+            pendingPOs,
+            warehouseCount
+        ] = await Promise.all([
+            prisma.$queryRaw<[{ value: number }]>`SELECT COALESCE(SUM(CAST(cost AS DOUBLE PRECISION) * CAST("currentStock" AS DOUBLE PRECISION)), 0) as value FROM "Item" WHERE "deletedAt" IS NULL`,
+            prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM "Item" WHERE "currentStock" < "minStock" AND "deletedAt" IS NULL`,
+            prisma.$queryRaw<[{ value: number }]>`SELECT COALESCE(SUM(CAST(l.quantity AS DOUBLE PRECISION) * CAST(l."unitPrice" AS DOUBLE PRECISION)), 0) as value FROM "SalesLine" l JOIN "SalesOrder" o ON l."soId" = o.id WHERE o.status != 'Draft'`,
+            prisma.$queryRaw<[{ value: number }]>`SELECT COALESCE(SUM(CAST(r.quantity AS DOUBLE PRECISION) * CAST(i.cost AS DOUBLE PRECISION)), 0) as value FROM "ProductionRun" r JOIN "Item" i ON r."itemId" = i.id`,
+            prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM "Item" WHERE "deletedAt" IS NULL`,
             prisma.purchaseOrder.count({ where: { status: { not: 'Completed' } } }),
-            prisma.salesOrder.findMany({ 
-                where: { status: { not: 'Draft' } },
-                include: { lines: true } 
-            }),
-            prisma.productionRun.findMany({ select: { quantity: true, item: { select: { cost: true } } } }),
             prisma.warehouse.count()
         ]);
 
-        const totalInventoryValue = items.reduce((sum, item) => sum + (Number(item.currentStock) * Number(item.cost)), 0);
-        const lowStockCount = items.filter(item => Number(item.currentStock) < Number(item.minStock)).length;
-
-        let totalRevenue = 0;
-        sales.forEach(so => {
-            so.lines.forEach(line => {
-                totalRevenue += Number(line.quantity) * line.unitPrice;
-            });
-        });
-
-        const totalProductionValue = production.reduce((sum, run) => {
-            return sum + (Number(run.quantity) * Number(run.item?.cost || 0));
-        }, 0);
+        const totalInventoryValue = Number(inventoryValueRes[0]?.value || 0);
+        const lowStockCount = Number(lowStockRes[0]?.count || 0);
+        const totalRevenue = Number(revenueRes[0]?.value || 0);
+        const totalProductionValue = Number(productionRes[0]?.value || 0);
+        const totalItems = Number(totalItemsRes[0]?.count || 0);
 
         return {
             success: true,
             data: {
                 totalInventoryValue,
-                totalItems: items.length,
+                totalItems,
                 lowStockCount,
-                pendingPOs: pos,
+                pendingPOs,
                 totalRevenue,
                 totalProductionValue,
-                warehouseCount: warehouses
+                warehouseCount
             }
         };
     } catch (error) {
