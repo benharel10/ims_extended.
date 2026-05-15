@@ -1131,6 +1131,7 @@ export default function InventoryPage() {
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                 <button
                                                                     className="mobile-expand-btn btn btn-sm btn-outline"
+                                                                    style={{ display: 'none' }}
                                                                     onClick={(e) => { e.stopPropagation(); toggleRow(item.id); }}
                                                                 >
                                                                     {isExpanded ? 'Show Less' : 'Show More'}
