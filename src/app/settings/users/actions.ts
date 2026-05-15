@@ -156,7 +156,7 @@ export async function purgeSystemLogs(days: number | 'all') {
 
             const [r1, r2] = await Promise.all([
                 prisma.systemLog.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-                prisma.iCountSyncLog.deleteMany({ where: { createdAt: { lt: cutoff } } })
+                prisma.iCountSyncLog.deleteMany({ where: { timestamp: { lt: cutoff } } })
             ]);
             deletedSystemLogs = r1.count;
             deletedICountLogs = r2.count;
