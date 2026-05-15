@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, Plus, Upload, MoreHorizontal, X, FileSpreadsheet, Edit2, Check, MapPin, Package, History } from 'lucide-react';
+import { Search, Filter, Plus, Upload, MoreHorizontal, X, FileSpreadsheet, Edit2, Check, MapPin, Package, History, Loader2 } from 'lucide-react';
 import { getItems, createItem, updateItem, deleteItem, updateStock, importBOM, importItems, updateItemCost, bulkDeleteItems, bulkUpdateStock, createAssemblyFromItems, createSaleFromInventory, getItemHistory } from './actions';
-import { getInspectionRecords } from '../quality/actions';
+import { getInspectionRecords, getInspectionFile } from '../quality/actions';
 import { getWarehouses } from '../shipping/actions';
 import * as XLSX from 'xlsx';
 import { useSystem } from '@/components/SystemProvider';
@@ -49,6 +49,7 @@ export default function InventoryPage() {
     const [activeHistoryTab, setActiveHistoryTab] = useState<'Stock' | 'Quality'>('Stock');
     const [qualityData, setQualityData] = useState<any[]>([]);
     const [loadingQuality, setLoadingQuality] = useState(false);
+    const [downloadingQCId, setDownloadingQCId] = useState<number | null>(null);
 
     async function openHistory(item: any) {
         setHistoryItem(item);
@@ -2045,18 +2046,35 @@ export default function InventoryPage() {
                                                             </div>
                                                             <button 
                                                                 className="btn btn-sm btn-outline" 
-                                                                onClick={(e) => {
+                                                                disabled={downloadingQCId === record.id}
+                                                                onClick={async (e) => {
                                                                     e.stopPropagation();
-                                                                    const link = document.createElement('a');
-                                                                    link.href = record.fileData;
-                                                                    link.download = record.fileName;
-                                                                    document.body.appendChild(link);
-                                                                    link.click();
-                                                                    document.body.removeChild(link);
+                                                                    try {
+                                                                        setDownloadingQCId(record.id);
+                                                                        const res = await getInspectionFile(record.id);
+                                                                        if (!res.success || !res.data?.fileData) {
+                                                                            showAlert(res.error || 'Failed to download file', 'error');
+                                                                            return;
+                                                                        }
+                                                                        const link = document.createElement('a');
+                                                                        link.href = res.data.fileData;
+                                                                        link.download = res.data.fileName;
+                                                                        document.body.appendChild(link);
+                                                                        link.click();
+                                                                        document.body.removeChild(link);
+                                                                    } catch (err) {
+                                                                        showAlert('Failed to download file', 'error');
+                                                                    } finally {
+                                                                        setDownloadingQCId(null);
+                                                                    }
                                                                 }}
-                                                                style={{ padding: '0.4rem' }}
+                                                                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '30px' }}
                                                             >
-                                                                <Upload size={14} style={{ transform: 'rotate(180deg)' }} />
+                                                                {downloadingQCId === record.id ? (
+                                                                    <Loader2 size={14} className="animate-spin" />
+                                                                ) : (
+                                                                    <Upload size={14} style={{ transform: 'rotate(180deg)' }} />
+                                                                )}
                                                             </button>
                                                         </div>
                                                     </div>

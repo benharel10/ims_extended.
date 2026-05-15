@@ -87,9 +87,20 @@ export async function getInspectionRecords(filters?: {
             }
         }
 
+        // Use select instead of include to explicitly omit the massive 'fileData' string 
+        // when loading lists. This yields enormous bandwidth and performance gains!
         const records = await prisma.inspectionRecord.findMany({
             where,
-            include: {
+            select: {
+                id: true,
+                itemId: true,
+                poId: true,
+                fileName: true,
+                status: true,
+                notes: true,
+                inspectorId: true,
+                createdAt: true,
+                updatedAt: true,
                 item: { select: { sku: true, name: true } },
                 po: { select: { poNumber: true } },
                 inspector: { select: { name: true } },
@@ -102,6 +113,28 @@ export async function getInspectionRecords(filters?: {
     } catch (error) {
         await logError('getInspectionRecords', error);
         return { success: false, error: 'Failed to load inspection records' };
+    }
+}
+
+export async function getInspectionFile(id: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const record = await prisma.inspectionRecord.findUnique({
+            where: { id },
+            select: {
+                id: true,
+                fileName: true,
+                fileData: true
+            }
+        });
+
+        if (!record) return { success: false, error: 'File not found' };
+        return { success: true, data: record };
+    } catch (error) {
+        await logError('getInspectionFile', error);
+        return { success: false, error: 'Failed to load file contents' };
     }
 }
 

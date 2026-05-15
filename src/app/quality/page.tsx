@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { getInspectionRecords, deleteInspectionRecord } from './actions';
+import { getInspectionRecords, deleteInspectionRecord, getInspectionFile } from './actions';
 import { useSystem } from '@/components/SystemProvider';
 import { 
     Search, 
@@ -15,7 +15,8 @@ import {
     User,
     Package,
     ShoppingCart,
-    X
+    X,
+    Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useDebounce } from '@/hooks/useDebounce'; // Assuming this exists or I will create it
@@ -26,6 +27,7 @@ export default function QualityPage() {
     
     const [records, setRecords] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [downloadingId, setDownloadingId] = useState<number | null>(null);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
     const debouncedSearch = useDebounce(search, 500);
@@ -57,16 +59,26 @@ export default function QualityPage() {
         });
     }
 
-    function handleDownload(record: any) {
+    async function handleDownload(record: any) {
         try {
+            setDownloadingId(record.id);
+            // Defer the retrieval of the massive Base64 file data until the user clicks download!
+            const res = await getInspectionFile(record.id);
+            if (!res.success || !res.data?.fileData) {
+                showAlert(res.error || 'Failed to load file', 'error');
+                return;
+            }
+            
             const link = document.createElement('a');
-            link.href = record.fileData;
-            link.download = record.fileName;
+            link.href = res.data.fileData;
+            link.download = res.data.fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         } catch (err) {
             showAlert('Failed to download file', 'error');
+        } finally {
+            setDownloadingId(null);
         }
     }
 
@@ -244,10 +256,15 @@ export default function QualityPage() {
                                     <button 
                                         className="btn btn-sm btn-outline" 
                                         onClick={() => handleDownload(record)}
-                                        title="Download Report"
+                                        disabled={downloadingId === record.id}
+                                        title={downloadingId === record.id ? "Loading file..." : "Download Report"}
                                         style={{ width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                                     >
-                                        <Download size={16} />
+                                        {downloadingId === record.id ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : (
+                                            <Download size={16} />
+                                        )}
                                     </button>
                                     {isAdmin && (
                                         <button 
