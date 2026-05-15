@@ -59,9 +59,6 @@ export default function PurchasingPage() {
     const [brands, setBrands] = useState<string[]>([]);
     const [salesOrders, setSalesOrders] = useState<any[]>([]);
     const [poSearch, setPoSearch] = useState('');
-    const [dueTodayPOs, setDueTodayPOs] = useState<any[]>([]);
-    const [showDuePrompt, setShowDuePrompt] = useState(false);
-    const [duePromptIndex, setDuePromptIndex] = useState(0);
     const [includeCompleted, setIncludeCompleted] = useState(false);
     const [poDueDate, setPoDueDate] = useState('');
 
@@ -94,19 +91,6 @@ export default function PurchasingPage() {
 
         if (posRes.success && posRes.data) {
             setPos(posRes.data);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const due = posRes.data.filter((po: any) => {
-                if (!po.dueDate || (po.status !== 'Sent' && po.status !== 'Partial')) return false;
-                const dueDate = new Date(po.dueDate);
-                dueDate.setHours(0, 0, 0, 0);
-                return dueDate <= today;
-            });
-            if (due.length > 0) {
-                setDueTodayPOs(due);
-                setDuePromptIndex(0);
-                setShowDuePrompt(true);
-            }
         }
         if (brandsRes.success && brandsRes.data) setBrands(brandsRes.data);
         if (soRes.success && soRes.data) {
@@ -302,37 +286,7 @@ export default function PurchasingPage() {
                 </div>
             )}
 
-            {/* Arrival Due Prompt */}
-            {showDuePrompt && dueTodayPOs[duePromptIndex] && (
-                <div className="modal-overlay" onClick={() => setShowDuePrompt(false)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
-                        <h2 style={{ marginBottom: '0.75rem' }}>Shipment Due!</h2>
-                        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                            Purchase Order <strong>{dueTodayPOs[duePromptIndex].poNumber}</strong> from <strong>{dueTodayPOs[duePromptIndex].supplier}</strong> was due today.
-                            Has it arrived?
-                        </p>
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                            <button className="btn btn-outline" onClick={() => {
-                                if (duePromptIndex + 1 < dueTodayPOs.length) {
-                                    setDuePromptIndex(duePromptIndex + 1);
-                                } else {
-                                    setShowDuePrompt(false);
-                                }
-                            }}>Not Yet</button>
-                            <button className="btn btn-primary" onClick={() => {
-                                setShowDuePrompt(false);
-                                router.push(`/purchasing/${dueTodayPOs[duePromptIndex].id}`);
-                            }}>Yes — View Details</button>
-                        </div>
-                        {dueTodayPOs.length > 1 && (
-                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
-                                {duePromptIndex + 1} of {dueTodayPOs.length} due POs
-                            </p>
-                        )}
-                    </div>
-                </div>
-            )}
+
 
             {/* Active Purchase Orders */}
             <div className="card" style={{ marginBottom: '2rem' }}>
