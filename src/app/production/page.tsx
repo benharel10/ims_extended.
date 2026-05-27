@@ -1,7 +1,8 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { PackageCheck, ScanLine, History, Settings, Play, Plus, Trash2, Save, Edit2 } from 'lucide-react';
+import { PackageCheck, ScanLine, History, Settings, Play, Plus, Trash2, Save, Edit2, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { getAssemblyParents, getComponentOptions, getBOM, saveBOM, runProduction, getProductionRuns, updateProductionRun, deleteProductionRun, bulkDeleteProductionRuns, getWarehouses } from './actions';
 import { createItem, deleteItem, updateItemCost } from '../inventory/actions';
 import { useSystem } from '@/components/SystemProvider';
@@ -25,6 +26,7 @@ export default function ProductionPage() {
     const [bomLines, setBomLines] = useState<{ childId: string, quantity: number }[]>([]);
     const [bomSearch, setBomSearch] = useState<string[]>([]); // Per-row search filter
     const [isLoadingBOM, setIsLoadingBOM] = useState(false);
+    const importBomRef = useRef<HTMLInputElement>(null);
 
     // Cost & Price State
     const [parentCost, setParentCost] = useState<number>(0);
@@ -240,6 +242,63 @@ export default function ProductionPage() {
         setBomSearch(bomSearch.filter((_, i) => i !== index));
     };
 
+    const handleImportBom = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const bstr = evt.target?.result;
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+                const newLines: { childId: string, quantity: number }[] = [];
+                const newSearches: string[] = [];
+                const missingSkus: string[] = [];
+
+                for (const row of data) {
+                    const sku = row['SKU'] || row['sku'] || row['Sku'];
+                    const itemName = row['Item Name'] || row['item name'] || row['name'] || row['Name'];
+                    let qty = row['Quantity'] || row['quantity'] || row['Qty'] || row['qty'];
+                    
+                    if (typeof qty === 'string') {
+                        qty = parseFloat(qty);
+                    }
+                    if (!qty || isNaN(qty)) qty = 1;
+
+                    // Match component by SKU first, then by exact Item Name
+                    const comp = components.find(c => 
+                        (sku && c.sku.toLowerCase() === String(sku).toLowerCase()) || 
+                        (itemName && c.name.toLowerCase() === String(itemName).toLowerCase())
+                    );
+
+                    if (comp) {
+                        newLines.push({ childId: String(comp.id), quantity: qty });
+                        newSearches.push('');
+                    } else if (sku || itemName) {
+                        missingSkus.push(sku || itemName);
+                    }
+                }
+
+                if (missingSkus.length > 0) {
+                    showAlert(`Error: The following items are unknown. Please add them before importing: ${missingSkus.join(', ')}`, 'error');
+                } else {
+                    setBomLines(prev => [...prev, ...newLines]);
+                    setBomSearch(prev => [...prev, ...newSearches]);
+                    showAlert('BOM imported successfully', 'success');
+                }
+            } catch (err) {
+                console.error(err);
+                showAlert('Failed to parse file', 'error');
+            }
+            if (importBomRef.current) importBomRef.current.value = '';
+        };
+        reader.readAsBinaryString(file);
+    };
+
     async function handleSaveBOM() {
         if (!selectedParentId) {
             showAlert('Please select a parent item.', 'warning');
@@ -387,6 +446,25 @@ export default function ProductionPage() {
                                 >
                                     <Plus size={16} /> New Product
                                 </button>
+                                <button
+                                    className="btn btn-outline"
+                                    onClick={() => {
+                                        if (!selectedParentId) {
+                                            showAlert('Please select or create a Product first before importing a BOM.', 'warning');
+                                            return;
+                                        }
+                                        importBomRef.current?.click();
+                                    }}
+                                >
+                                    <Upload size={16} /> Import BOM
+                                </button>
+                                <input 
+                                    type="file" 
+                                    ref={importBomRef} 
+                                    style={{ display: 'none' }} 
+                                    accept=".csv, .xlsx, .xls"
+                                    onChange={handleImportBom}
+                                />
                                 {selectedParentId && isAdmin && (
                                     <button
                                         className="btn btn-outline"
