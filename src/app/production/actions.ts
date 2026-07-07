@@ -218,6 +218,10 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                 throw new Error('No assembly definition (BOM) found for this product. Define the BOM first.');
             }
 
+            if (!toWarehouseId) {
+                throw new Error('A warehouse must be selected for production.');
+            }
+
             // 2. Pre-flight stock check for ALL components before deducting anything
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
@@ -229,12 +233,12 @@ export async function runProduction(parentId: number, quantity: number, serialNu
                     throw new Error(`Component (ID: ${line.childId}) no longer exists`);
                 }
 
-                // Calculate total available across all warehouses
-                const available = childItem.stocks.reduce((acc, s) => acc + Number(s.quantity), 0);
+                const stockInSelectedWarehouse = childItem.stocks.find(s => s.warehouseId === toWarehouseId);
+                const available = stockInSelectedWarehouse ? Number(stockInSelectedWarehouse.quantity) : 0;
 
                 if (available < requiredQty) {
                     throw new Error(
-                        `Insufficient stock for "${childItem.sku}". Required: ${requiredQty}, Available: ${available}`
+                        `Insufficient stock for "${childItem.sku}" in the selected warehouse. Required: ${requiredQty}, Available: ${available}`
                     );
                 }
             }
@@ -243,30 +247,19 @@ export async function runProduction(parentId: number, quantity: number, serialNu
             for (const line of bom) {
                 const requiredQty = Number(line.quantity) * quantity;
 
-                const childItem = await tx.item.findUnique({
-                    where: { id: line.childId },
-                    include: { stocks: true }
+                const existingStock = await tx.itemStock.findUnique({
+                    where: { itemId_warehouseId: { itemId: line.childId, warehouseId: toWarehouseId! } }
                 });
-                if (!childItem) throw new Error(`Component ID ${line.childId} not found`);
 
-                // Deduct from warehouse stocks (auto-deduct from wherever available)
-                let remaining = requiredQty;
-                for (const stock of childItem.stocks) {
-                    if (remaining <= 0) break;
-                    const available = Number(stock.quantity);
-                    if (available > 0) {
-                        const deduct = Math.min(available, remaining);
-                        await tx.itemStock.update({
-                            where: { id: stock.id },
-                            data: { quantity: { decrement: deduct } }
-                        });
-                        remaining -= deduct;
-                    }
+                if (!existingStock) {
+                    const childItem = await tx.item.findUnique({ where: { id: line.childId } });
+                    throw new Error(`Stock record missing for "${childItem?.sku}" in the selected warehouse.`);
                 }
 
-                if (remaining > 0.0001) {
-                    throw new Error(`Stock inconsistency for "${childItem.sku}". Please refresh and try again.`);
-                }
+                await tx.itemStock.update({
+                    where: { id: existingStock.id },
+                    data: { quantity: { decrement: requiredQty } }
+                });
 
                 // Deduct from total stock + bump version
                 const currentChild = await tx.item.findUnique({ where: { id: line.childId }, select: { version: true } });
@@ -413,33 +406,26 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                     });
                     if (!child) throw new Error(`Component ID ${line.childId} missing`);
 
-                    const available = child.stocks.reduce((acc, s) => acc + Number(s.quantity), 0);
+                    const stockInSelectedWarehouse = child.stocks.find(s => s.warehouseId === run.toWarehouseId);
+                    const available = stockInSelectedWarehouse ? Number(stockInSelectedWarehouse.quantity) : 0;
                     if (available < needed) {
-                        throw new Error(`Insufficient stock for "${child.sku}". Need ${needed}, available in total ${available}`);
+                        throw new Error(`Insufficient stock for "${child.sku}" in the selected warehouse. Need ${needed}, available ${available}`);
                     }
                 }
 
-                // Now deduct from stock auto
+                // Now deduct from stock in the selected warehouse
                 for (const line of bom) {
                     const needed = Number(line.quantity) * diff;
-                    const child = await tx.item.findUnique({
-                        where: { id: line.childId },
-                        include: { stocks: true }
+                    
+                    const existingStock = await tx.itemStock.findUnique({
+                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.toWarehouseId! } }
                     });
-                    if (child) {
-                        let remaining = needed;
-                        for (const stock of child.stocks) {
-                            if (remaining <= 0) break;
-                            const available = Number(stock.quantity);
-                            if (available > 0) {
-                                const deduct = Math.min(available, remaining);
-                                await tx.itemStock.update({
-                                    where: { id: stock.id },
-                                    data: { quantity: { decrement: deduct } }
-                                });
-                                remaining -= deduct;
-                            }
-                        }
+
+                    if (existingStock) {
+                        await tx.itemStock.update({
+                            where: { id: existingStock.id },
+                            data: { quantity: { decrement: needed } }
+                        });
                     }
                     const currentChild = await tx.item.findUnique({ where: { id: line.childId }, select: { version: true } });
                     if (!currentChild) throw new Error('Item not found for concurrency check');
@@ -481,9 +467,9 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
 
                 for (const line of bom) {
                     const returning = Number(line.quantity) * removeQty;
-                    // Try to find ANY existing stock to return to
-                    let stock = await tx.itemStock.findFirst({
-                        where: { itemId: line.childId }
+                    // Return it to the warehouse it was taken from
+                    let stock = await tx.itemStock.findUnique({
+                        where: { itemId_warehouseId: { itemId: line.childId, warehouseId: run.toWarehouseId! } }
                     });
 
                     if (stock) {
@@ -492,9 +478,8 @@ export async function updateProductionRun(runId: number, newQuantity: number) {
                             data: { quantity: { increment: returning } }
                         });
                     } else {
-                        // Just use the toWarehouseId as fallback if no existing stock locations
                         await tx.itemStock.create({
-                            data: { itemId: line.childId, warehouseId: run.toWarehouseId, quantity: returning }
+                            data: { itemId: line.childId, warehouseId: run.toWarehouseId!, quantity: returning }
                         });
                     }
 
