@@ -635,7 +635,7 @@ export async function receivePOItems(
             // Determine new PO status
             const updatedLines = await tx.pOLine.findMany({ where: { poId } });
             for (const line of updatedLines) {
-                if (line.received < line.quantity) {
+                if (Number(line.received) < Number(line.quantity)) {
                     allCompleted = false;
                     break;
                 }
