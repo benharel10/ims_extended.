@@ -41,6 +41,47 @@ function EditableDueCell({ po, onUpdate }: any) {
     );
 }
 
+function getStatusLabel(status: string) {
+    switch (status) {
+        case 'Completed':
+            return {
+                text: 'Completed',
+                bg: 'rgba(34, 197, 94, 0.1)', // green
+                color: '#16a34a'
+            };
+        case 'Partial':
+            return {
+                text: 'Partial',
+                bg: 'rgba(245, 158, 11, 0.1)', // orange
+                color: '#d97706'
+            };
+        case 'Sent':
+            return {
+                text: 'In Transit',
+                bg: 'rgba(59, 130, 246, 0.1)', // blue
+                color: '#3b82f6'
+            };
+        case 'Draft':
+            return {
+                text: 'Draft',
+                bg: 'rgba(156, 163, 175, 0.1)', // gray
+                color: '#9ca3af'
+            };
+        case 'Cancelled':
+            return {
+                text: 'Cancelled',
+                bg: 'rgba(239, 68, 68, 0.1)', // red
+                color: '#ef4444'
+            };
+        default:
+            return {
+                text: status,
+                bg: 'rgba(156, 163, 175, 0.1)',
+                color: '#9ca3af'
+            };
+    }
+}
+
 export default function PurchasingPage() {
     const router = useRouter();
     const { showAlert, showConfirm, user } = useSystem();
@@ -397,16 +438,22 @@ export default function PurchasingPage() {
                                             {new Date(po.orderDate || po.createdAt).toLocaleDateString()}
                                         </td>
                                         <td style={{ padding: '1rem' }} data-label="Status">
-                                            <span style={{ 
-                                                display: 'inline-flex', 
-                                                padding: '0.25rem 0.75rem', 
-                                                borderRadius: '999px', 
-                                                fontSize: '0.75rem', 
-                                                background: po.status === 'Completed' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                                                color: po.status === 'Completed' ? '#16a34a' : '#d97706'
-                                            }}>
-                                                {po.status === 'Completed' ? 'Arrived' : 'In Transit'}
-                                            </span>
+                                            {(() => {
+                                                const label = getStatusLabel(po.status);
+                                                return (
+                                                    <span style={{ 
+                                                        display: 'inline-flex', 
+                                                        padding: '0.25rem 0.75rem', 
+                                                        borderRadius: '999px', 
+                                                        fontSize: '0.75rem', 
+                                                        fontWeight: 500,
+                                                        background: label.bg,
+                                                        color: label.color
+                                                    }}>
+                                                        {label.text}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td style={{ padding: '1rem' }} data-label="Due Date">
                                             <EditableDueCell po={po} onUpdate={handleUpdateDueDate} />
