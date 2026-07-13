@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { getPurchaseOrders, receivePOItems, getWarehouses } from '../actions';
-import { PackageCheck, ChevronDown, ChevronRight, Save } from 'lucide-react';
+import { PackageCheck, ChevronDown, ChevronRight, Save, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 import { useSystem } from '@/components/SystemProvider';
 
 export default function ReceivePOPage() {
-    const { showAlert, showConfirm } = useSystem();
+    const { showAlert, showConfirm, user } = useSystem();
+    const isAdmin = user?.role === 'Admin';
     const [pos, setPos] = useState<any[]>([]);
     const [warehouses, setWarehouses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -100,6 +101,26 @@ export default function ReceivePOPage() {
                     Back to Purchasing
                 </Link>
             </div>
+
+            {!isAdmin && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#ef4444',
+                    padding: '1rem',
+                    borderRadius: 'var(--radius-md)',
+                    marginBottom: '1.5rem'
+                }}>
+                    <Lock size={20} />
+                    <div>
+                        <strong style={{ display: 'block' }}>Admin Access Required</strong>
+                        <span style={{ fontSize: '0.9rem', opacity: 0.9 }}>You do not have permission to receive items or confirm receipts. Please contact an administrator.</span>
+                    </div>
+                </div>
+            )}
 
             {loading ? (
                 <div>Loading...</div>
@@ -206,9 +227,12 @@ export default function ReceivePOPage() {
                                             <button
                                                 className="btn btn-primary"
                                                 onClick={(e) => { e.stopPropagation(); handleReceive(po.id); }}
-                                                disabled={!selectedWarehouses[po.id]}
+                                                disabled={!selectedWarehouses[po.id] || !isAdmin}
+                                                title={!isAdmin ? "Only administrators can process receipts" : undefined}
+                                                style={!isAdmin ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
                                             >
-                                                <Save size={16} style={{ marginRight: '0.5rem' }} /> Process Receipt
+                                                {!isAdmin ? <Lock size={16} style={{ marginRight: '0.5rem' }} /> : <Save size={16} style={{ marginRight: '0.5rem' }} />}
+                                                Process Receipt
                                             </button>
                                         </div>
                                     </div>

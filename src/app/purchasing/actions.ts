@@ -543,6 +543,7 @@ export async function receivePOItems(
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
+        if (session.user.role !== 'Admin') return { success: false, error: 'Unauthorized: Only admins can confirm receipts' };
         if (!warehouseId || warehouseId <= 0) return { success: false, error: 'A valid warehouse is required' };
         if (items.every(i => i.qty <= 0)) return { success: false, error: 'At least one item with a positive quantity is required' };
 

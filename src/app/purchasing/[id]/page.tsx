@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getPurchaseOrder, addPOLine, removePOLine, updatePOStatus, getItems, updatePOLine, updatePODueDate, updatePONumber, getPOHistory, getWarehouses, receivePOItems, updatePOLinkedSO, generateInspectionReports, searchItems, getDraftSalesOrders } from '../actions';
 import { createInspectionRecord } from '../../quality/actions';
 import { getSalesOrders } from '@/app/sales/actions';
-import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet, ShieldCheck, ShieldAlert, Upload, Check, X, Search, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Save, ArrowLeft, Package, Zap, History, FileSpreadsheet, ShieldCheck, ShieldAlert, Upload, Check, X, Search, Loader2, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useSystem } from '@/components/SystemProvider';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -166,7 +166,8 @@ function EditablePOLine({ line, po, handleRemoveLine, handleUpdateLine, handleSh
 export default function PODetailPage() {
     const params = useParams();
     const router = useRouter();
-    const { showAlert, showConfirm } = useSystem();
+    const { showAlert, showConfirm, user } = useSystem();
+    const isAdmin = user?.role === 'Admin';
     const poId = parseInt(params.id as string);
 
     const [po, setPo] = useState<any>(null);
@@ -666,14 +667,31 @@ export default function PODetailPage() {
                         </button>
                     )}
                     {po.status !== 'Completed' && (
-                        <button className="btn btn-primary" onClick={handleConfirmReceiptPreCheck}>
-                            <Package size={18} />
+                        <button 
+                            className="btn btn-primary" 
+                            onClick={handleConfirmReceiptPreCheck}
+                            disabled={!isAdmin}
+                            title={!isAdmin ? "Only administrators can confirm receipts" : undefined}
+                            style={!isAdmin ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+                        >
+                            {!isAdmin ? <Lock size={18} style={{ marginRight: '0.25rem' }} /> : <Package size={18} />}
                             Confirm Receipt
                         </button>
                     )}
-                    <Link href="/purchasing/receive" className="btn btn-outline">
-                        <ArrowLeft size={18} style={{ transform: 'rotate(180deg)' }} /> Detailed Receive
-                    </Link>
+                    {isAdmin ? (
+                        <Link href="/purchasing/receive" className="btn btn-outline">
+                            <ArrowLeft size={18} style={{ transform: 'rotate(180deg)' }} /> Detailed Receive
+                        </Link>
+                    ) : (
+                        <button 
+                            className="btn btn-outline" 
+                            disabled 
+                            title="Only administrators can access Detailed Receive"
+                            style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                        >
+                            <Lock size={18} style={{ marginRight: '0.25rem' }} /> Detailed Receive
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -994,7 +1012,7 @@ export default function PODetailPage() {
                             <button 
                                 className="btn btn-primary" 
                                 onClick={handleQuickReceive}
-                                disabled={isReceiving || !selectedWarehouseId}
+                                disabled={isReceiving || !selectedWarehouseId || !isAdmin}
                             >
                                 {isReceiving ? 'Processing...' : 'Confirm Receipt'}
                             </button>
