@@ -743,3 +743,125 @@ export async function autoProcureMissingRequirements(orderId: number) {
         return { success: false, error: 'Failed to auto-procure. Please try again.' };
     }
 }
+
+export async function updateSalesLineShippedQty(lineId: number, newShipped: number) {
+    try {
+        const session = await getSession();
+        if (session?.user?.role !== 'Admin') return { success: false, error: 'Unauthorized — Admin only' };
+
+        if (typeof newShipped !== 'number' || isNaN(newShipped) || newShipped < 0) {
+            return { success: false, error: 'Invalid shipped quantity' };
+        }
+
+        await prisma.$transaction(async (tx) => {
+            const line = await tx.salesLine.findUnique({
+                where: { id: lineId },
+                include: { so: true }
+            });
+            if (!line) throw new Error('Sales line not found');
+
+            const oldShipped = Number(line.shipped);
+            if (newShipped === oldShipped) return;
+
+            if (newShipped > Number(line.quantity)) {
+                throw new Error(`Shipped quantity cannot exceed ordered quantity (${line.quantity})`);
+            }
+
+            if (newShipped > oldShipped) {
+                const diff = newShipped - oldShipped;
+                
+                // 1. Deduct overall stock
+                const currentItem = await tx.item.findUnique({ where: { id: line.itemId }, select: { version: true } });
+                if (!currentItem) throw new Error(`Item not found for concurrency check`);
+
+                const occResult = await tx.item.updateMany({
+                    where: { id: line.itemId, version: currentItem.version },
+                    data: {
+                        currentStock: { decrement: diff },
+                        ...(line.so.isAllocated && { allocatedStock: { decrement: diff } }),
+                        version: { increment: 1 }
+                    }
+                });
+                if (occResult.count === 0) throw new Error('Concurrency conflict: stock was updated simultaneously. Please try again.');
+
+                // 2. Deduct from warehouses (largest quantity first)
+                let remainingWhDeduct = diff;
+                const stocks = await tx.itemStock.findMany({
+                    where: { itemId: line.itemId, quantity: { gt: 0 } },
+                    orderBy: { quantity: 'desc' }
+                });
+                for (const stock of stocks) {
+                    if (remainingWhDeduct <= 0) break;
+                    const qtyInStock = Number(stock.quantity);
+                    const ded = Math.min(qtyInStock, remainingWhDeduct);
+                    await tx.itemStock.update({
+                        where: { id: stock.id },
+                        data: { quantity: { decrement: ded } }
+                    });
+                    remainingWhDeduct -= ded;
+                }
+            } else {
+                // If newShipped < oldShipped, do nothing to the stock as requested:
+                // "BUT IF I REDUCE THE SHIPPED QUANTITY DONT RAISE IT IN THE STOCK"
+            }
+
+            // Update the shipped quantity in database
+            await tx.salesLine.update({
+                where: { id: lineId },
+                data: { shipped: newShipped }
+            });
+
+            // Recalculate order status
+            const updatedLines = await tx.salesLine.findMany({ where: { soId: line.soId } });
+            let allCompleted = true;
+            let anyShipped = false;
+            for (const ul of updatedLines) {
+                const ulQty = Number(ul.quantity);
+                const ulShipped = Number(ul.shipped);
+                if (ulShipped < ulQty) {
+                    allCompleted = false;
+                }
+                if (ulShipped > 0) {
+                    anyShipped = true;
+                }
+            }
+
+            let newStatus = line.so.status;
+            if (line.so.status !== 'Draft' && line.so.status !== 'Cancelled') {
+                if (allCompleted) {
+                    newStatus = 'Completed';
+                } else if (anyShipped) {
+                    newStatus = 'Shipped';
+                } else {
+                    newStatus = 'Confirmed';
+                }
+            }
+
+            await tx.salesOrder.update({
+                where: { id: line.soId },
+                data: { status: newStatus }
+            });
+
+            await tx.systemLog.create({
+                data: {
+                    userId: session.user.id,
+                    action: 'UPDATE_LINE_SHIPPED_QTY',
+                    entity: 'SalesOrder',
+                    entityId: line.soId,
+                    details: JSON.stringify({ lineId, oldShipped, newShipped, newStatus })
+                }
+            });
+        }, {
+            maxWait: 15000,
+            timeout: 30000
+        });
+
+        revalidatePath('/sales');
+        revalidatePath('/inventory');
+        return { success: true };
+    } catch (error: any) {
+        await logError('sales.updateSalesLineShippedQty', error);
+        return { success: false, error: error.message || 'Failed to update shipped quantity' };
+    }
+}
+

@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
-import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer, Calendar } from 'lucide-react';
+import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer, Calendar, Pencil } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer, updateSalesOrderDate, supplySOItems } from './actions';
+import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer, updateSalesOrderDate, supplySOItems, updateSalesLineShippedQty } from './actions';
 import { createEmptyPO, getBrands, getWarehouses, getPurchaseOrders, updatePOLinkedSO } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
@@ -583,10 +583,34 @@ export default function SalesPage() {
 }
 
 function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSearch, showProductionOnly, setShowProductionOnly }: any) {
-    const { showAlert, showConfirm } = useSystem();
+    const { user, showAlert, showConfirm } = useSystem();
+    const isAdmin = user?.role === 'Admin';
     const [selectedItemId, setSelectedItemId] = useState('');
     const [qty, setQty] = useState(1);
     const [adding, setAdding] = useState(false);
+
+    // Editing Shipped Qty state
+    const [editingLineId, setEditingLineId] = useState<number | null>(null);
+    const [editShippedVal, setEditShippedVal] = useState<string>('');
+    const [updatingShipped, setUpdatingShipped] = useState(false);
+
+    async function handleSaveShippedQty(lineId: number) {
+        const val = parseFloat(editShippedVal);
+        if (isNaN(val) || val < 0) {
+            showAlert('Please enter a valid shipped quantity', 'warning');
+            return;
+        }
+        setUpdatingShipped(true);
+        const res = await updateSalesLineShippedQty(lineId, val);
+        setUpdatingShipped(false);
+        if (res.success) {
+            setEditingLineId(null);
+            showAlert('Shipped quantity updated successfully', 'success');
+            onUpdate();
+        } else {
+            showAlert(res.error || 'Failed to update shipped quantity', 'error');
+        }
+    }
 
     // Production modal state
     const [produceModal, setProduceModal] = useState<null | { item: any; soldQty: number }>(null);
@@ -1074,7 +1098,71 @@ function OrderDetails({ order, items, onClose, onUpdate, itemSearch, setItemSear
                                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{product?.sku}</div>
                                                     </td>
                                                     <td style={{ padding: '0.5rem' }}>{qty}</td>
-                                                    <td style={{ padding: '0.5rem', color: shipped > 0 ? '#10b981' : 'inherit' }}>{shipped}</td>
+                                                    <td style={{ padding: '0.5rem', color: shipped > 0 ? '#10b981' : 'inherit' }}>
+                                                        {isAdmin && editingLineId === line.id ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    value={editShippedVal}
+                                                                    onChange={(e) => setEditShippedVal(e.target.value)}
+                                                                    min="0"
+                                                                    max={qty}
+                                                                    step="any"
+                                                                    style={{
+                                                                        width: '60px',
+                                                                        padding: '0.25rem',
+                                                                        background: 'var(--bg-dark)',
+                                                                        border: '1px solid var(--border-color)',
+                                                                        borderRadius: '4px',
+                                                                        color: 'white',
+                                                                    }}
+                                                                    disabled={updatingShipped}
+                                                                    autoFocus
+                                                                />
+                                                                <button
+                                                                    className="btn btn-sm btn-primary"
+                                                                    style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                                                                    onClick={() => handleSaveShippedQty(line.id)}
+                                                                    disabled={updatingShipped}
+                                                                >
+                                                                    {updatingShipped ? '...' : '✓'}
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-sm btn-outline"
+                                                                    style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', borderColor: 'var(--border-color)' }}
+                                                                    onClick={() => setEditingLineId(null)}
+                                                                    disabled={updatingShipped}
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                <span>{shipped}</span>
+                                                                {isAdmin && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingLineId(line.id);
+                                                                            setEditShippedVal(String(shipped));
+                                                                        }}
+                                                                        style={{
+                                                                            background: 'none',
+                                                                            border: 'none',
+                                                                            color: 'var(--text-muted)',
+                                                                            cursor: 'pointer',
+                                                                            padding: '0.2rem',
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            borderRadius: '4px',
+                                                                        }}
+                                                                        title="Edit shipped quantity"
+                                                                    >
+                                                                        <Pencil size={12} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </td>
                                                     <td style={{ padding: '0.5rem', color: pending > 0 ? '#f59e0b' : '#10b981' }}>{pending > 0 ? pending : '✓'}</td>
                                                     <td style={{ padding: '0.5rem' }}>${(qty * line.unitPrice).toFixed(2)}</td>
                                                     <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
