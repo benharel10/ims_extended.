@@ -6,6 +6,7 @@ import { getSession } from '@/lib/auth';
 import { logError } from '@/lib/errorLogger';
 import { createInvoiceInICount } from '@/lib/icount';
 import { CreateSalesOrderSchema, AddSalesLineSchema, UpdateSalesStatusSchema, LinkSalesOrderSchema, parseSchema } from '@/lib/schemas';
+import ExcelJS from 'exceljs';
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
@@ -864,4 +865,220 @@ export async function updateSalesLineShippedQty(lineId: number, newShipped: numb
         return { success: false, error: error.message || 'Failed to update shipped quantity' };
     }
 }
+
+export async function getCustomerMRPExcel(customerName: string) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        // Fetch all open sales orders for the customer
+        const openOrders = await prisma.salesOrder.findMany({
+            where: {
+                customer: customerName,
+                status: { in: ['Draft', 'Confirmed', 'Shipped'] }
+            },
+            include: { lines: true }
+        });
+
+        // Requirements map: key -> { item, baseQuantity }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const requirements = new Map<number, { item: any; baseQuantity: number }>();
+        
+        // Track consumed stocks of assemblies: key -> consumedQuantity
+        const consumedStock = new Map<number, number>();
+
+        // Track assembly stats for Sheet 2: key -> { item, totalNeeded, fulfilledFromStock, netNeeded }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const assemblyStats = new Map<number, { item: any; totalNeeded: number; fulfilledFromStock: number; netNeeded: number }>();
+
+        async function traverse(currentId: number, multiplier: number) {
+            const currentItem = await prisma.item.findUnique({ where: { id: currentId } });
+            if (!currentItem || currentItem.deletedAt !== null) return;
+
+            const boms = await prisma.bOM.findMany({
+                where: { parentId: currentId, deletedAt: null },
+                include: { child: true }
+            });
+
+            const activeBoms = boms.filter(bom => bom.child && bom.child.deletedAt === null);
+
+            if (activeBoms.length === 0) {
+                // It's a leaf node -> raw material / base component
+                const existing = requirements.get(currentId);
+                if (existing) {
+                    existing.baseQuantity += multiplier;
+                } else {
+                    requirements.set(currentId, { item: currentItem, baseQuantity: multiplier });
+                }
+                return;
+            }
+
+            // It's an assembly! Deduct available stock (currentStock - allocatedStock)
+            const currentStock = Number(currentItem.currentStock || 0);
+            const allocatedStock = Number(currentItem.allocatedStock || 0);
+            const totalAvailable = Math.max(0, currentStock - allocatedStock);
+
+            const alreadyConsumed = consumedStock.get(currentId) || 0;
+            const availableToUse = Math.max(0, totalAvailable - alreadyConsumed);
+
+            const fulfilled = Math.min(multiplier, availableToUse);
+            if (fulfilled > 0) {
+                consumedStock.set(currentId, alreadyConsumed + fulfilled);
+            }
+
+            const net = multiplier - fulfilled;
+
+            // Track stats for this assembly
+            const existingStat = assemblyStats.get(currentId);
+            if (existingStat) {
+                existingStat.totalNeeded += multiplier;
+                existingStat.fulfilledFromStock += fulfilled;
+                existingStat.netNeeded += net;
+            } else {
+                assemblyStats.set(currentId, {
+                    item: currentItem,
+                    totalNeeded: multiplier,
+                    fulfilledFromStock: fulfilled,
+                    netNeeded: net
+                });
+            }
+
+            if (net > 0) {
+                // It has children, traverse them
+                for (const bom of activeBoms) {
+                    await traverse(bom.childId, net * Number(bom.quantity));
+                }
+            }
+        }
+
+        for (const order of openOrders) {
+            for (const line of order.lines) {
+                if (line.itemId) {
+                    const pendingQty = Number(line.quantity) - Number(line.shipped || 0);
+                    if (pendingQty > 0) {
+                        await traverse(line.itemId, pendingQty);
+                    }
+                }
+            }
+        }
+
+        // Excel Generation using exceljs
+        const workbook = new ExcelJS.Workbook();
+        
+        // ── Sheet 1: Raw Materials to Order ──
+        const sheet1 = workbook.addWorksheet('Raw Materials to Order');
+        sheet1.columns = [
+            { header: 'SKU', key: 'sku', width: 25 },
+            { header: 'Name', key: 'name', width: 40 },
+            { header: 'Brand', key: 'brand', width: 20 },
+            { header: 'Base Qty Needed', key: 'baseQty', width: 18 },
+            { header: 'Available Stock', key: 'availableStock', width: 18 },
+            { header: 'Quantity to Order', key: 'quantityToOrder', width: 18 }
+        ];
+
+        // Format header row for Sheet 1
+        const headerRow1 = sheet1.getRow(1);
+        headerRow1.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow1.eachCell(cell => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF4F81BD' } // Nice corporate blue
+            };
+        });
+
+        // Add raw material data
+        for (const req of requirements.values()) {
+            const current = Number(req.item.currentStock || 0);
+            const allocated = Number(req.item.allocatedStock || 0);
+            const available = Math.max(0, current - allocated);
+            const baseQty = req.baseQuantity;
+            const quantityToOrder = Math.max(0, baseQty - available);
+
+            const row = sheet1.addRow({
+                sku: req.item.sku,
+                name: req.item.name,
+                brand: req.item.brand || '',
+                baseQty,
+                availableStock: available,
+                quantityToOrder
+            });
+
+            // If quantity to order is > 0, highlight the entire row in red
+            if (quantityToOrder > 0) {
+                row.eachCell(cell => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFC7CE' } // Light red fill
+                    };
+                    cell.font = {
+                        color: { argb: 'FF9C0006' }, // Dark red text
+                        bold: true
+                    };
+                });
+            }
+        }
+
+        // ── Sheet 2: Sub-Assembly Consumption ──
+        const sheet2 = workbook.addWorksheet('Sub-Assembly Consumption');
+        sheet2.columns = [
+            { header: 'SKU', key: 'sku', width: 25 },
+            { header: 'Name', key: 'name', width: 40 },
+            { header: 'Type', key: 'type', width: 15 },
+            { header: 'Total Needed', key: 'totalNeeded', width: 15 },
+            { header: 'Fulfilled From Stock', key: 'fulfilledFromStock', width: 20 },
+            { header: 'Net Needed to Build', key: 'netNeeded', width: 20 }
+        ];
+
+        // Format header row for Sheet 2
+        const headerRow2 = sheet2.getRow(1);
+        headerRow2.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow2.eachCell(cell => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF7030A0' } // Purple header
+            };
+        });
+
+        // Add assembly stats
+        for (const stat of assemblyStats.values()) {
+            const row = sheet2.addRow({
+                sku: stat.item.sku,
+                name: stat.item.name,
+                type: stat.item.type,
+                totalNeeded: stat.totalNeeded,
+                fulfilledFromStock: stat.fulfilledFromStock,
+                netNeeded: stat.netNeeded
+            });
+
+            // Highlight in orange/yellow if net needed > 0
+            if (stat.netNeeded > 0) {
+                row.eachCell(cell => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFEF2CB' } // Light yellow/orange
+                    };
+                    cell.font = {
+                        color: { argb: 'FFB25E00' }, // Dark yellow text
+                        bold: true
+                    };
+                });
+            }
+        }
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const base64 = Buffer.from(buffer).toString('base64');
+        const fileName = `${customerName.replace(/[^a-z0-9]/gi, '_')}_MRP.xlsx`;
+
+        return { success: true, data: { base64, fileName } };
+    } catch (error) {
+        await logError('sales.getCustomerMRPExcel', error);
+        return { success: false, error: 'Failed to generate customer MRP Excel file' };
+    }
+}
+
+
 

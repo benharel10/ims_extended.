@@ -253,38 +253,81 @@ export default function ProductionPage() {
                 const wb = XLSX.read(bstr, { type: 'binary' });
                 const wsname = wb.SheetNames[0];
                 const ws = wb.Sheets[wsname];
-                const data = XLSX.utils.sheet_to_json(ws) as any[];
+                
+                // Read sheet as a 2D array of rows and columns
+                const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
                 const newLines: { childId: string, quantity: number }[] = [];
                 const newSearches: string[] = [];
                 const missingSkus: string[] = [];
 
-                for (const row of data) {
-                    const sku = row['SKU'] || row['sku'] || row['Sku'];
-                    const itemName = row['Item Name'] || row['item name'] || row['name'] || row['Name'];
-                    let qty = row['Quantity'] || row['quantity'] || row['Qty'] || row['qty'];
-                    
-                    if (typeof qty === 'string') {
-                        qty = parseFloat(qty);
+                let skuColIndex = -1;
+                let qtyColIndex = -1;
+                let nameColIndex = -1;
+
+                for (let r = 0; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row.length === 0) continue;
+
+                    // Detect if this row is a header row (e.g. contains SKU or P/N:)
+                    const isHeaderRow = row.some(cell => {
+                        const val = String(cell || '').trim().toUpperCase();
+                        return val === 'SKU' || val === 'P/N:';
+                    });
+
+                    if (isHeaderRow) {
+                        // Map the column indices based on this header row
+                        skuColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'SKU' || val === 'P/N:';
+                        });
+                        qtyColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val.startsWith('QTY') || val === 'QUANTITY';
+                        });
+                        nameColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'NAME' || val === 'DESCRIPTION:';
+                        });
+                        continue; // Skip the header row itself
                     }
-                    if (!qty || isNaN(qty)) qty = 1;
 
-                    // Match component by SKU first, then by exact Item Name
-                    const comp = components.find(c => 
-                        (sku && c.sku.toLowerCase() === String(sku).toLowerCase()) || 
-                        (itemName && c.name.toLowerCase() === String(itemName).toLowerCase())
-                    );
+                    // If we have mapped columns, attempt to parse the data row
+                    if (skuColIndex !== -1 && qtyColIndex !== -1) {
+                        const rawSku = row[skuColIndex];
+                        const rawQty = row[qtyColIndex];
+                        const rawName = nameColIndex !== -1 ? row[nameColIndex] : '';
 
-                    if (comp) {
-                        newLines.push({ childId: String(comp.id), quantity: qty });
-                        newSearches.push('');
-                    } else if (sku || itemName) {
-                        missingSkus.push(sku || itemName);
+                        const sku = String(rawSku || '').trim();
+                        const itemName = String(rawName || '').trim();
+                        let qty = typeof rawQty === 'string' ? parseFloat(rawQty) : Number(rawQty);
+
+                        if (!sku && !itemName) continue; // Empty row or metadata row
+
+                        // If SKU is actually a header value (e.g. "P/N:"), skip
+                        if (sku.toUpperCase() === 'P/N:' || sku.toUpperCase() === 'SKU') continue;
+
+                        if (isNaN(qty) || qty <= 0) qty = 1;
+
+                        // Match component by SKU first, then by exact Item Name
+                        const comp = components.find(c => 
+                            (sku && c.sku.toLowerCase() === sku.toLowerCase()) || 
+                            (itemName && c.name.toLowerCase() === itemName.toLowerCase())
+                        );
+
+                        if (comp) {
+                            newLines.push({ childId: String(comp.id), quantity: qty });
+                            newSearches.push('');
+                        } else if (sku || itemName) {
+                            missingSkus.push(sku || itemName);
+                        }
                     }
                 }
 
                 if (missingSkus.length > 0) {
                     showAlert(`Error: The following items are unknown. Please add them before importing: ${missingSkus.join(', ')}`, 'error');
+                } else if (newLines.length === 0) {
+                    showAlert('No valid items found in the Excel sheet.', 'warning');
                 } else {
                     setBomLines(prev => [...prev, ...newLines]);
                     setBomSearch(prev => [...prev, ...newSearches]);

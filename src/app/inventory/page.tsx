@@ -412,60 +412,124 @@ export default function InventoryPage() {
                 const wb = XLSX.read(bstr, { type: 'binary' });
                 const wsname = wb.SheetNames[0]; // Assume first sheet
                 const ws = wb.Sheets[wsname];
-                const data = XLSX.utils.sheet_to_json(ws); // Read with headers
+                
+                // Read sheet as 2D array of rows and columns
+                const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
                 if (data.length === 0) {
                     showAlert('No data found in file.', 'warning');
                     return;
                 }
 
-                // Map specific columns requested:
-                // NAME, SKU, PART NUMBER, COST, PRICE, UNITS, TAX(18%), WAREHOUSE
-                const mappedData = data.map((row: any) => {
-                    const keys = Object.keys(row);
-                    const getVal = (search: string, searchExact = false) => {
-                        if (searchExact) {
-                            return row[search];
-                        }
-                        // Case insensitive fuzzy match
-                        const key = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === search.toLowerCase().replace(/[^a-z0-9]/g, ''));
-                        return key ? row[key] : undefined;
-                    };
+                const mappedData: any[] = [];
+                let skuColIndex = -1;
+                let nameColIndex = -1;
+                let costColIndex = -1;
+                let priceColIndex = -1;
+                let qtyColIndex = -1;
+                let minStockColIndex = -1;
+                let revColIndex = -1;
+                let whColIndex = -1;
+                let brandColIndex = -1;
 
-                    // SKU logic: Check 'SKU', then 'PART NUMBER', then 'Part Number', etc.
-                    const sku = getVal('sku') || getVal('part number') || getVal('partnumber');
-                    const name = getVal('name') || getVal('item name');
+                for (let r = 0; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row.length === 0) continue;
 
-                    return {
-                        sku: String(sku || '').trim(),
-                        name: String(name || '').trim(),
-                        type: getVal('type') || getVal('category'), // Default mapping if exists
-                        cost: Number(getVal('cost') || getVal('unit cost') || 0),
-                        price: Number(getVal('price') || getVal('sales price') || 0),
-                        // UNITS -> currentStock
-                        currentStock: Number(getVal('units') || getVal('quantity') || getVal('qty') || 0),
-                        minStock: Number(getVal('min stock') || getVal('reorder point') || 0),
-                        revision: String(getVal('rev') || getVal('revision') || '').trim(),
-                        warehouse: String(getVal('warehouse') || getVal('location') || '').trim(),
-                        brand: String(getVal('brand') || getVal('manufacturer') || getVal('vendor') || '').trim()
-                    };
-                }).filter(i => i.sku && i.name); // Filter invalid items
+                    // Detect if this row is a header row (e.g. contains SKU or P/N:)
+                    const isHeaderRow = row.some(cell => {
+                        const val = String(cell || '').trim().toUpperCase();
+                        return val === 'SKU' || val === 'P/N:';
+                    });
 
-                if (mappedData.length === 0) {
+                    if (isHeaderRow) {
+                        skuColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'SKU' || val === 'P/N:' || val === 'PART NUMBER' || val === 'PARTNUMBER';
+                        });
+                        nameColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'NAME' || val === 'DESCRIPTION:' || val === 'ITEM NAME';
+                        });
+                        costColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'COST' || val === 'UNIT COST';
+                        });
+                        priceColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'PRICE' || val === 'SALES PRICE';
+                        });
+                        qtyColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val.startsWith('QTY') || val === 'UNITS' || val === 'QUANTITY';
+                        });
+                        minStockColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'MIN STOCK' || val === 'REORDER POINT';
+                        });
+                        revColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val.startsWith('REV') || val === 'REVISION';
+                        });
+                        whColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'WAREHOUSE' || val === 'LOCATION';
+                        });
+                        brandColIndex = row.findIndex(cell => {
+                            const val = String(cell || '').trim().toUpperCase();
+                            return val === 'BRAND' || val === 'MANUFACTURER' || val === 'VENDOR';
+                        });
+                        continue; // Skip the header row itself
+                    }
+
+                    // If we have mapped columns, attempt to parse the data row
+                    if (skuColIndex !== -1 && nameColIndex !== -1) {
+                        const skuVal = String(row[skuColIndex] || '').trim();
+                        const nameVal = String(row[nameColIndex] || '').trim();
+
+                        if (!skuVal && !nameVal) continue;
+                        if (skuVal.toUpperCase() === 'P/N:' || skuVal.toUpperCase() === 'SKU') continue;
+
+                        const costVal = costColIndex !== -1 ? Number(row[costColIndex] || 0) : 0;
+                        const priceVal = priceColIndex !== -1 ? Number(row[priceColIndex] || 0) : 0;
+                        const qtyVal = qtyColIndex !== -1 ? Number(row[qtyColIndex] || 0) : 0;
+                        const minStockVal = minStockColIndex !== -1 ? Number(row[minStockColIndex] || 0) : 0;
+                        const revVal = revColIndex !== -1 ? String(row[revColIndex] || '').trim() : '';
+                        const whVal = whColIndex !== -1 ? String(row[whColIndex] || '').trim() : '';
+                        const brandVal = brandColIndex !== -1 ? String(row[brandColIndex] || '').trim() : '';
+
+                        mappedData.push({
+                            sku: skuVal,
+                            name: nameVal,
+                            type: 'Raw', // Default type for imported items
+                            cost: isNaN(costVal) ? 0 : costVal,
+                            price: isNaN(priceVal) ? 0 : priceVal,
+                            currentStock: isNaN(qtyVal) ? 0 : qtyVal,
+                            minStock: isNaN(minStockVal) ? 0 : minStockVal,
+                            revision: revVal,
+                            warehouse: whVal,
+                            brand: brandVal
+                        });
+                    }
+                }
+
+                const validData = mappedData.filter(i => i.sku && i.name);
+
+                if (validData.length === 0) {
                     showAlert('No valid items found. Ensure valid "SKU" and "NAME" columns exist.', 'warning');
                     return;
                 }
 
-                showConfirm(`Found ${mappedData.length} items to import. Proceed?`, async () => {
-                    const res = await importItems(mappedData as any);
+                showConfirm(`Found ${validData.length} items to import. Proceed?`, async () => {
+                    const res = await importItems(validData as any);
                     if (res.success) {
                         showAlert(res.message || 'Import successful', 'success');
                         if (res.errors) showAlert('Some errors occurred: ' + res.errors.join('\n'), 'warning');
                         loadItems();
 
                         // POST-IMPORT: Ask to create Assembly
-                        if (mappedData.length > 0) {
-                            setRecentImportedItems(mappedData);
+                        if (validData.length > 0) {
+                            setRecentImportedItems(validData);
                             setAssemblyFormData({ name: '', sku: '' });
                             setShowAssemblyModal(true);
                         }
@@ -652,62 +716,99 @@ export default function InventoryPage() {
         });
     }
 
-    function handleExportToExcel() {
-        // Prepare data for export
-        const exportData = filteredItems.map(item => {
-            const warehouseStocks = item.stocks?.map((s: any) => {
-                const wh = warehouses.find(w => w.id === s.warehouseId);
-                return `${wh?.name || 'Unknown'}: ${s.quantity}`;
-            }).join(', ') || '';
+    async function handleExportToExcel() {
+        setLoading(true);
+        try {
+            const res = await getItems(1, 999999, debouncedSearch, {
+                warehouseId: selectedWarehouse ? parseInt(selectedWarehouse) : undefined,
+                type: filterType || undefined,
+                brand: filterBrand || undefined,
+                lowStock: filterLowStock
+            });
 
-            return {
-                'SKU': item.sku,
-                'Revision': item.revision || '',
-                'Name': item.name,
-                'Brand': item.brand || '',
-                'Type': item.type,
-                'Warehouse': item.warehouse || '',
-                'Total Physical': item.currentStock || 0,
-                'Warehouse Breakdown': warehouseStocks,
-                'Allocated': item.allocatedStock || 0,
-                'Available': Math.max(0, (item.currentStock || 0) - (item.allocatedStock || 0)),
-                'Min Stock': item.minStock || 0,
-                'Cost': item.cost || 0,
-                'Price': item.price || 0,
-                'Description': item.description || ''
-            };
-        });
+            if (!res.success || !res.data) {
+                showAlert(res.error || 'Failed to fetch items for export', 'error');
+                return;
+            }
 
-        // Create worksheet
-        const ws = XLSX.utils.json_to_sheet(exportData);
+            // Sort retrieved items based on active sortConfig
+            const allItems = [...res.data];
+            if (sortConfig) {
+                const { key, direction } = sortConfig;
+                allItems.sort((a, b) => {
+                    let aVal = (a as any)[key] ?? '';
+                    let bVal = (b as any)[key] ?? '';
 
-        // Set column widths
-        ws['!cols'] = [
-            { wch: 15 }, // SKU
-            { wch: 8 },  // Revision
-            { wch: 30 }, // Name
-            { wch: 15 }, // Brand
-            { wch: 10 }, // Type
-            { wch: 15 }, // Warehouse
-            { wch: 12 }, // Total Stock
-            { wch: 30 }, // Warehouse Breakdown
-            { wch: 10 }, // Min Stock
-            { wch: 10 }, // Cost
-            { wch: 10 }, // Price
-            { wch: 40 }  // Description
-        ];
+                    if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                    if (typeof bVal === 'string') bVal = bVal.toLowerCase();
 
-        // Create workbook
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
+                    if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
 
-        // Generate filename with timestamp
-        const timestamp = new Date().toISOString().split('T')[0];
-        const filename = `Inventory_Export_${timestamp}.xlsx`;
+            // Prepare data for export
+            const exportData = allItems.map((item: any) => {
+                const warehouseStocks = item.stocks?.map((s: any) => {
+                    const wh = warehouses.find(w => w.id === s.warehouseId);
+                    return `${wh?.name || 'Unknown'}: ${s.quantity}`;
+                }).join(', ') || '';
 
-        // Download
-        XLSX.writeFile(wb, filename);
-        showAlert(`Exported ${exportData.length} items to ${filename}`, 'success');
+                return {
+                    'SKU': item.sku,
+                    'Revision': item.revision || '',
+                    'Name': item.name,
+                    'Brand': item.brand || '',
+                    'Type': item.type,
+                    'Warehouse': item.warehouse || '',
+                    'Total Physical': item.currentStock || 0,
+                    'Warehouse Breakdown': warehouseStocks,
+                    'Allocated': item.allocatedStock || 0,
+                    'Available': Math.max(0, (item.currentStock || 0) - (item.allocatedStock || 0)),
+                    'Min Stock': item.minStock || 0,
+                    'Cost': item.cost || 0,
+                    'Price': item.price || 0,
+                    'Description': item.description || ''
+                };
+            });
+
+            // Create worksheet
+            const ws = XLSX.utils.json_to_sheet(exportData);
+
+            // Set column widths
+            ws['!cols'] = [
+                { wch: 15 }, // SKU
+                { wch: 8 },  // Revision
+                { wch: 30 }, // Name
+                { wch: 15 }, // Brand
+                { wch: 10 }, // Type
+                { wch: 15 }, // Warehouse
+                { wch: 12 }, // Total Stock
+                { wch: 30 }, // Warehouse Breakdown
+                { wch: 10 }, // Min Stock
+                { wch: 10 }, // Cost
+                { wch: 10 }, // Price
+                { wch: 40 }  // Description
+            ];
+
+            // Create workbook
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
+
+            // Generate filename with timestamp
+            const timestamp = new Date().toISOString().split('T')[0];
+            const filename = `Inventory_Export_${timestamp}.xlsx`;
+
+            // Download
+            XLSX.writeFile(wb, filename);
+            showAlert(`Exported ${exportData.length} items to ${filename}`, 'success');
+        } catch (err) {
+            console.error(err);
+            showAlert('Failed to export to Excel', 'error');
+        } finally {
+            setLoading(false);
+        }
     }
 
     return (

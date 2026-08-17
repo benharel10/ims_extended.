@@ -160,6 +160,7 @@ export async function getItems(
             ...item,
             minStock: Number(item.minStock),
             currentStock: Number(item.currentStock),
+            allocatedStock: Number(item.allocatedStock),
             cost: Number(item.cost),
             price: Number(item.price),
             stocks: item.stocks.map(stock => ({

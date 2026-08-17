@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
-import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer, Calendar, Pencil } from 'lucide-react';
+import { Plus, Search, X, Package, Trash2, CheckCircle, AlertCircle, Hammer, Calendar, Pencil, DollarSign, Clock, TrendingUp } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer, updateSalesOrderDate, supplySOItems, updateSalesLineShippedQty } from './actions';
+import { getSalesOrders, createSalesOrder, updateSalesOrderStatus, addSalesLine, removeSalesLine, getSellableItems, deleteSalesOrder, bulkDeleteSalesOrders, getRecentProductionRuns, explodeOrderBOM, linkSalesOrderDetails, previewMissingRequirements, autoProcureMissingRequirements, getCustomers, addCustomer, updateSalesOrderDate, supplySOItems, updateSalesLineShippedQty, getCustomerMRPExcel } from './actions';
 import { createEmptyPO, getBrands, getWarehouses, getPurchaseOrders, updatePOLinkedSO } from '../purchasing/actions';
 import { runProduction } from '../production/actions';
 
@@ -126,6 +126,46 @@ export default function SalesPage() {
             }
         });
     }
+
+    const [exportingMRP, setExportingMRP] = useState(false);
+
+    async function handleExportCustomerMRP() {
+        if (!customerFilter) return;
+        setExportingMRP(true);
+        try {
+            const res = await getCustomerMRPExcel(customerFilter);
+            if (!res.success || !res.data) {
+                showAlert(res.error || 'Failed to calculate customer BOM requirements', 'error');
+                return;
+            }
+
+            const { base64, fileName } = res.data;
+
+            // Convert base64 to binary and download
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            showAlert(`MRP Excel downloaded for ${customerFilter}!`, 'success');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (error: any) {
+            showAlert('Failed to export customer MRP: ' + (error?.message || error), 'error');
+        } finally {
+            setExportingMRP(false);
+        }
+    }
+
     const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
@@ -260,6 +300,56 @@ export default function SalesPage() {
     });
     const displayedOrders = filteredOrders.slice(0, visibleCount);
 
+    // Dashboard KPI Calculations
+    const totalOrdersCount = orders.length;
+    const pendingOrdersCount = orders.filter(o => o.status !== 'Completed' && o.status !== 'Cancelled').length;
+    
+    const totalRevenue = orders
+        .filter(o => o.status !== 'Cancelled')
+        .reduce((sum, order) => {
+            return sum + order.lines.reduce((lSum, l) => lSum + (Number(l.quantity) * Number(l.unitPrice)), 0);
+        }, 0);
+
+    // Calculate Antennas Left to Supply in total
+    const totalAntennasToSupply = orders
+        .filter(o => o.status !== 'Completed' && o.status !== 'Cancelled')
+        .reduce((sum, order) => {
+            return sum + order.lines.reduce((lSum, l) => {
+                const item = sellableItems.find(i => i.id === l.itemId);
+                const isAntenna = item ? (item.type === 'Product' || item.type === 'Assembly') : true;
+                if (isAntenna) {
+                    const pending = Math.max(0, Number(l.quantity) - Number(l.shipped || 0));
+                    return lSum + pending;
+                }
+                return lSum;
+            }, 0);
+        }, 0);
+
+    // Calculate Antennas Left to Supply by Customer (for customers with open/pending orders)
+    const customerPendingSupplyMap = new Map<string, number>();
+    orders
+        .filter(o => o.status !== 'Completed' && o.status !== 'Cancelled')
+        .forEach(order => {
+            let orderPendingSupply = 0;
+            order.lines.forEach(l => {
+                const item = sellableItems.find(i => i.id === l.itemId);
+                const isAntenna = item ? (item.type === 'Product' || item.type === 'Assembly') : true;
+                if (isAntenna) {
+                    const pending = Math.max(0, Number(l.quantity) - Number(l.shipped || 0));
+                    orderPendingSupply += pending;
+                }
+            });
+
+            if (orderPendingSupply > 0) {
+                const currentVal = customerPendingSupplyMap.get(order.customer) || 0;
+                customerPendingSupplyMap.set(order.customer, currentVal + orderPendingSupply);
+            }
+        });
+
+    const customerPendingSupply = Array.from(customerPendingSupplyMap.entries())
+        .map(([customer, qty]) => ({ customer, qty }))
+        .sort((a, b) => b.qty - a.qty);
+
     return (
         <>
             <div className="animate-fade-in">
@@ -272,6 +362,81 @@ export default function SalesPage() {
                         <Plus size={18} />
                         New Order
                     </button>
+                </div>
+
+                {/* KPI Dashboard */}
+                <div className="grid-cols-4 animate-fade-in" style={{ marginBottom: '2rem' }}>
+                    {/* Card 1: Total Sales Orders */}
+                    <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem' }}>
+                        <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)' }}>
+                            <TrendingUp size={24} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>Total Sales Orders</div>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 700, margin: '0.1rem 0' }}>{totalOrdersCount}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>All-time orders placed</div>
+                        </div>
+                    </div>
+
+                    {/* Card 2: Pending Orders */}
+                    <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem' }}>
+                        <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
+                            <Clock size={24} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>Pending Orders</div>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 700, margin: '0.1rem 0' }}>{pendingOrdersCount}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Waiting to complete</div>
+                        </div>
+                    </div>
+
+                    {/* Card 3: Total Revenue */}
+                    <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem' }}>
+                        <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)' }}>
+                            <DollarSign size={24} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>Total Revenue</div>
+                            <div style={{ fontSize: '1.75rem', fontWeight: 700, margin: '0.1rem 0' }}>${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Excluding cancelled</div>
+                        </div>
+                    </div>
+
+                    {/* Card 4: Antennas Left to Supply */}
+                    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.25rem', height: '100%', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ padding: '0.75rem', borderRadius: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--secondary)' }}>
+                                <Package size={24} />
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 500 }}>Antennas to Supply</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0.1rem 0' }}>{totalAntennasToSupply} units</div>
+                            </div>
+                        </div>
+                        
+                        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.5rem' }}>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.35rem' }}>By Customer</div>
+                            <div style={{ maxHeight: '80px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.25rem', paddingRight: '0.25rem' }}>
+                                {customerPendingSupply.map(({ customer, qty }) => (
+                                    <div 
+                                        key={customer} 
+                                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', cursor: 'pointer' }}
+                                        onClick={() => {
+                                            setCustomerFilter(customer);
+                                            setVisibleCount(20);
+                                        }}
+                                        title={`Filter by ${customer}`}
+                                    >
+                                        <span style={{ color: 'var(--primary)', textDecoration: 'underline' }}>{customer}</span>
+                                        <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{qty}</span>
+                                    </div>
+                                ))}
+                                {customerPendingSupply.length === 0 && (
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No pending antennas.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="card">
@@ -309,6 +474,16 @@ export default function SalesPage() {
                                 <option key={c} value={c}>{c}</option>
                             ))}
                         </select>
+                        {customerFilter && (
+                            <button
+                                className="btn btn-outline"
+                                onClick={handleExportCustomerMRP}
+                                style={{ color: '#a855f7', borderColor: '#a855f7', padding: '0.6rem 1.2rem' }}
+                                disabled={exportingMRP}
+                            >
+                                {exportingMRP ? 'Generating MRP...' : '📦 Customer MRP'}
+                            </button>
+                        )}
                         {selectedIds.size > 0 && isAdmin && (
                             <button
                                 className="btn btn-outline"
@@ -367,7 +542,17 @@ export default function SalesPage() {
                                                     <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }} data-label="Customer Order #">
                                                         {order.customerOrderNumber || <span style={{ opacity: 0.4 }}>—</span>}
                                                     </td>
-                                                    <td style={{ padding: '1rem' }} data-label="Customer">{order.customer}</td>
+                                                    <td 
+                                                        style={{ padding: '1rem', cursor: 'pointer', color: 'var(--primary)', textDecoration: 'underline' }} 
+                                                        data-label="Customer"
+                                                        onClick={() => {
+                                                            setCustomerFilter(order.customer);
+                                                            setVisibleCount(20);
+                                                        }}
+                                                        title={`Filter by ${order.customer}`}
+                                                    >
+                                                        {order.customer}
+                                                    </td>
                                                     <td style={{ padding: '1rem' }} data-label="Status">
                                                         <span style={{
                                                             padding: '0.25rem 0.75rem',
