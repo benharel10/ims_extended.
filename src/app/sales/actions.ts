@@ -325,8 +325,13 @@ export async function updateSalesOrderStatus(id: number, status: string) {
 
                     if (remainingToDeduct > 0) {
                         // 1. Deduct overall stock
-                        const currentItem = await tx.item.findUnique({ where: { id: line.itemId }, select: { version: true } });
+                        const currentItem = await tx.item.findUnique({ where: { id: line.itemId }, select: { version: true, currentStock: true, sku: true } });
                         if (!currentItem) throw new Error(`Item not found for concurrency check`);
+
+                        if (Number(currentItem.currentStock) < remainingToDeduct) {
+                            throw new Error(`Insufficient stock for "${currentItem.sku}". Available: ${currentItem.currentStock}, Needed: ${remainingToDeduct}`);
+                        }
+
                         const occResult = await tx.item.updateMany({
                             where: { id: line.itemId, version: currentItem.version },
                             data: { 
@@ -447,8 +452,12 @@ export async function supplySOItems(
                 if (req.qty > pending) throw new Error(`Cannot supply more than pending quantity for line ${line.id}`);
 
                 // 1. Deduct overall stock
-                const currentItem = await tx.item.findUnique({ where: { id: line.itemId }, select: { version: true } });
+                const currentItem = await tx.item.findUnique({ where: { id: line.itemId }, select: { version: true, currentStock: true, sku: true } });
                 if (!currentItem) throw new Error(`Item not found for concurrency check`);
+
+                if (Number(currentItem.currentStock) < req.qty) {
+                    throw new Error(`Insufficient stock for "${currentItem.sku}". Available: ${currentItem.currentStock}, Needed: ${req.qty}`);
+                }
                 
                 const occResult = await tx.item.updateMany({
                     where: { id: line.itemId, version: currentItem.version },

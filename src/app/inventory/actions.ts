@@ -96,6 +96,16 @@ export async function getItems(
         const session = await getSession();
         const isAdmin = session?.user?.role === 'Admin';
 
+        // Auto-heal negative stock values in the database
+        await prisma.item.updateMany({
+            where: { currentStock: { lt: 0 } },
+            data: { currentStock: 0 }
+        });
+        await prisma.itemStock.updateMany({
+            where: { quantity: { lt: 0 } },
+            data: { quantity: 0 }
+        });
+
         const skip = (page - 1) * limit;
 
         const where: any = { ...ACTIVE };

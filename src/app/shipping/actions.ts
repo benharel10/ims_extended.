@@ -228,7 +228,9 @@ export async function confirmArrival(id: number) {
                                 });
                                 remaining -= deduct;
                             }
-                            // remaining > 0 means not enough stock across all warehouses — still proceed, currentStock handles it
+                            if (remaining > 0) {
+                                throw new Error(`Insufficient stock across all warehouses for "${pItem.item.sku}". Needed: ${Number(pItem.quantity)}, Available: ${Number(pItem.quantity) - remaining}`);
+                            }
                         }
 
                         // Deduct overall item currentStock (and allocatedStock if linked to SO)
@@ -314,8 +316,13 @@ export async function updateShipmentStatus(id: number, status: string) {
                         }
 
                         // 2. Deduct overall item currentStock (and allocatedStock)
-                        const currentItem = await tx.item.findUnique({ where: { id: pItem.itemId }, select: { version: true } });
+                        const currentItem = await tx.item.findUnique({ where: { id: pItem.itemId }, select: { version: true, currentStock: true, sku: true } });
                         if (!currentItem) throw new Error('Item not found for concurrency check');
+
+                        if (Number(currentItem.currentStock) < Number(pItem.quantity)) {
+                            throw new Error(`Insufficient stock for "${currentItem.sku}". Available: ${currentItem.currentStock}, Needed: ${pItem.quantity}`);
+                        }
+
                         const occResult = await tx.item.updateMany({
                             where: { id: pItem.itemId, version: currentItem.version },
                             data: { 
