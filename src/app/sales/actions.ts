@@ -1090,11 +1090,11 @@ export async function getCustomerMRPExcel(customerName: string) {
             await buildTree(itemId, 0, pendingQty, pendingQty, 1, rootType);
         }
 
-        // Fetch all open purchase order lines with status 'Sent' or 'Partial' to calculate "Quantity in Delivery"
+        // Fetch all open purchase order lines with status 'Synced', 'Sent', 'Partial', or 'Pending SKU Mapping' to calculate "Quantity in Delivery"
         const openPOLines = await prisma.pOLine.findMany({
             where: {
                 po: {
-                    status: { in: ['Sent', 'Partial'] }
+                    status: { in: ['Synced', 'Sent', 'Partial', 'Pending SKU Mapping'] }
                 },
                 itemId: { not: null }
             },
