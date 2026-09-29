@@ -1090,6 +1090,30 @@ export async function getCustomerMRPExcel(customerName: string) {
             await buildTree(itemId, 0, pendingQty, pendingQty, 1, rootType);
         }
 
+        // Fetch all open purchase order lines with status 'Sent' or 'Partial' to calculate "Quantity in Delivery"
+        const openPOLines = await prisma.pOLine.findMany({
+            where: {
+                po: {
+                    status: { in: ['Sent', 'Partial'] }
+                },
+                itemId: { not: null }
+            },
+            select: {
+                itemId: true,
+                quantity: true,
+                received: true
+            }
+        });
+
+        const inDeliveryMap = new Map<number, number>();
+        for (const line of openPOLines) {
+            if (!line.itemId) continue;
+            const pending = Math.max(0, Number(line.quantity) - Number(line.received || 0));
+            if (pending > 0) {
+                inDeliveryMap.set(line.itemId, (inDeliveryMap.get(line.itemId) || 0) + pending);
+            }
+        }
+
         // Excel Generation using exceljs
         const workbook = new ExcelJS.Workbook();
         
@@ -1103,6 +1127,7 @@ export async function getCustomerMRPExcel(customerName: string) {
             ...(isDFEND ? [{ header: 'BOM (S/L/B)', key: 'bomType', width: 16 }] : []),
             { header: 'Base Qty Needed', key: 'baseQty', width: 18 },
             { header: 'Available Stock', key: 'availableStock', width: 18 },
+            { header: 'Quantity in Delivery', key: 'quantityInDelivery', width: 20 },
             { header: 'Quantity to Order', key: 'quantityToOrder', width: 18 }
         ];
 
@@ -1120,13 +1145,18 @@ export async function getCustomerMRPExcel(customerName: string) {
             headerRow1.getCell('bomType').alignment = { horizontal: 'center' };
         }
 
+        const baseCol = isDFEND ? 'F' : 'E';
+        const availCol = isDFEND ? 'G' : 'F';
+        const delivCol = isDFEND ? 'H' : 'G';
+
         // Add raw material data
         for (const req of requirements.values()) {
             const current = Number(req.item.currentStock || 0);
             const allocated = Number(req.item.allocatedStock || 0);
             const available = Math.max(0, current - allocated);
             const baseQty = req.baseQuantity;
-            const quantityToOrder = Math.max(0, baseQty - available);
+            const inDelivery = inDeliveryMap.get(req.item.id) || 0;
+            const quantityToOrder = Math.max(0, baseQty - available - inDelivery);
 
             let bomSign = '-';
             if (isDFEND) {
@@ -1151,6 +1181,7 @@ export async function getCustomerMRPExcel(customerName: string) {
                 cost: itemCost,
                 baseQty,
                 availableStock: available,
+                quantityInDelivery: inDelivery,
                 quantityToOrder
             };
 
@@ -1159,6 +1190,13 @@ export async function getCustomerMRPExcel(customerName: string) {
             }
 
             const row = sheet1.addRow(rowData);
+            const rNum = row.number;
+
+            // Set dynamic Excel formula with fallback precalculated result
+            row.getCell('quantityToOrder').value = {
+                formula: `MAX(0, ${baseCol}${rNum} - ${availCol}${rNum} - ${delivCol}${rNum})`,
+                result: quantityToOrder
+            };
 
             // Format cost cell
             const costCell = row.getCell('cost');
