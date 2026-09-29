@@ -536,3 +536,128 @@ export async function bulkDeleteProductionRuns(ids: number[]) {
         return { success: false, error: 'Failed to delete production runs. Please try again.' };
     }
 }
+
+export async function exportBOMExcel(parentId: number) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const parentItem = await prisma.item.findUnique({ where: { id: parentId } });
+        if (!parentItem) return { success: false, error: 'Product not found' };
+
+        const ExcelJS = require('exceljs');
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('BOM Structure');
+
+        sheet.columns = [
+            { header: 'SKU', key: 'sku', width: 35 },
+            { header: 'Name', key: 'name', width: 45 },
+            { header: 'Type', key: 'type', width: 15 },
+            { header: 'Qty Per Parent', key: 'qtyPerParent', width: 15 },
+            { header: 'Available Stock', key: 'availableStock', width: 18 },
+            { header: 'Max Build Potential', key: 'maxBuildPotential', width: 22 }
+        ];
+
+        // Format header row
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.eachCell((cell: any) => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF7030A0' } // Purple header
+            };
+        });
+
+        const treeRows: any[] = [];
+        const visited = new Set<number>();
+
+        async function traverse(itemId: number, depth: number, qtyPerParent: number) {
+            if (visited.has(itemId)) return;
+            visited.add(itemId);
+
+            const item = await prisma.item.findUnique({ where: { id: itemId } });
+            if (!item || item.deletedAt !== null) {
+                visited.delete(itemId);
+                return;
+            }
+
+            const boms = await prisma.bOM.findMany({
+                where: { parentId: itemId, deletedAt: null },
+                include: { child: true }
+            });
+            const activeBoms = boms.filter(bom => bom.child && bom.child.deletedAt === null);
+
+            const currentStock = Number(item.currentStock || 0);
+            const allocatedStock = Number(item.allocatedStock || 0);
+            const availableStock = Math.max(0, currentStock - allocatedStock);
+
+            const prefix = depth === 0 ? '' : '  '.repeat(depth - 1) + '└─ ';
+            const skuWithIndent = prefix + item.sku;
+
+            const qty = Number(qtyPerParent);
+            const maxBuildPotential = (depth === 0 || isNaN(qty) || qty <= 0) ? '-' : Math.floor(Number((availableStock / qty).toFixed(4)));
+
+            treeRows.push({
+                sku: skuWithIndent,
+                name: item.name,
+                type: item.type,
+                qtyPerParent: depth === 0 ? '-' : qtyPerParent,
+                availableStock,
+                maxBuildPotential,
+                depth,
+                isSubAssembly: depth > 0 && activeBoms.length > 0
+            });
+
+            for (const bom of activeBoms) {
+                await traverse(bom.childId, depth + 1, Number(bom.quantity));
+            }
+
+            visited.delete(itemId);
+        }
+
+        // Start traversal from parent
+        await traverse(parentId, 0, 1);
+
+        // Add rows to sheet and apply styling
+        for (const rowData of treeRows) {
+            const row = sheet.addRow({
+                sku: rowData.sku,
+                name: rowData.name,
+                type: rowData.type,
+                qtyPerParent: rowData.qtyPerParent,
+                availableStock: rowData.availableStock,
+                maxBuildPotential: rowData.maxBuildPotential
+            });
+
+            // Format root products vs sub-assemblies vs raw components
+            if (rowData.depth === 0) {
+                row.eachCell((cell: any) => {
+                    cell.font = { bold: true };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFE8F1F5' } // Very light blue/gray background for root products
+                    };
+                });
+            } else if (rowData.isSubAssembly) {
+                row.eachCell((cell: any) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFF2CC' } // Soft yellow fill for sub-assemblies
+                    };
+                });
+            }
+        }
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const base64 = Buffer.from(buffer).toString('base64');
+        const fileName = `${parentItem.sku.replace(/[^a-z0-9]/gi, '_')}_BOM.xlsx`;
+
+        return { success: true, data: { base64, fileName } };
+    } catch (error: any) {
+        await logError('exportBOMExcel', error);
+        return { success: false, error: error.message || 'Failed to export BOM structure' };
+    }
+}

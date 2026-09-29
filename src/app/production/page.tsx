@@ -1,9 +1,9 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { PackageCheck, ScanLine, History, Settings, Play, Plus, Trash2, Save, Edit2, Upload } from 'lucide-react';
+import { PackageCheck, ScanLine, History, Settings, Play, Plus, Trash2, Save, Edit2, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { getAssemblyParents, getComponentOptions, getBOM, saveBOM, runProduction, getProductionRuns, updateProductionRun, deleteProductionRun, bulkDeleteProductionRuns, getWarehouses } from './actions';
+import { getAssemblyParents, getComponentOptions, getBOM, saveBOM, runProduction, getProductionRuns, updateProductionRun, deleteProductionRun, bulkDeleteProductionRuns, getWarehouses, exportBOMExcel } from './actions';
 import { createItem, deleteItem, updateItemCost } from '../inventory/actions';
 import { useSystem } from '@/components/SystemProvider';
 
@@ -26,6 +26,7 @@ export default function ProductionPage() {
     const [bomLines, setBomLines] = useState<{ childId: string, quantity: number }[]>([]);
     const [bomSearch, setBomSearch] = useState<string[]>([]); // Per-row search filter
     const [isLoadingBOM, setIsLoadingBOM] = useState(false);
+    const [isExportingBOM, setIsExportingBOM] = useState(false);
     const importBomRef = useRef<HTMLInputElement>(null);
 
     // Cost & Price State
@@ -342,6 +343,42 @@ export default function ProductionPage() {
         reader.readAsBinaryString(file);
     };
 
+    async function handleExportBOM() {
+        if (!selectedParentId) return;
+        setIsExportingBOM(true);
+        try {
+            const res = await exportBOMExcel(parseInt(selectedParentId));
+            if (!res.success || !res.data) {
+                showAlert(res.error || 'Failed to export BOM structure', 'error');
+                return;
+            }
+
+            const { base64, fileName } = res.data;
+
+            // Convert base64 to binary and download
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            showAlert('BOM Excel downloaded!', 'success');
+        } catch (error: any) {
+            showAlert('Failed to export BOM: ' + (error?.message || error), 'error');
+        } finally {
+            setIsExportingBOM(false);
+        }
+    }
+
     async function handleSaveBOM() {
         if (!selectedParentId) {
             showAlert('Please select a parent item.', 'warning');
@@ -508,6 +545,15 @@ export default function ProductionPage() {
                                     accept=".csv, .xlsx, .xls"
                                     onChange={handleImportBom}
                                 />
+                                {selectedParentId && (
+                                    <button
+                                        className="btn btn-outline"
+                                        onClick={handleExportBOM}
+                                        disabled={isExportingBOM}
+                                    >
+                                        <Download size={16} /> {isExportingBOM ? 'Exporting...' : 'Export BOM'}
+                                    </button>
+                                )}
                                 {selectedParentId && isAdmin && (
                                     <button
                                         className="btn btn-outline"

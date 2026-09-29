@@ -893,82 +893,201 @@ export async function getCustomerMRPExcel(customerName: string) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const requirements = new Map<number, { item: any; baseQuantity: number }>();
         
-        // Track consumed stocks of assemblies: key -> consumedQuantity
+        // Track consumed stocks of assemblies and raw materials: key -> consumedQuantity
         const consumedStock = new Map<number, number>();
 
-        // Track assembly stats for Sheet 2: key -> { item, totalNeeded, fulfilledFromStock, netNeeded }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const assemblyStats = new Map<number, { item: any; totalNeeded: number; fulfilledFromStock: number; netNeeded: number }>();
+        // Check if exporting for DFEND customer
+        const isDFEND = customerName.trim().toUpperCase().replace(/-/g, '').includes('DFEND');
+        const shortItemIds = new Set<number>();
+        const longItemIds = new Set<number>();
 
-        async function traverse(currentId: number, multiplier: number) {
-            const currentItem = await prisma.item.findUnique({ where: { id: currentId } });
-            if (!currentItem || currentItem.deletedAt !== null) return;
-
-            const boms = await prisma.bOM.findMany({
-                where: { parentId: currentId, deletedAt: null },
-                include: { child: true }
-            });
-
-            const activeBoms = boms.filter(bom => bom.child && bom.child.deletedAt === null);
-
-            if (activeBoms.length === 0) {
-                // It's a leaf node -> raw material / base component
-                const existing = requirements.get(currentId);
-                if (existing) {
-                    existing.baseQuantity += multiplier;
-                } else {
-                    requirements.set(currentId, { item: currentItem, baseQuantity: multiplier });
-                }
-                return;
-            }
-
-            // It's an assembly! Deduct available stock (currentStock - allocatedStock)
-            const currentStock = Number(currentItem.currentStock || 0);
-            const allocatedStock = Number(currentItem.allocatedStock || 0);
-            const totalAvailable = Math.max(0, currentStock - allocatedStock);
-
-            const alreadyConsumed = consumedStock.get(currentId) || 0;
-            const availableToUse = Math.max(0, totalAvailable - alreadyConsumed);
-
-            const fulfilled = Math.min(multiplier, availableToUse);
-            if (fulfilled > 0) {
-                consumedStock.set(currentId, alreadyConsumed + fulfilled);
-            }
-
-            const net = multiplier - fulfilled;
-
-            // Track stats for this assembly
-            const existingStat = assemblyStats.get(currentId);
-            if (existingStat) {
-                existingStat.totalNeeded += multiplier;
-                existingStat.fulfilledFromStock += fulfilled;
-                existingStat.netNeeded += net;
-            } else {
-                assemblyStats.set(currentId, {
-                    item: currentItem,
-                    totalNeeded: multiplier,
-                    fulfilledFromStock: fulfilled,
-                    netNeeded: net
+        if (isDFEND) {
+            try {
+                // Fetch all active BOM links to map the entire product structure
+                const allActiveBoms = await prisma.bOM.findMany({
+                    where: { deletedAt: null },
+                    select: { parentId: true, childId: true }
                 });
-            }
 
-            if (net > 0) {
-                // It has children, traverse them
-                for (const bom of activeBoms) {
-                    await traverse(bom.childId, net * Number(bom.quantity));
+                const bomChildrenMap = new Map<number, number[]>();
+                for (const b of allActiveBoms) {
+                    const list = bomChildrenMap.get(b.parentId) || [];
+                    list.push(b.childId);
+                    bomChildrenMap.set(b.parentId, list);
                 }
+
+                function getDescendantIds(rootIds: number[]): Set<number> {
+                    const result = new Set<number>();
+                    const seen = new Set<number>();
+                    function dfs(currId: number) {
+                        if (seen.has(currId)) return;
+                        seen.add(currId);
+                        const children = bomChildrenMap.get(currId) || [];
+                        for (const cId of children) {
+                            result.add(cId);
+                            dfs(cId);
+                        }
+                    }
+                    for (const rId of rootIds) {
+                        dfs(rId);
+                    }
+                    return result;
+                }
+
+                const dfendCandidates = await prisma.item.findMany({
+                    where: {
+                        deletedAt: null,
+                        OR: [
+                            { name: { contains: 'DFEND', mode: 'insensitive' } },
+                            { sku: { contains: '017KNW18ICD', mode: 'insensitive' } }
+                        ]
+                    },
+                    select: { id: true, sku: true, name: true }
+                });
+
+                const shortRootIds: number[] = [];
+                const longRootIds: number[] = [];
+
+                for (const item of dfendCandidates) {
+                    const upperName = item.name.toUpperCase();
+                    const upperSku = item.sku.toUpperCase();
+                    if (upperName.includes('SHORT') || upperSku.includes('ICD02')) {
+                        shortRootIds.push(item.id);
+                        shortItemIds.add(item.id);
+                    }
+                    if (upperName.includes('LONG') || upperSku.includes('ICD01')) {
+                        longRootIds.push(item.id);
+                        longItemIds.add(item.id);
+                    }
+                }
+
+                const shortDescendants = getDescendantIds(shortRootIds);
+                const longDescendants = getDescendantIds(longRootIds);
+
+                for (const id of shortDescendants) shortItemIds.add(id);
+                for (const id of longDescendants) longItemIds.add(id);
+            } catch (err) {
+                console.error('Error precomputing DFEND BOM sets:', err);
             }
         }
 
+        // To generate Sheet 2: a flat array of tree nodes to be appended
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const treeRows: any[] = [];
+        const visited = new Set<number>();
+
+        async function buildTree(
+            itemId: number,
+            depth: number,
+            parentTotalNeeded: number,
+            parentNetNeeded: number,
+            qtyPerParent: number,
+            rootType: 'SHORT' | 'LONG' | 'UNKNOWN' = 'UNKNOWN'
+        ) {
+            if (visited.has(itemId)) return;
+            visited.add(itemId);
+
+            const item = await prisma.item.findUnique({ where: { id: itemId } });
+            if (!item || item.deletedAt !== null) {
+                visited.delete(itemId);
+                return;
+            }
+
+            if (rootType === 'SHORT') shortItemIds.add(itemId);
+            if (rootType === 'LONG') longItemIds.add(itemId);
+
+            const boms = await prisma.bOM.findMany({
+                where: { parentId: itemId, deletedAt: null },
+                include: { child: true }
+            });
+            const activeBoms = boms.filter(bom => bom.child && bom.child.deletedAt === null);
+
+            const currentStock = Number(item.currentStock || 0);
+            const allocatedStock = Number(item.allocatedStock || 0);
+            const availableStock = Math.max(0, currentStock - allocatedStock);
+
+            // Calculate total needed (gross quantity needed at this level)
+            const totalNeeded = depth === 0 ? parentTotalNeeded : parentTotalNeeded * qtyPerParent;
+
+            // Calculate net multiplier (net quantity needed from parent level to build the parent)
+            const netMultiplier = depth === 0 ? parentNetNeeded : parentNetNeeded * qtyPerParent;
+
+            // Determine stock consumption for this node
+            const alreadyConsumed = consumedStock.get(itemId) || 0;
+            const availableToUse = Math.max(0, availableStock - alreadyConsumed);
+            const fulfilled = Math.min(netMultiplier, availableToUse);
+
+            if (fulfilled > 0) {
+                consumedStock.set(itemId, alreadyConsumed + fulfilled);
+            }
+            const netNeeded = netMultiplier - fulfilled;
+
+            // Add raw materials to Sheet 1 requirements if this is a leaf node
+            if (activeBoms.length === 0) {
+                const existing = requirements.get(itemId);
+                if (existing) {
+                    existing.baseQuantity += netMultiplier;
+                } else {
+                    requirements.set(itemId, { item, baseQuantity: netMultiplier });
+                }
+            }
+
+            // Indent SKU for visual tree representation
+            const prefix = depth === 0 ? '' : '  '.repeat(depth - 1) + '└─ ';
+            const skuWithIndent = prefix + item.sku;
+
+            treeRows.push({
+                sku: skuWithIndent,
+                name: item.name,
+                type: item.type,
+                qtyPerParent: depth === 0 ? '-' : qtyPerParent,
+                totalNeeded,
+                availableStock,
+                fulfilledFromStock: fulfilled,
+                netNeeded,
+                depth,
+                isSubAssembly: depth > 0 && activeBoms.length > 0
+            });
+
+            // Recurse into children
+            for (const bom of activeBoms) {
+                await buildTree(bom.childId, depth + 1, totalNeeded, netNeeded, Number(bom.quantity), rootType);
+            }
+
+            visited.delete(itemId);
+        }
+
+        // Group open sales order line items by unique top-level item to prevent duplicate trees
+        const topLevelItems = new Map<number, number>();
         for (const order of openOrders) {
             for (const line of order.lines) {
                 if (line.itemId) {
                     const pendingQty = Number(line.quantity) - Number(line.shipped || 0);
                     if (pendingQty > 0) {
-                        await traverse(line.itemId, pendingQty);
+                        topLevelItems.set(line.itemId, (topLevelItems.get(line.itemId) || 0) + pendingQty);
                     }
                 }
             }
+        }
+
+        // Traverse each unique top-level item to populate the tree
+        for (const [itemId, pendingQty] of topLevelItems.entries()) {
+            let rootType: 'SHORT' | 'LONG' | 'UNKNOWN' = 'UNKNOWN';
+            if (isDFEND) {
+                const rootItem = await prisma.item.findUnique({ where: { id: itemId } });
+                if (rootItem) {
+                    const uName = rootItem.name.toUpperCase();
+                    const uSku = rootItem.sku.toUpperCase();
+                    if (uName.includes('SHORT') || uSku.includes('ICD02')) {
+                        rootType = 'SHORT';
+                        shortItemIds.add(itemId);
+                    } else if (uName.includes('LONG') || uSku.includes('ICD01')) {
+                        rootType = 'LONG';
+                        longItemIds.add(itemId);
+                    }
+                }
+            }
+            await buildTree(itemId, 0, pendingQty, pendingQty, 1, rootType);
         }
 
         // Excel Generation using exceljs
@@ -980,6 +1099,8 @@ export async function getCustomerMRPExcel(customerName: string) {
             { header: 'SKU', key: 'sku', width: 25 },
             { header: 'Name', key: 'name', width: 40 },
             { header: 'Brand', key: 'brand', width: 20 },
+            { header: 'Cost', key: 'cost', width: 15 },
+            ...(isDFEND ? [{ header: 'BOM (S/L/B)', key: 'bomType', width: 16 }] : []),
             { header: 'Base Qty Needed', key: 'baseQty', width: 18 },
             { header: 'Available Stock', key: 'availableStock', width: 18 },
             { header: 'Quantity to Order', key: 'quantityToOrder', width: 18 }
@@ -995,6 +1116,9 @@ export async function getCustomerMRPExcel(customerName: string) {
                 fgColor: { argb: 'FF4F81BD' } // Nice corporate blue
             };
         });
+        if (isDFEND) {
+            headerRow1.getCell('bomType').alignment = { horizontal: 'center' };
+        }
 
         // Add raw material data
         for (const req of requirements.values()) {
@@ -1004,14 +1128,47 @@ export async function getCustomerMRPExcel(customerName: string) {
             const baseQty = req.baseQuantity;
             const quantityToOrder = Math.max(0, baseQty - available);
 
-            const row = sheet1.addRow({
+            let bomSign = '-';
+            if (isDFEND) {
+                const inShort = shortItemIds.has(req.item.id);
+                const inLong = longItemIds.has(req.item.id);
+                if (inShort && inLong) {
+                    bomSign = 'B';
+                } else if (inShort) {
+                    bomSign = 'S';
+                } else if (inLong) {
+                    bomSign = 'L';
+                }
+            }
+
+            const itemCost = Number(req.item.cost || 0);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const rowData: Record<string, any> = {
                 sku: req.item.sku,
                 name: req.item.name,
                 brand: req.item.brand || '',
+                cost: itemCost,
                 baseQty,
                 availableStock: available,
                 quantityToOrder
-            });
+            };
+
+            if (isDFEND) {
+                rowData.bomType = bomSign;
+            }
+
+            const row = sheet1.addRow(rowData);
+
+            // Format cost cell
+            const costCell = row.getCell('cost');
+            costCell.numFmt = '$#,##0.00##';
+
+            // Center-align the S/L/B indicator
+            if (isDFEND) {
+                const bomCell = row.getCell('bomType');
+                bomCell.alignment = { horizontal: 'center' };
+            }
 
             // If quantity to order is > 0, highlight the entire row in red
             if (quantityToOrder > 0) {
@@ -1032,10 +1189,12 @@ export async function getCustomerMRPExcel(customerName: string) {
         // ── Sheet 2: Sub-Assembly Consumption ──
         const sheet2 = workbook.addWorksheet('Sub-Assembly Consumption');
         sheet2.columns = [
-            { header: 'SKU', key: 'sku', width: 25 },
-            { header: 'Name', key: 'name', width: 40 },
+            { header: 'SKU', key: 'sku', width: 35 },
+            { header: 'Name', key: 'name', width: 45 },
             { header: 'Type', key: 'type', width: 15 },
+            { header: 'Qty Per Parent', key: 'qtyPerParent', width: 15 },
             { header: 'Total Needed', key: 'totalNeeded', width: 15 },
+            { header: 'Available Stock', key: 'availableStock', width: 18 },
             { header: 'Fulfilled From Stock', key: 'fulfilledFromStock', width: 20 },
             { header: 'Net Needed to Build', key: 'netNeeded', width: 20 }
         ];
@@ -1051,28 +1210,35 @@ export async function getCustomerMRPExcel(customerName: string) {
             };
         });
 
-        // Add assembly stats
-        for (const stat of assemblyStats.values()) {
+        // Add assembly tree rows
+        for (const rowData of treeRows) {
             const row = sheet2.addRow({
-                sku: stat.item.sku,
-                name: stat.item.name,
-                type: stat.item.type,
-                totalNeeded: stat.totalNeeded,
-                fulfilledFromStock: stat.fulfilledFromStock,
-                netNeeded: stat.netNeeded
+                sku: rowData.sku,
+                name: rowData.name,
+                type: rowData.type,
+                qtyPerParent: rowData.qtyPerParent,
+                totalNeeded: rowData.totalNeeded,
+                availableStock: rowData.availableStock,
+                fulfilledFromStock: rowData.fulfilledFromStock,
+                netNeeded: rowData.netNeeded
             });
 
-            // Highlight in orange/yellow if net needed > 0
-            if (stat.netNeeded > 0) {
+            // Format root products vs sub-assemblies vs raw components
+            if (rowData.depth === 0) {
+                row.eachCell(cell => {
+                    cell.font = { bold: true };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFE8F1F5' } // Very light blue/gray background for root products
+                    };
+                });
+            } else if (rowData.isSubAssembly) {
                 row.eachCell(cell => {
                     cell.fill = {
                         type: 'pattern',
                         pattern: 'solid',
-                        fgColor: { argb: 'FFFEF2CB' } // Light yellow/orange
-                    };
-                    cell.font = {
-                        color: { argb: 'FFB25E00' }, // Dark yellow text
-                        bold: true
+                        fgColor: { argb: 'FFFFF2CC' } // Soft yellow fill for sub-assemblies
                     };
                 });
             }
