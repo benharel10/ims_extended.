@@ -896,29 +896,58 @@ export default function ShippingPage() {
                             </div>
                         </div>
 
-                        {printingShipment.packages.map((pkg: any, idx: number) => (
-                            <div key={pkg.id} style={{ marginBottom: '2rem' }}>
-                                <h2>Box #{idx + 1} <span style={{ fontSize: '0.8em', fontWeight: 'normal' }}>({pkg.type})</span></h2>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>SKU</th>
-                                            <th>Description</th>
-                                            <th style={{ textAlign: 'right' }}>Quantity</th>
+                        {printingShipment.packages.length === 0 ? (
+                            <div style={{ padding: '1rem', textAlign: 'center', color: '#666' }}>No packages in this shipment.</div>
+                        ) : (
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style={{ width: '15%' }}>Box</th>
+                                        <th style={{ width: '25%' }}>SKU</th>
+                                        <th>Description</th>
+                                        <th style={{ textAlign: 'right', width: '15%' }}>Quantity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {printingShipment.packages.flatMap((pkg: any, idx: number) => {
+                                        const boxLabel = `Box #${idx + 1}${pkg.type && pkg.type !== 'Box' ? ` (${pkg.type})` : ''}`;
+                                        if (!pkg.items || pkg.items.length === 0) {
+                                            return [{
+                                                id: `empty-${pkg.id || idx}`,
+                                                boxLabel,
+                                                sku: '-',
+                                                name: 'Empty Box',
+                                                quantity: 0
+                                            }];
+                                        }
+                                        return pkg.items.map((pItem: any) => ({
+                                            id: pItem.id,
+                                            boxLabel,
+                                            sku: pItem.item?.sku || '-',
+                                            name: (pItem.item?.name || '-') + (pItem.serializedItem?.sn ? ` (SN: ${pItem.serializedItem.sn})` : ''),
+                                            quantity: pItem.quantity
+                                        }));
+                                    }).map((row: any) => (
+                                        <tr key={row.id}>
+                                            <td style={{ fontWeight: 600 }}>{row.boxLabel}</td>
+                                            <td>{row.sku}</td>
+                                            <td>{row.name}</td>
+                                            <td style={{ textAlign: 'right' }}>{row.quantity}</td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pkg.items.map((pItem: any) => (
-                                            <tr key={pItem.id}>
-                                                <td>{pItem.item.sku}</td>
-                                                <td>{pItem.item.name}</td>
-                                                <td style={{ textAlign: 'right' }}>{pItem.quantity}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ))}
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr style={{ borderTop: '2px solid #000', fontWeight: 'bold' }}>
+                                        <td colSpan={3} style={{ textAlign: 'right', padding: '0.5rem' }}>Total Quantity:</td>
+                                        <td style={{ textAlign: 'right', padding: '0.5rem' }}>
+                                            {printingShipment.packages.reduce((sum: number, pkg: any) =>
+                                                sum + (pkg.items || []).reduce((pSum: number, item: any) => pSum + Number(item.quantity || 0), 0)
+                                            , 0)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        )}
                     </div>
                 )
             }

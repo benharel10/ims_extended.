@@ -663,6 +663,14 @@ p {
     margin-top: 1rem;
   }
 
+  .printable-area thead {
+    display: table-header-group;
+  }
+
+  .printable-area tr {
+    page-break-inside: avoid;
+  }
+
   .printable-area th {
     border-bottom: 2px solid #000;
     text-align: left;
@@ -673,6 +681,10 @@ p {
   .printable-area td {
     border-bottom: 1px solid #ddd;
     padding: 0.5rem;
+  }
+
+  .printable-area tfoot {
+    display: table-footer-group;
   }
 }
 
