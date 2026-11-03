@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft, Search, Loader2 } from 'lucide-react';
+import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft, Search, Loader2, Clock } from 'lucide-react';
 import { getShipments, createShipment, createPackage, addItemToPackage, addItemsToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival, importExcelToShipment, validateExcelTransferRows } from './actions';
 import { getItems } from '../inventory/actions'; // Reuse getItems
 import { useSystem } from '@/components/SystemProvider';
@@ -573,6 +573,12 @@ export default function ShippingPage() {
                                             )}
                                         </div>
                                         <span className={`badge ${shipment.status === 'Draft' ? 'badge-warning' : 'badge-success'}`}>{shipment.status}</span>
+                                        {shipment.createdAt && (
+                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(255,255,255,0.04)', padding: '0.2rem 0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                                                <Clock size={14} style={{ color: 'var(--primary)' }} />
+                                                {new Date(shipment.createdAt).toLocaleDateString('en-GB')} {new Date(shipment.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        )}
                                     </div>
                                     <div style={{ display: 'flex', gap: '2rem', color: 'var(--text-muted)', fontSize: '0.9rem', alignItems: 'center' }}>
                                         {shipment.type === 'Transfer' ? (
@@ -606,7 +612,7 @@ export default function ShippingPage() {
                                     <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.1)' }}>
                                         <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <h3>Packages</h3>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                                 {shipment.type === 'Transfer' && shipment.status !== 'Completed' && (
                                                     <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); handleCompleteTransfer(shipment.id); }} style={{ background: '#10b981', color: 'white', border: 'none' }}>
                                                         <ArrowRightLeft size={14} style={{ marginRight: '0.5rem' }} /> Complete Transfer
@@ -623,7 +629,12 @@ export default function ShippingPage() {
                                                 )}
                                                 {shipment.status === 'Delivered' && (
                                                     <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
-                                                        ✓ Delivered{shipment.receiveDate ? ` on ${new Date(shipment.receiveDate).toLocaleDateString()}` : ''}
+                                                        ✓ Delivered{shipment.receiveDate ? ` on ${new Date(shipment.receiveDate).toLocaleDateString()} ${new Date(shipment.receiveDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                                                    </span>
+                                                )}
+                                                {shipment.status === 'Completed' && shipment.receiveDate && (
+                                                    <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
+                                                        ✓ Completed on {new Date(shipment.receiveDate).toLocaleDateString()} {new Date(shipment.receiveDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 )}
                                                 <button className="btn btn-sm btn-outline" onClick={(e) => { e.stopPropagation(); handlePrint(shipment); }}>
@@ -888,7 +899,7 @@ export default function ShippingPage() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
                             <div>
                                 <strong>Shipment #:</strong> {printingShipment.shipmentNo}<br />
-                                <strong>Date:</strong> {new Date().toLocaleDateString()}
+                                <strong>Date:</strong> {printingShipment.createdAt ? `${new Date(printingShipment.createdAt).toLocaleDateString()} ${new Date(printingShipment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
                             </div>
                             <div style={{ textAlign: 'right' }}>
                                 <strong>Method:</strong> {printingShipment.carrier?.replace('Local: ', '')}<br />
