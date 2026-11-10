@@ -103,6 +103,8 @@ model SerializedItem {
   parent          SerializedItem?  @relation("Genealogy", fields: [parentSnId], references: [id])
   children        SerializedItem[] @relation("Genealogy")
   productionRun   ProductionRun?   @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, status])
 }
 
 model PurchaseOrder {
@@ -205,6 +207,13 @@ model Shipment {
   fromWarehouse   Warehouse?  @relation("Origin", fields: [fromWarehouseId], references: [id])
   salesOrder      SalesOrder? @relation(fields: [soId], references: [id])
   toWarehouse     Warehouse?  @relation("Destination", fields: [toWarehouseId], references: [id])
+
+  @@index([createdAt])
+  @@index([soId])
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+  @@index([type])
+  @@index([status])
 }
 
 model Package {
@@ -216,6 +225,8 @@ model Package {
   trackingNo String?
   shipment   Shipment      @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   items      PackageItem[]
+
+  @@index([shipmentId])
 }
 
 model PackageItem {
@@ -227,6 +238,10 @@ model PackageItem {
   item             Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
   package          Package         @relation(fields: [packageId], references: [id], onDelete: Cascade)
   serializedItem   SerializedItem? @relation(fields: [serializedItemId], references: [id])
+
+  @@index([packageId])
+  @@index([itemId])
+  @@index([serializedItemId])
 }
 
 model ProductionRun {

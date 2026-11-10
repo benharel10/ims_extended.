@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Truck, Box, Plus, Package as PackageIcon, Trash2, ChevronDown, ChevronRight, Save, Printer, Building, ArrowRightLeft, Search, Loader2, Clock } from 'lucide-react';
-import { getShipments, createShipment, createPackage, addItemToPackage, addItemsToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival, importExcelToShipment, validateExcelTransferRows } from './actions';
-import { getItems } from '../inventory/actions'; // Reuse getItems
+import { getShipments, getShippingPageData, searchShippingItems, createShipment, createPackage, addItemToPackage, addItemsToPackage, deletePackage, removeItemFromPackage, updateShipmentStatus, getAvailableSerialNumbers, deleteShipment, bulkDeleteShipments, getWarehouses, createWarehouse, deleteWarehouse, completeTransfer, confirmArrival, importExcelToShipment, validateExcelTransferRows } from './actions';
 import { useSystem } from '@/components/SystemProvider';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -12,7 +11,6 @@ export default function ShippingPage() {
     const { user, showAlert, showConfirm } = useSystem();
     const isAdmin = user?.role === 'Admin';
     const [shipments, setShipments] = useState<any[]>([]);
-    const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedShipmentId, setExpandedShipmentId] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState<'all' | 'carrier' | 'local' | 'transfer'>('all');
@@ -37,7 +35,7 @@ export default function ShippingPage() {
     const [searchingItems, setSearchingItems] = useState(false);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [showResults, setShowResults] = useState(false);
-    const debouncedItemSearch = useDebounce(itemSearch, 500);
+    const debouncedItemSearch = useDebounce(itemSearch, 250);
     const searchRef = useRef<HTMLDivElement>(null);
 
     const [qtyToAdd, setQtyToAdd] = useState(1);
@@ -73,7 +71,12 @@ export default function ShippingPage() {
         showConfirm('Are you sure you want to delete this shipment?', async () => {
             const res = await deleteShipment(id);
             if (res.success) {
-                loadData();
+                setShipments(prev => prev.filter(s => s.id !== id));
+                setSelectedShipmentIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(id);
+                    return next;
+                });
                 showAlert('Shipment deleted', 'success');
             } else {
                 showAlert(res.error || 'Failed to delete shipment', 'error');
@@ -83,10 +86,12 @@ export default function ShippingPage() {
 
     async function handleBulkDeleteShipments() {
         showConfirm(`Delete ${selectedShipmentIds.size} shipments?`, async () => {
-            const res = await bulkDeleteShipments(Array.from(selectedShipmentIds));
+            const idsToDelete = Array.from(selectedShipmentIds);
+            const res = await bulkDeleteShipments(idsToDelete);
             if (res.success) {
+                const deletedSet = new Set(idsToDelete);
+                setShipments(prev => prev.filter(s => !deletedSet.has(s.id)));
                 setSelectedShipmentIds(new Set());
-                loadData();
                 showAlert('Shipments deleted', 'success');
             } else {
                 showAlert(res.error || 'Failed to delete shipments', 'error');
@@ -119,11 +124,11 @@ export default function ShippingPage() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // Effect to search items when itemSearch changes
+    // Effect to search items when itemSearch changes (lightweight read-only query)
     useEffect(() => {
         if (debouncedItemSearch.trim().length > 0) {
             setSearchingItems(true);
-            getItems(1, 10, debouncedItemSearch).then(res => {
+            searchShippingItems(debouncedItemSearch).then(res => {
                 if (res.success) {
                     setSearchResults(res.data || []);
                     setShowResults(true);
@@ -137,18 +142,19 @@ export default function ShippingPage() {
     }, [debouncedItemSearch]);
 
     useEffect(() => {
-        loadData();
+        loadData(false);
     }, []);
 
-    async function loadData() {
-        setLoading(true);
-        const [shipRes, itemRes, whRes] = await Promise.all([getShipments(), getItems(), getWarehouses()]);
+    async function loadData(silent = false) {
+        if (!silent) setLoading(true);
+        const res = await getShippingPageData();
 
-        if (shipRes.success) setShipments(shipRes.data || []);
-        if (itemRes.success) setItems(itemRes.data || []);
-        if (whRes.success) setWarehouses(whRes.data || []);
+        if (res.success && res.data) {
+            setShipments(res.data.shipments || []);
+            setWarehouses(res.data.warehouses || []);
+        }
 
-        setLoading(false);
+        if (!silent) setLoading(false);
     }
 
     async function handleCreateShipment() {
@@ -196,7 +202,11 @@ export default function ShippingPage() {
                 shipmentNo: '', carrier: '', trackingNo: '', driverName: '', vehiclePlate: '',
                 fromWarehouseId: '', toWarehouseId: '', destination: ''
             });
-            loadData();
+            if (res.data) {
+                setShipments(prev => [res.data, ...prev]);
+            } else {
+                loadData(true);
+            }
             showAlert('Shipment created', 'success');
         } else {
             showAlert('Failed to create shipment: ' + (res.error || 'Unknown error'), 'error');
@@ -211,7 +221,11 @@ export default function ShippingPage() {
         const res = await createWarehouse(newWarehouseData);
         if (res.success) {
             setNewWarehouseData({ name: '', location: '', type: 'Standard' });
-            loadData(); // Reloads warehouses list
+            if (res.data) {
+                setWarehouses(prev => [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name)));
+            } else {
+                loadData(true);
+            }
             showAlert('Warehouse added', 'success');
         } else {
             showAlert(res.error || 'Failed to create warehouse', 'error');
@@ -222,7 +236,7 @@ export default function ShippingPage() {
         showConfirm('Delete warehouse?', async () => {
             const res = await deleteWarehouse(id);
             if (res.success) {
-                loadData();
+                setWarehouses(prev => prev.filter(w => w.id !== id));
                 showAlert('Warehouse deleted', 'success');
             } else {
                 showAlert(res.error || 'Failed to delete warehouse', 'error');
@@ -235,7 +249,7 @@ export default function ShippingPage() {
             const res = await completeTransfer(shipmentId);
             if (res.success) {
                 showAlert('Transfer Completed Successfully', 'success');
-                loadData();
+                loadData(true);
             } else {
                 showAlert('Transfer Failed: ' + (res.error || 'Unknown error'), 'error');
             }
@@ -243,8 +257,16 @@ export default function ShippingPage() {
     }
 
     async function handleAddPackage(shipmentId: number) {
-        await createPackage(shipmentId);
-        loadData();
+        const res = await createPackage(shipmentId);
+        if (res.success && res.data) {
+            setShipments(prev => prev.map(s =>
+                s.id === shipmentId
+                    ? { ...s, packages: [...(s.packages || []), res.data] }
+                    : s
+            ));
+        } else {
+            loadData(true);
+        }
     }
 
     async function handleExcelUpload(e: any, shipmentId: number) {
@@ -344,16 +366,14 @@ export default function ShippingPage() {
             return;
         }
 
-        setLoading(true);
         const res = await importExcelToShipment(excelShipmentId, validRows);
-        setLoading(false);
 
         if (res.success) {
             showAlert(res.message || 'Excel imported successfully', 'success');
             setShowExcelPreviewModal(false);
             setExcelPreviewRows([]);
             setExcelShipmentId(null);
-            loadData();
+            loadData(true);
         } else {
             showAlert(res.error || 'Failed to import Excel', 'error');
         }
@@ -404,7 +424,6 @@ export default function ShippingPage() {
         const items = pendingPackageItems[packageId];
         if (!items || items.length === 0) return;
 
-        setLoading(true);
         const res = await addItemsToPackage(packageId, items.map((i: any) => ({
             itemId: i.itemId,
             quantity: i.quantity,
@@ -418,11 +437,19 @@ export default function ShippingPage() {
                 return next;
             });
             setAddingItemToPkg(null);
-            loadData();
+            if (res.data) {
+                setShipments(prev => prev.map(s => ({
+                    ...s,
+                    packages: (s.packages || []).map((pkg: any) =>
+                        pkg.id === packageId ? res.data : pkg
+                    )
+                })));
+            } else {
+                loadData(true);
+            }
             showAlert('Items saved to package', 'success');
         } else {
             showAlert('Server Error: ' + (res.error || 'Unknown error'), 'error');
-            setLoading(false);
         }
     }
 
@@ -621,7 +648,7 @@ export default function ShippingPage() {
                                                 {shipment.type !== 'Transfer' && !['Delivered', 'Completed'].includes(shipment.status) && (
                                                     <button
                                                         className="btn btn-sm btn-success"
-                                                        onClick={async (e) => { e.stopPropagation(); const res = await confirmArrival(shipment.id); if (res.success) { loadData(); showAlert('Shipment marked as Delivered', 'success'); } else showAlert(res.error || 'Failed', 'error'); }}
+                                                        onClick={async (e) => { e.stopPropagation(); const res = await confirmArrival(shipment.id); if (res.success) { loadData(true); showAlert('Shipment marked as Delivered', 'success'); } else showAlert(res.error || 'Failed', 'error'); }}
                                                         style={{ background: '#10b981', color: 'white', border: 'none' }}
                                                     >
                                                         ✓ Confirm Arrival
@@ -677,7 +704,18 @@ export default function ShippingPage() {
                                                                 <span className="text-muted" style={{ fontSize: '0.8rem' }}>({pkg.type})</span>
                                                             </div>
                                                             {isAdmin && (
-                                                                <button onClick={async () => { const res = await deletePackage(pkg.id); if (res.success) loadData(); else showAlert('Failed to delete box', 'error'); }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                                                <button onClick={async () => {
+                                                                    const res = await deletePackage(pkg.id);
+                                                                    if (res.success) {
+                                                                        setShipments(prev => prev.map(s =>
+                                                                            s.id === shipment.id
+                                                                                ? { ...s, packages: (s.packages || []).filter((p: any) => p.id !== pkg.id) }
+                                                                                : s
+                                                                        ));
+                                                                    } else {
+                                                                        showAlert('Failed to delete box', 'error');
+                                                                    }
+                                                                }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
                                                                     <Trash2 size={14} />
                                                                 </button>
                                                             )}
@@ -698,7 +736,25 @@ export default function ShippingPage() {
                                                                             <td style={{ color: 'var(--text-main)' }}>{pItem.quantity}</td>
                                                                             <td>
                                                                                 {isAdmin && (
-                                                                                    <button onClick={async () => { const res = await removeItemFromPackage(pItem.id); if (res.success) loadData(); else showAlert('Failed to remove item', 'error'); }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+                                                                                    <button onClick={async () => {
+                                                                                        const res = await removeItemFromPackage(pItem.id);
+                                                                                        if (res.success) {
+                                                                                            setShipments(prev => prev.map(s =>
+                                                                                                s.id === shipment.id
+                                                                                                    ? {
+                                                                                                        ...s,
+                                                                                                        packages: (s.packages || []).map((p: any) =>
+                                                                                                            p.id === pkg.id
+                                                                                                                ? { ...p, items: (p.items || []).filter((i: any) => i.id !== pItem.id) }
+                                                                                                                : p
+                                                                                                        )
+                                                                                                    }
+                                                                                                    : s
+                                                                                            ));
+                                                                                        } else {
+                                                                                            showAlert('Failed to remove item', 'error');
+                                                                                        }
+                                                                                    }} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
                                                                                 )}
                                                                             </td>
                                                                         </tr>

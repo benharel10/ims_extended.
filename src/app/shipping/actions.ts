@@ -78,7 +78,57 @@ export async function deleteWarehouse(id: number) {
     }
 }
 
-// ─── Serialized Items ─────────────────────────────────────────────────────────
+// ─── Serialized Items & Lightweight Item Search ───────────────────────────────
+
+export async function searchShippingItems(search: string) {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const trimmed = search.trim();
+        if (!trimmed) return { success: true, data: [] };
+
+        const items = await prisma.item.findMany({
+            where: {
+                deletedAt: null,
+                OR: [
+                    { sku: { contains: trimmed, mode: 'insensitive' } },
+                    { name: { contains: trimmed, mode: 'insensitive' } },
+                    { brand: { contains: trimmed, mode: 'insensitive' } },
+                ]
+            },
+            select: {
+                id: true,
+                sku: true,
+                name: true,
+                isSerialized: true,
+                currentStock: true,
+                stocks: {
+                    select: {
+                        warehouseId: true,
+                        quantity: true
+                    }
+                }
+            },
+            orderBy: { sku: 'asc' },
+            take: 15
+        });
+
+        const data = items.map(item => ({
+            ...item,
+            currentStock: Number(item.currentStock),
+            stocks: item.stocks.map(s => ({
+                warehouseId: s.warehouseId,
+                quantity: Number(s.quantity)
+            }))
+        }));
+
+        return { success: true, data };
+    } catch (error) {
+        await logError('shipping.searchShippingItems', error);
+        return { success: false, error: 'Failed to search items. Please try again.' };
+    }
+}
 
 export async function getAvailableSerialNumbers(itemId: number) {
     try {
@@ -98,33 +148,111 @@ export async function getAvailableSerialNumbers(itemId: number) {
 
 // ─── Shipments ────────────────────────────────────────────────────────────────
 
+const shipmentInclude = {
+    salesOrder: {
+        select: {
+            id: true,
+            soNumber: true,
+            customer: true,
+            status: true
+        }
+    },
+    fromWarehouse: {
+        select: {
+            id: true,
+            name: true,
+            location: true,
+            type: true
+        }
+    },
+    toWarehouse: {
+        select: {
+            id: true,
+            name: true,
+            location: true,
+            type: true
+        }
+    },
+    packages: {
+        orderBy: { id: 'asc' as const },
+        include: {
+            items: {
+                orderBy: { id: 'asc' as const },
+                include: {
+                    item: {
+                        select: {
+                            id: true,
+                            sku: true,
+                            name: true,
+                            isSerialized: true,
+                            uom: true
+                        }
+                    },
+                    serializedItem: {
+                        select: {
+                            id: true,
+                            sn: true,
+                            status: true
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+
+function serializeShipments(shipments: any[]) {
+    return shipments.map(s => ({
+        ...s,
+        packages: (s.packages || []).map((pkg: any) => ({
+            ...pkg,
+            items: (pkg.items || []).map((pItem: any) => ({
+                ...pItem,
+                quantity: Number(pItem.quantity)
+            }))
+        }))
+    }));
+}
+
 export async function getShipments() {
     try {
         const session = await getSession();
         if (!session?.user) return { success: false, error: 'Unauthorized' };
 
         const shipments = await prisma.shipment.findMany({
-            include: {
-                salesOrder: true,
-                fromWarehouse: true,
-                toWarehouse: true,
-                packages: {
-                    include: {
-                        items: {
-                            include: {
-                                item: true,
-                                serializedItem: true
-                            }
-                        }
-                    }
-                }
-            },
+            include: shipmentInclude,
             orderBy: { createdAt: 'desc' }
         });
-        return { success: true, data: shipments };
+        return { success: true, data: serializeShipments(shipments) };
     } catch (error) {
         await logError('shipping.getShipments', error);
         return { success: false, error: 'Failed to fetch shipments. Please try again.' };
+    }
+}
+
+export async function getShippingPageData() {
+    try {
+        const session = await getSession();
+        if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+        const [shipments, warehouses] = await Promise.all([
+            prisma.shipment.findMany({
+                include: shipmentInclude,
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.warehouse.findMany({ orderBy: { name: 'asc' } })
+        ]);
+
+        return {
+            success: true,
+            data: {
+                shipments: serializeShipments(shipments),
+                warehouses
+            }
+        };
+    } catch (error) {
+        await logError('shipping.getShippingPageData', error);
+        return { success: false, error: 'Failed to fetch shipping data. Please try again.' };
     }
 }
 
@@ -159,11 +287,12 @@ export async function createShipment(data: {
                 type,
                 fromWarehouseId: p.data.fromWarehouseId ?? null,
                 toWarehouseId: p.data.toWarehouseId ?? null
-            }
+            },
+            include: shipmentInclude
         });
 
         revalidatePath('/shipping');
-        return { success: true, data: shipment };
+        return { success: true, data: serializeShipments([shipment])[0] };
     } catch (error: unknown) {
         await logError('shipping.createShipment', error);
         const msg = error instanceof Error && error.message.includes('Unique')
@@ -383,7 +512,7 @@ export async function completeTransfer(shipmentId: number) {
                 include: {
                     packages: {
                         include: {
-                            items: { include: { item: true } }
+                            items: { include: { item: { select: { id: true, sku: true } } } }
                         }
                     }
                 }
@@ -396,19 +525,22 @@ export async function completeTransfer(shipmentId: number) {
                 throw new Error('Transfer is missing source or destination warehouse');
             }
 
-            // ── Pre-flight: check ALL items have sufficient stock before moving anything ──
-            for (const pkg of shipment.packages) {
-                for (const pItem of pkg.items) {
-                    const stock = await tx.itemStock.findUnique({
-                        where: {
-                            itemId_warehouseId: {
-                                itemId: pItem.itemId,
-                                warehouseId: shipment.fromWarehouseId!
-                            }
-                        }
-                    });
+            const allPkgItems = shipment.packages.flatMap(pkg => pkg.items);
+            const uniqueItemIds = Array.from(new Set(allPkgItems.map(p => p.itemId)));
 
-                    const available = Number(stock?.quantity ?? 0);
+            if (uniqueItemIds.length > 0) {
+                // Batch-fetch all relevant source stocks in a single query
+                const sourceStocks = await tx.itemStock.findMany({
+                    where: {
+                        warehouseId: shipment.fromWarehouseId,
+                        itemId: { in: uniqueItemIds }
+                    }
+                });
+                const stockMap = new Map(sourceStocks.map(s => [s.itemId, Number(s.quantity)]));
+
+                // ── Pre-flight: check ALL items have sufficient stock before moving anything ──
+                for (const pItem of allPkgItems) {
+                    const available = stockMap.get(pItem.itemId) ?? 0;
                     if (available < Number(pItem.quantity)) {
                         const sku = pItem.item?.sku ?? `Item #${pItem.itemId}`;
                         throw new Error(
@@ -416,11 +548,9 @@ export async function completeTransfer(shipmentId: number) {
                         );
                     }
                 }
-            }
 
-            // ── Now apply all stock movements (all checks passed) ──
-            for (const pkg of shipment.packages) {
-                for (const pItem of pkg.items) {
+                // ── Now apply all stock movements (all checks passed) ──
+                for (const pItem of allPkgItems) {
                     // Deduct from source warehouse
                     await tx.itemStock.update({
                         where: {
@@ -530,7 +660,7 @@ export async function createPackage(shipmentId: number, type: string = 'Box') {
 
         const pkg = await prisma.package.create({ data: { shipmentId, type: safeType } });
         revalidatePath('/shipping');
-        return { success: true, data: pkg };
+        return { success: true, data: { ...pkg, items: [] } };
     } catch (error) {
         await logError('shipping.createPackage', error);
         return { success: false, error: 'Failed to add package. Please try again.' };
@@ -574,7 +704,7 @@ export async function addItemToPackage(
             }
         });
         revalidatePath('/shipping');
-        return { success: true, data: item };
+        return { success: true, data: { ...item, quantity: Number(item.quantity) } };
     } catch (error) {
         await logError('shipping.addItemToPackage', error);
         return { success: false, error: 'Failed to add item to package. Please try again.' };
@@ -602,10 +732,40 @@ export async function addItemsToPackage(
         
         const pkg = await prisma.package.findUnique({
             where: { id: packageId },
-            include: { items: { include: { item: true } } }
+            include: {
+                items: {
+                    orderBy: { id: 'asc' },
+                    include: {
+                        item: {
+                            select: {
+                                id: true,
+                                sku: true,
+                                name: true,
+                                isSerialized: true,
+                                uom: true
+                            }
+                        },
+                        serializedItem: {
+                            select: {
+                                id: true,
+                                sn: true,
+                                status: true
+                            }
+                        }
+                    }
+                }
+            }
         });
         
-        return { success: true, data: pkg };
+        const serializedPkg = pkg ? {
+            ...pkg,
+            items: pkg.items.map(pItem => ({
+                ...pItem,
+                quantity: Number(pItem.quantity)
+            }))
+        } : null;
+
+        return { success: true, data: serializedPkg };
     } catch (error) {
         await logError('shipping.addItemsToPackage', error);
         return { success: false, error: 'Failed to add items to package. Please try again.' };
@@ -787,16 +947,16 @@ export async function importExcelToShipment(shipmentId: number, rows: { box: str
         const errors: string[] = [];
 
         await prisma.$transaction(async (tx) => {
-            for (const [boxName, boxRows] of boxMap.entries()) {
+            for (const [, boxRows] of boxMap.entries()) {
                 // Create package for this box
                 const pkg = await tx.package.create({
                     data: {
                         shipmentId,
                         type: 'Box',
-                        // You could add a reference field to package if we had one, 
-                        // but here we just create a package.
                     }
                 });
+
+                const itemsToInsert: { packageId: number; itemId: number; quantity: number }[] = [];
 
                 for (const row of boxRows) {
                     const sku = row.sku.trim().toLowerCase();
@@ -812,12 +972,16 @@ export async function importExcelToShipment(shipmentId: number, rows: { box: str
                         continue;
                     }
 
-                    await tx.packageItem.create({
-                        data: {
-                            packageId: pkg.id,
-                            itemId: itemId,
-                            quantity: row.quantity
-                        }
+                    itemsToInsert.push({
+                        packageId: pkg.id,
+                        itemId,
+                        quantity: row.quantity
+                    });
+                }
+
+                if (itemsToInsert.length > 0) {
+                    await tx.packageItem.createMany({
+                        data: itemsToInsert
                     });
                 }
             }
