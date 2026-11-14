@@ -700,7 +700,11 @@ export default function ShippingPage() {
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
                                                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                                                 <Box size={16} />
-                                                                <span style={{ fontWeight: 600 }}>Box #{idx + 1}</span>
+                                                                <span style={{ fontWeight: 600 }}>
+                                                                    {pkg.trackingNo
+                                                                        ? (/^box/i.test(pkg.trackingNo) ? pkg.trackingNo : `Box #${pkg.trackingNo}`)
+                                                                        : `Box #${idx + 1}`}
+                                                                </span>
                                                                 <span className="text-muted" style={{ fontSize: '0.8rem' }}>({pkg.type})</span>
                                                             </div>
                                                             {isAdmin && (
@@ -977,7 +981,10 @@ export default function ShippingPage() {
                                 </thead>
                                 <tbody>
                                     {printingShipment.packages.flatMap((pkg: any, idx: number) => {
-                                        const boxLabel = `Box #${idx + 1}${pkg.type && pkg.type !== 'Box' ? ` (${pkg.type})` : ''}`;
+                                        const boxTitle = pkg.trackingNo
+                                            ? (/^box/i.test(pkg.trackingNo) ? pkg.trackingNo : `Box #${pkg.trackingNo}`)
+                                            : `Box #${idx + 1}`;
+                                        const boxLabel = `${boxTitle}${pkg.type && pkg.type !== 'Box' ? ` (${pkg.type})` : ''}`;
                                         if (!pkg.items || pkg.items.length === 0) {
                                             return [{
                                                 id: `empty-${pkg.id || idx}`,

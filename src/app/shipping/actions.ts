@@ -947,12 +947,13 @@ export async function importExcelToShipment(shipmentId: number, rows: { box: str
         const errors: string[] = [];
 
         await prisma.$transaction(async (tx) => {
-            for (const [, boxRows] of boxMap.entries()) {
-                // Create package for this box
+            for (const [boxName, boxRows] of boxMap.entries()) {
+                // Create package for this box, storing the Excel box number/name in trackingNo
                 const pkg = await tx.package.create({
                     data: {
                         shipmentId,
                         type: 'Box',
+                        trackingNo: boxName,
                     }
                 });
 
